@@ -14,6 +14,34 @@ import { buildCleanupMessage, acceptCleanup, buildCommandMessage, parseCommandRe
  * off the end of a long sentence). Whisper keeps the audio; this model gets
  * the text, which is the job it is actually better at.
  */
+/**
+ * What Ollama has pulled on this machine, newest-looking first.
+ *
+ * Standalone rather than a method on an assist instance: the settings panel
+ * needs the list before a model has been chosen, and creating an assist to ask
+ * would mean creating one for a model that may not exist.
+ *
+ * A machine with no Ollama is the ordinary case, not an error — the whole
+ * assist feature is optional — so an unreachable server comes back as an empty
+ * list with a reason, never a throw.
+ *
+ * @returns {Promise<{models: string[], reachable: boolean}>}
+ */
+export async function listOllamaModels (url = 'http://127.0.0.1:11434') {
+  try {
+    const res = await fetch(`${url}/api/tags`, { signal: AbortSignal.timeout(1500) })
+    if (!res.ok) return { models: [], reachable: false }
+    const body = await res.json()
+    const models = (body.models || [])
+      .map(m => String(m?.name ?? ''))
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b))
+    return { models, reachable: true }
+  } catch {
+    return { models: [], reachable: false }
+  }
+}
+
 export function createAssist ({
   url = 'http://127.0.0.1:11434',
   model = 'gemma4:e2b',

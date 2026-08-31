@@ -60,7 +60,7 @@ export const SECTIONS = [
       },
       {
         key: 'modelPath',
-        label: 'Model',
+        label: 'Speech model',
         help: 'Every whisper model found on this Mac, including ones other apps downloaded. Bigger is more accurate and slower.',
         type: 'select', options: 'models', nullable: true, restart: true
       }
@@ -163,7 +163,12 @@ export const SECTIONS = [
     fields: [
       { key: 'cleanup', label: 'Tidy fillers out of settled text', type: 'toggle' },
       { key: 'commandFallback', label: 'Guess what an unrecognised command meant', type: 'toggle' },
-      { key: 'assistModel', label: 'Model', type: 'text', placeholder: 'gemma4:e2b' },
+      {
+        key: 'assistModel',
+        label: 'Assist model',
+        help: 'What Ollama has pulled on this machine. Nothing to do with the speech model above — this one only ever sees text.',
+        type: 'select', options: 'ollama', missingSuffix: '— not pulled'
+      },
       { key: 'assistUrl', label: 'Ollama at', type: 'text', placeholder: 'http://127.0.0.1:11434' }
     ]
   }

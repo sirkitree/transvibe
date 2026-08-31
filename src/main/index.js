@@ -7,7 +7,7 @@ import { spawn } from 'node:child_process'
 import fs, { existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { createEngine } from './whisper.js'
-import { createAssist } from './assist.js'
+import { createAssist, listOllamaModels } from './assist.js'
 import { findModel, downloadModel, listModels, humanSize, MODELS_DIR } from './models.js'
 import * as config from './config.js'
 import { stripBounds, contains, nextWake } from './overlay.js'
@@ -513,6 +513,11 @@ ipcMain.handle('models:list', () => ({
   models: listModels().map(m => ({ ...m, size: humanSize(m.bytes) })),
   inUse: findModel(settings.modelPath)
 }))
+
+/* Asked at the URL the settings currently hold, so pointing Ollama somewhere
+   else and then opening the list shows that server's models, not the last
+   one's. */
+ipcMain.handle('assist:models', () => listOllamaModels(settings.assistUrl))
 
 ipcMain.handle('login-item:get', () => app.getLoginItemSettings().openAtLogin)
 ipcMain.handle('login-item:set', (_e, value) => {

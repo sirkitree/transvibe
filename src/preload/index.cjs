@@ -9,6 +9,8 @@ contextBridge.exposeInMainWorld('transvibe', {
      whatever the login item list actually says. */
   /** every whisper model on this machine, and which one is loaded */
   listModels: () => ipcRenderer.invoke('models:list'),
+  /** the models Ollama has pulled, for the assist model list */
+  listAssistModels: () => ipcRenderer.invoke('assist:models'),
   getLaunchAtLogin: () => ipcRenderer.invoke('login-item:get'),
   setLaunchAtLogin: value => ipcRenderer.invoke('login-item:set', value),
   setSettings: patch => ipcRenderer.invoke('settings:set', patch),

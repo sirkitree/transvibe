@@ -140,7 +140,7 @@ export function createSettingsPanel ({
     // find out why the engine did not start.
     const want = current == null ? '' : String(current)
     if (want && !options.some(o => o.value === want)) {
-      const missing = el('option', null, `${want} — missing`)
+      const missing = el('option', null, `${want} ${field.missingSuffix ?? '— missing'}`)
       missing.value = want
       input.append(missing)
     }

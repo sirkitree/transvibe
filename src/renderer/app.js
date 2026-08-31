@@ -554,7 +554,26 @@ function openPanel () {
    "Automatic" is first and is what the setting holds by default; the readout
    beside it names the file that choice actually landed on, which is otherwise
    invisible. */
-async function modelOptions () {
+async function fieldOptions (field) {
+  return field.options === 'ollama' ? assistModelOptions() : speechModelOptions()
+}
+
+/* The assist model is Ollama's, and Ollama is optional in the strongest sense:
+   not running is the ordinary case, so the list says so plainly rather than
+   coming up empty and looking broken. */
+async function assistModelOptions () {
+  const { models, reachable } = await window.transvibe.listAssistModels()
+  const options = models.map(name => ({ value: name, label: name }))
+  if (!reachable) {
+    return { options, note: 'Ollama not running' }
+  }
+  if (!models.length) {
+    return { options, note: 'nothing pulled yet' }
+  }
+  return { options, note: `${models.length} pulled` }
+}
+
+async function speechModelOptions () {
   const { models, inUse } = await window.transvibe.listModels()
   const options = [{ value: '', label: 'Automatic — first one found' }]
   for (const model of models) {
@@ -628,7 +647,7 @@ async function main () {
     open: name => togglePanel(name, true),
     getExternal: () => window.transvibe.getLaunchAtLogin(),
     setExternal: (_key, value) => window.transvibe.setLaunchAtLogin(value),
-    getOptions: modelOptions
+    getOptions: fieldOptions
   })
   state.presence = createPresence({ idleFadeMs: state.settings.idleFadeMs })
   state.presence.activity(Date.now())
