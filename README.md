@@ -11,7 +11,7 @@ Local voice-to-text for macOS. A click-through strip across the top of the scree
 - Every setting is a panel on the strip, applied as you change it
 - Lives in the menu bar
 
-![The strip across the top of the screen: a transcript with the in-flight words highlighted, a row of buttons under it, and the visualizer ribbon along the top edge](docs/images/strip.png)
+![The strip reacting to a spoken sentence: the ribbon flat and dim in silence, alive as the words come, and settling again as the finished transcript appears](docs/images/visualizer.gif)
 
 <!-- demo video goes here: drag the .mp4 into a GitHub comment box, paste the
      user-attachments URL on the next line. Script: docs/demo.md -->
@@ -57,6 +57,8 @@ Three macOS permissions are involved, each degrading on its own rather than taki
 | Accessibility | pasting on send | text is still on the clipboard |
 
 ## The short version
+
+![The strip: the transcript with the in-flight words highlighted, the row of buttons under it, and the status line below those](docs/images/strip.png)
 
 Talk, and the text appears as you speak. The strip ignores your mouse until you rest the pointer on it; then the words become clickable and a row of buttons appears under them. Six seconds after you stop talking the text fades away on its own.
 

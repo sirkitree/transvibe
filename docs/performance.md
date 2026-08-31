@@ -8,6 +8,8 @@ The whole app idles at roughly 12% CPU in a quiet room on an M-series Mac: ~4% G
 
 **`shadowBlur` was almost all of it.** It rasterises a blur *per stroke*, and the band draws 55 strokes a frame. Disabling that one line took the GPU process from 49% to 12%. The glow now comes from drawing the band to an offscreen canvas and blitting it twice, blurred then crisp — one blur per frame instead of 55.
 
+![The ribbon at full travel](images/visualizer.png)
+
 **Frame pacing was the rest.** 30fps is indistinguishable from 60 for a flowing ribbon, and a silent room drops to 8. The idle path did not engage at first: it tested `model.level`, which `levelGain` multiplies well past any threshold, so a quiet room still painted at 26fps. It now keys off the VAD's own state, which is the thing that actually knows whether anyone is talking.
 
 ## What did not

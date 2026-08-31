@@ -75,4 +75,12 @@ npm run dev &
 node script/make-screenshots.mjs
 ```
 
+The ribbon gets its own recorder, because a still of a moving band is a squiggle:
+
+```sh
+node script/make-visualizer-media.mjs     # -> visualizer.png and visualizer.gif
+```
+
+That one is not staged at all beyond the backdrop. macOS `say` reads a line out loud, the microphone picks it up like any other sound in the room, and the frames are whatever the app drew in response — the transcript in them is that sentence, actually transcribed. It needs `ffmpeg` for the GIF and writes the PNG either way, choosing the busiest frame for it rather than the first, since a frame caught between words is the flat line this is trying not to show.
+
 Retake them after anything that changes what the strip or a panel looks like. Two things in there are staged rather than captured as found, and both on purpose: a plain dark backdrop stands in for whatever would really be behind a click-through window, and the glossary panel is rendered from a demo glossary held in memory, because the real one is full of the client names and jargon its owner has had to teach it. Nothing is written to `settings.json`, and the app is put back the way it was found.
