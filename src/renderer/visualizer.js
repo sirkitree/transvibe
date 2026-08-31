@@ -17,7 +17,8 @@ export function createVisualizer (canvas, {
   linesPerFamily = 18,
   points = 220,
   fps = 30,
-  quietFps = 8
+  quietFps = 8,
+  centerRatio = 0.58
 } = {}) {
   const ctx = canvas.getContext('2d', { alpha: true })
   const model = createBandModel({
@@ -62,8 +63,9 @@ export function createVisualizer (canvas, {
     off.height = canvas.height
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
     octx.setTransform(dpr, 0, 0, dpr, 0, 0)
-    // The ribbon sits low in the band, the way it does in the reference.
-    box = { width: w, centerY: h * 0.58, height: h * 0.92 }
+    // Where the ribbon rides in its canvas. Low in a boxed window; high in the
+    // overlay strip, so it hangs off the top edge of the screen.
+    box = { width: w, centerY: h * centerRatio, height: h * 0.92 }
   }
 
   /* Midpoint quadratic smoothing: each sample becomes a control point and the

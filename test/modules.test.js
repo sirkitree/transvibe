@@ -6,10 +6,14 @@ import { describe, it, expect } from 'vitest'
    here first. */
 const MODULES = [
   '../src/main/config.js',
-  '../src/main/bounds.js',
+  '../src/main/overlay.js',
   '../src/main/wav.js',
   '../src/main/whisper-parse.js',
   '../src/main/models.js',
+  '../src/shared/glossary.js',
+  '../src/shared/assist.js',
+  '../src/renderer/glossary-edit.js',
+  '../src/renderer/presence.js',
   '../src/renderer/vad.js',
   '../src/renderer/band.js',
   '../src/renderer/commands.js'

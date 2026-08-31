@@ -1,18 +1,24 @@
 # transvibe
 
-Local voice-to-text for macOS. A translucent always-on-top HUD that listens
-continuously, transcribes on-device with [whisper.cpp](https://github.com/ggml-org/whisper.cpp),
-and draws a colorful "electric" audio visualizer along the bottom edge.
+Local voice-to-text for macOS. A click-through strip across the top of the
+screen that listens continuously, transcribes on-device with
+[whisper.cpp](https://github.com/ggml-org/whisper.cpp), and draws a colorful
+"electric" audio visualizer hanging off the top edge.
 
+- **No window.** Clicks land in whatever is behind it until you park the pointer on it
 - Text appears **while you are still talking**, not after you stop
+- The transcript fades a few seconds after you stop; esc clears it now
 - Hold right ⌥ to speak an editing command instead of dictating
 - ⌃⌥↩ pastes the transcript straight into whatever app is in front
-- Lives in the menu bar; the window fades out of the way when unfocused
+- Optionally, a second local model tidies the fillers out and makes command
+  mode understand phrasings the rules never learned
+- Lives in the menu bar
 
 **No cloud service.** Audio never leaves the machine — there is no network call
 anywhere in the transcription path. The only outbound request the app can ever
 make is a one-time model download from Hugging Face, and only if it cannot find
-a Whisper model already on disk.
+a Whisper model already on disk. The optional assist model runs locally too,
+through Ollama on `127.0.0.1`, and is only ever sent text.
 
 ## Requirements
 
@@ -20,6 +26,9 @@ a Whisper model already on disk.
 - Node 20+
 - `brew install whisper-cpp`
 - Swift (from the Xcode command line tools) to build the key-tap helper
+
+Optional, for [the assist model](#the-assist-model-optional): [Ollama](https://ollama.com)
+and `ollama pull gemma4:e2b` (~7.2 GB). Everything works without it.
 
 ## Run
 
@@ -38,6 +47,31 @@ this order:
 3. Failing both, it downloads `ggml-base.en.bin` (~148 MB) into its own
    models directory.
 
+### Turning on the assist model
+
+Off by default, and the app never mentions it unless you ask for it. If you
+want the filler-word cleanup and the smarter command mode:
+
+```sh
+ollama pull gemma4:e2b     # ~7.2 GB, one time
+```
+
+then in `~/Library/Application Support/transvibe/settings.json`:
+
+```json
+{ "cleanup": true, "commandFallback": true }
+```
+
+Restart, and say something with a false start in it — "um so I was thinking
+maybe we could ship this on Friday, no wait, Thursday". Whisper's text appears
+as you speak; a tidied version swaps in about a quarter of a second after you
+stop. Then hold right ⌥ and try a phrasing the rules do not know, like "nope,
+take that back" or "stick that on the clipboard for me".
+
+If Ollama is not running or the model was never pulled, the strip says so once
+and everything carries on exactly as before. [How it works, and what it
+deliberately does not do](#the-assist-model-optional).
+
 ## How it works
 
 ```
@@ -52,11 +86,16 @@ main      wav.js (16-bit mono WAV) → whisper.js FIFO queue → whisper-server
                                                                       │
                              transcribe mode ─────────────────────────┤
                                → append to the transcript             │
+                               → assist.cleanup (optional) ──┐        │
+                                   swaps the tidied text in ─┘        │
                              command mode (right ⌥ held) ─────────────┘
                                → commands.js → edit the transcript
+                               → on a miss: assist.command (optional)
+                                   → picks a known phrase → commands.js
 
 send      ⌃⌥↩ → clipboard → hide if focused → bin/sendkeys posts ⌘V
 keys      bin/rightopt (CGEventTap) → "down"/"up" → arm command mode
+assist    text only, never audio → Ollama on 127.0.0.1
 ```
 
 One microphone stream feeds both consumers, so there is no second capture
@@ -154,12 +193,17 @@ src/main/       index.js      window, tray, shortcuts, IPC, send
                 whisper-parse.js  output parsing, artifact filter, queue
                 wav.js        Float32 → 16-bit PCM WAV
                 models.js     locate or download a ggml model
-                bounds.js     window-geometry rules (pure)
+                overlay.js    strip geometry + hover-wake rule (pure)
                 config.js     settings persistence
+                assist.js     optional local LLM pass (Ollama)
+src/shared/     glossary.js   vocabulary prompt + corrections (pure)
+                assist.js     assist prompts + reply guards (pure)
 src/renderer/   app.js        transcript UI, command dispatch, help panel
                 audio.js      mic graph, ring buffer, segment slicing
                 vad.js        voice-activity state machine (pure)
+                presence.js   when the transcript fades (pure)
                 commands.js   voice-command parser + applier (pure)
+                glossary-edit.js  glossary panel edit rules (pure)
                 band.js       visualizer math (pure)
                 visualizer.js canvas rendering
                 pcm-worklet.js
@@ -167,8 +211,8 @@ src/native/     rightopt.swift   right-⌥ hold detection via CGEventTap
                 sendkeys.swift   posts ⌘V to the frontmost app
 ```
 
-The pure modules — `vad`, `commands`, `band`, `wav`, `bounds`,
-`whisper-parse` — take no DOM, Electron, filesystem or network dependency, which
+The pure modules — `vad`, `commands`, `band`, `wav`, `overlay`, `presence`,
+`glossary`, `glossary-edit`, `assist`, `whisper-parse` — take no DOM, Electron, filesystem or network dependency, which
 is what makes the awkward parts (segment boundaries, command false positives,
 off-screen windows) testable under plain Node rather than only discoverable by
 hand.
@@ -186,23 +230,26 @@ app down with it:
 
 ## Controls
 
-The controls stay hidden until the pointer is over the window. They sit in a
-column at the top right, and the transcript reserves a gutter beside them at
-every scroll position — a float spacer would only hold the first few lines
-clear, and text scrolled past it would slide under the buttons again. The bar
-also carries a higher `z-index` than the transcript, which comes later in the
-DOM and would otherwise swallow clicks over the overlap.
+The controls only exist while the strip is awake — asleep it is a ribbon and
+some text, and there would be nothing to click anyway. They sit in a row
+directly under the transcript, not off in a corner: hovering the text is what
+woke the strip, so the pointer is already there. The row holds its space
+whether visible or not, so waking never shifts the layout out from under the
+pointer.
 
 | | |
 |---|---|
-| Close (×) | Hide the window to the menu bar — does **not** quit |
+| Close (×) | Clear the transcript and get out of the way |
 | Copy | Copy the full transcript |
 | Clear | Empty the transcript |
-| Pin | Toggle always-on-top |
 | ➤ | Send the transcript to the frontmost app |
+| Click a word | Correct it, optionally saving the fix to the glossary |
+| Book | Glossary — terms to recognise, and fixes for the ones it misses |
 | ? | In-app help — keys, buttons, and the full command list |
+| hovering any button | Describes it on the status line under the row |
 | Pause | Stop feeding segments to the recogniser |
-| `⌃⌥Space` | Show/hide the window from anywhere |
+| `esc` | Closes the fixer, then a panel, then clears the transcript |
+| `⌃⌥Space` | Show/hide the strip from anywhere |
 | Hold right `⌥` | Speak one command instead of dictating |
 | `⌃⌥C` | Same, without holding a key |
 | `⌃⌥↩` | Send the transcript to the app in front |
@@ -225,6 +272,12 @@ consumed when the utterance actually finishes.
     "new paragraph"                "replace whisper with Whisper"
     "question mark"                "copy that" / "clear everything"
     "send that" / "ship it"
+
+Anything the rules cannot place is shown as `not a command: "…"` rather than
+guessed at, so nothing you said is silently swallowed. With
+[`commandFallback`](#the-assist-model-optional) on, that miss goes to the local
+assist model first, which makes phrasings like "nope, take that back" or "stick
+that on the clipboard for me" work without adding a rule for each one.
 
 Hold-to-talk needs a native helper. Electron's `globalShortcut` fires only on
 key-down, never key-up, and it cannot bind a bare modifier or tell left ⌥ from
@@ -281,45 +334,129 @@ old copy-and-paste rather than nothing.
 ### Menu bar
 
 transvibe lives in the macOS menu bar as a waveform icon. Left-click toggles the
-window; right-click opens a menu with show/hide, a listening checkbox, copy and
+strip; right-click opens a menu with show/hide, a listening checkbox, copy and
 clear, and Quit.
 
-The window never really closes — closing it parks the app in the menu bar with
-the model still resident, so bringing it back is instant rather than a fresh
-model load. Only Quit (or `⌘Q`) actually tears down the engine.
+Hiding parks the app in the menu bar with the model still resident, so bringing
+it back is instant rather than a fresh model load. It comes back with
+`showInactive`, never stealing focus from what you were typing in. Only Quit
+(or `⌘Q`) actually tears down the engine.
 
-### Focus fade
+### Getting out of the way
 
-Unfocused, the window gets out of the way so you can read what is behind it.
-Each layer fades independently rather than the panel fading as a whole — an
-`opacity` on the shell would cap its children, and the band is the part still
-worth glancing at from the background:
+There is no window. The app is a frameless, transparent strip hanging from the
+top of the work area — 180pt tall, or taller when there is more to show, `alwaysOnTop` at the `screen-saver`
+level so it survives full-screen apps, and **click-through**: every click goes
+to whatever is behind it.
 
-| layer | focused | unfocused |
-|---|---|---|
-| vibrancy material | `blur(28px)` | off |
-| window shadow | on | off |
-| visualizer | 1.0 | 0.56 |
-| transcript / footer | 1.0 | 0.22 |
-| buttons | hover only | hover only |
-| dotted trim | 0.55 | 0.12 |
+Three things make that liveable.
 
-The vibrancy material has to go with the fade: it frosts whatever is behind the
-window, which is exactly what you are trying to see. The window shadow goes too,
-since a CSS opacity fade cannot reach it.
+**Hover to wake.** Rest the pointer on the strip and it turns solid — words
+become clickable, the buttons appear. Move away and it is a ghost again.
+Waking takes a deliberate dwell (`wakeDelayMs`, 320ms) so sweeping up to the
+menu bar never steals a click; sleeping is immediate, because a strip that
+stays solid after you have gone is the whole problem this layout exists to
+solve.
 
-Tune the depth with `idleOpacity` in settings (default `0.22`); the visualizer
-always rides `0.34` above it.
+**Only over something clickable.** Being on the strip is not enough — most of
+it is empty air. The renderer watches the forwarded mouse-move events and tells
+the main process whether the pointer is over the text, a control or a panel; a
+click in the gaps reaches the app underneath even though the pointer is
+technically on the overlay.
 
-The window remembers its size and position and restores them on next launch,
-debounced so a drag writes once rather than on every frame.
+The wake decision is polled from the cursor position rather than driven by
+mouse events, because a click-through window is only told about movement *over*
+it: it can see the pointer arrive but never see it leave. `src/main/overlay.js`
+holds the geometry and the dwell rule as pure functions.
 
-A saved rectangle is only reused if it still lands on a screen that exists, and
-with enough overlap to actually grab (120×80pt). Unplug the external display the
-window was parked on and it comes back centred at its old *size* rather than
-stranded off-canvas where it cannot be reached or seen. `src/main/bounds.js`
-holds that rule as a pure function so the recovery paths are unit-tested rather
-than discovered the hard way.
+**The text fades.** `idleFadeMs` (6s) after the last thing you said, the
+transcript fades out. It stays in memory — ⌃⌥↩ still sends it — but it is now
+*stale*, so the next utterance starts a fresh transcript rather than appending
+to something you can no longer see. Anything that counts as interest resets the
+clock: speech, an interim update, the pointer arriving, a panel being open. Esc
+clears it outright. `src/renderer/presence.js` is that state machine, pure and
+clock-injected.
+
+**The strip is as tall as its contents.** The renderer measures its own laid-out
+content after every render and the window follows. A fixed height clipped the
+last line of a three-line utterance and cut the button row underneath it in
+half; measuring means the buttons are always fully on screen, wherever the text
+happens to wrap. The transcript itself caps at four lines and the oldest
+scrolls off under the mask. Only the stage is measured, never an open panel —
+a panel is sized in percentages of the window, so feeding its height back in
+would grow the strip without limit.
+
+Opening the help or glossary panel asks the main process for at least
+`panelHeight` (560pt) and pins it awake; closing shrinks it back. Panels are
+near-opaque rather than glass: `backdrop-filter` is dead weight on a
+transparent window with no vibrancy material — there is no backdrop for it to
+sample — so a translucent panel was really just showing whatever bright thing
+was behind it straight through the text. A panel is something you opened in
+order to read it.
+
+### The assist model (optional)
+
+A second, local model — Gemma 4 E2B through [Ollama](https://ollama.com) —
+does the two things whisper and a rule parser each do badly. Both features are
+off by default and the app is unchanged without them: if Ollama is not running
+or the model was never pulled, the availability check fails once and every
+later call short-circuits.
+
+```sh
+ollama pull gemma4:e2b     # ~7.2 GB
+```
+```json
+{ "cleanup": true, "commandFallback": true }
+```
+
+Still no cloud. Ollama serves on `127.0.0.1` and the audio never reaches it at
+all — only text does.
+
+**`cleanup`** rewrites a settled utterance with the filler words and false
+starts taken out. "Um, so I was thinking we should uh ship the thing on Friday"
+becomes "So I was thinking we should ship the thing on Friday". It runs after
+whisper's text is already on screen, so it costs nothing you wait for; the
+tidier version swaps in a few hundred milliseconds later, or never.
+
+Every reply is guarded before it can touch the transcript, because the failure
+that matters is not a bad rewrite but a *plausible* one — a summary, or an
+answer to a question the user happened to dictate. A reply that is under half
+or over 1.5× the original's length, that opens like a chatbot ("Here's the…"),
+or that comes back empty is discarded and the original stands. `acceptCleanup`
+in `src/shared/assist.js` is that rule, unit-tested, and it always returns
+something safe to show.
+
+**`commandFallback`** fills the seam the rules leave open. An utterance spoken
+in command mode that `parseCommand` cannot place used to be logged and shown as
+"not a command"; now the model is asked what it meant. It does not invent a
+command — it picks one of the 66 example phrases the parser already
+understands, and that phrase goes straight back through `parseCommand`. Two
+things fall out of that: a wrong answer can only ever produce a command the app
+actually implements, and everything the rules know about targets and counts
+("the last three words") keeps working without a second, weaker copy of it.
+
+It is safe to ask here precisely because command mode is armed deliberately.
+The model is never shown ordinary dictation, so it never gets the chance to
+mistake any for a command — which it will: asked cold, "I need to copy that
+file to the server" comes back as `copy`. That is the exact false positive
+`commands.test.js` has 60-odd cases guarding against, and it is why the rules
+stay in front.
+
+Measured on an M-series Mac, warm, with thinking disabled (`reasoning_effort:
+"none"` — leaving it on cost ~1.1s per call for a task that needs none):
+
+| | |
+|---|---:|
+| cleanup, one sentence | 170–350ms |
+| command fallback | 180–510ms |
+
+**What was tried and rejected:** Gemma 4 takes audio natively, so it could
+replace whisper outright. On the same clips it was slower and less accurate —
+"Vinchi" for "Vinci", words dropped off the end of a long sentence, and it
+ignored an instruction to clean up while transcribing. Whisper keeps the audio.
+Google's other new model, Gemini 3.5 Transcribe, does all of this better and in
+one pass, but it is a cloud API with no open weights, which would cost this app
+the only property it really has.
 
 ### Settings
 
@@ -335,16 +472,86 @@ merged over the defaults, so deleting the file resets everything.
 | `sendTarget` | `null` | app to focus before pasting; null = whatever is in front |
 | `sendPressesEnter` | `false` | also hit Return after pasting |
 | `clearAfterSend` | `true` | empty the transcript once delivered |
-| `idleOpacity` | `0.22` | how far the window fades when unfocused |
+| `stripHeight` | `180` | minimum height of the strip; it grows to fit |
+| `panelHeight` | `560` | height while the help or glossary panel is open |
+| `wakeDelayMs` | `320` | pointer dwell before the strip stops being click-through |
+| `idleFadeMs` | `6000` | silence before the transcript fades |
 | `alwaysOnTop` | `true` | keep above other windows |
 | `autoCopy` | `false` | copy every finished utterance automatically |
 | `modelPath` | `null` | pin a specific ggml model |
 | `language` | `'en'` | recognition language |
-| `bounds` | `null` | last window rectangle |
+| `vocabulary` | `[]` | terms to bias recognition toward (see Glossary) |
+| `corrections` | `{}` | wrong → right rewrites applied to finished text |
+| `dropGlossaryEcho` | `true` | discard an utterance that is only glossary words |
+| `cleanup` | `false` | tidy fillers out of settled text with the assist model |
+| `commandFallback` | `false` | ask the assist model about unrecognised commands |
+| `assistModel` | `'gemma4:e2b'` | Ollama model for both of the above |
+| `assistUrl` | `'http://127.0.0.1:11434'` | where Ollama is listening |
 | `vizLinesPerFamily` | `18` | polylines per hue family (×3) |
 | `vizPoints` | `220` | samples per polyline |
 | `vizFps` | `30` | frame rate while speech is detected |
 | `vizQuietFps` | `8` | frame rate in a silent room |
+
+### Glossary
+
+**Click a word in the transcript** to say what it should have been. The
+rewrite always happens; what you keep is the opt-out. *Remember the fix* saves
+it as a rule, and *listen for it too* adds the corrected spelling to the terms
+— untick both and the word is simply fixed here and now, which is what a
+one-off mishearing deserves. Both checkboxes hold their setting for the rest of
+the session, so a run of throwaway fixes is one click, not one per word.
+
+Esc, the *esc* button, or a click anywhere outside dismisses it without
+changing anything. Dragging still selects text; only a click that leaves no
+selection opens the fixer. The "heard" side stays editable, which is how a
+two-word phrase gets a rule.
+
+The book button opens the glossary panel: terms on top, fixes
+below, added and removed in place. Every edit is written to the settings file
+and swapped into the running recogniser immediately — the model stays loaded,
+and the change takes effect on the next thing you say. The file below is the
+same data, if you would rather paste a list in.
+
+Names, jargon and product words are what a small Whisper model gets wrong most
+consistently — it has never seen them, so it reaches for the nearest thing it
+has. Two settings attack that from opposite ends.
+
+```json
+{
+  "vocabulary": ["Drupal", "Lullabot", "Tugboat", "transvibe", "Claude Code"],
+  "corrections": {
+    "trans vibe": "transvibe",
+    "drupple": "Drupal",
+    "lolabot": "Lullabot"
+  }
+}
+```
+
+`vocabulary` becomes whisper.cpp's initial prompt (`prompt` on the server,
+`--prompt` on the CLI). The decoder conditions on it, so those spellings become
+much cheaper token sequences and often win *during* recognition — which means
+interim text is right too, not just the settled utterance. It is a nudge, and
+Whisper truncates its prompt at 224 tokens, so the list is capped at 800
+characters and extra terms are dropped from the end. Keep it to words that
+actually get mangled; a long list of ordinary English wastes the budget and
+tempts the model into reciting the prompt back.
+
+**Prompt echo.** The initial prompt is prepended as prior context, and over
+silence or room noise Whisper will happily just repeat it back — the shorter
+the glossary, the more often it does. A one-term glossary turns every cough
+into that term. So an utterance made of *nothing but* glossary words is
+dropped, exactly like the model's other stock hallucinations (`Thank you.`,
+`[BLANK_AUDIO]`). Said inside a real sentence the term still comes through,
+which is what it was added for. The cost is that dictating a single glossary
+term on its own does nothing; set `dropGlossaryEcho: false` if you need that.
+
+`corrections` is the backstop for the passes where the nudge lost. Each key is
+matched whole-word and case-insensitively, and a space in the key matches any
+run of whitespace or punctuation — so `"trans vibe"` also catches `Trans-Vibe`
+and `trans vibe.`. Replacements are inserted verbatim, longest key first, and
+never fire inside a longer word (`undruppled` stays put).
+
+Edits take effect on the next utterance; the model stays loaded.
 
 ## Tests
 
@@ -359,7 +566,11 @@ npm run test:unit # 256 — pure modules only, no whisper binary needed
 | `wav.test.js` | 26 | header byte-exactness, clamping, overflow guards |
 | `vad.test.js` | 16 | segment boundaries, hangover, force-flush, bad options |
 | `band.test.js` | 15 | visualizer math stays finite and in-bounds |
-| `bounds.test.js` | 11 | window restore, off-screen recovery |
+| `overlay.test.js` | 16 | strip geometry, hover-wake dwell |
+| `assist.test.js` | 18 | assist prompts, and the guards on its replies |
+| `presence.test.js` | 11 | when the transcript fades, and what un-fades it |
+| `glossary.test.js` | 18 | prompt budget, whole-word corrections |
+| `glossary-edit.test.js` | 23 | glossary panel edits, word splitting |
 | `whisper-parse.test.js` | 21 | output parsing, artifact filter, FIFO queue |
 | `engine.integration.test.js` | 4 | the real engine, end to end |
 
@@ -379,28 +590,35 @@ whisper.cpp, or a model is unavailable.
 
 Things the automated tests cannot cover:
 
-- [ ] Window is translucent and blurs the desktop behind it
-- [ ] Specular rim reads as glass, not as a flat border
+- [ ] Clicking through the empty parts of the strip reaches the app underneath
+- [ ] Resting the pointer on the text wakes the strip; leaving puts it back
+- [ ] Sweeping up to the menu bar does not wake it
+- [ ] The strip floats over a full-screen app
+- [ ] Transcript fades ~6s after you stop talking, and esc clears it now
+- [ ] After a fade, the next thing you say starts a fresh transcript
+- [ ] ⌃⌥↩ still sends a faded transcript
 - [ ] Microphone permission prompt appears on first launch
 - [ ] Visualizer sits flat and still when the room is quiet
 - [ ] Visualizer reacts immediately and colorfully to speech
 - [ ] Text appears while you are still talking, highlighted in blue
 - [ ] Blue interim text is replaced by the final when you stop
 - [ ] Transcript appends within ~1s of finishing a sentence
-- [ ] Holding right ⌥ turns the window amber and shows the Command banner
+- [ ] Holding right ⌥ turns the strip amber and shows the Command banner
 - [ ] Left ⌥ does nothing (only the right key arms command mode)
-- [ ] ⌃⌥C turns the window amber and shows the Command banner
+- [ ] ⌃⌥C turns the strip amber and shows the Command banner
 - [ ] A spoken command edits the transcript and returns to transcribe mode
+- [ ] With `commandFallback` on, "nope, take that back" undoes
+- [ ] With it off, the same phrase is reported as not a command
+- [ ] With `cleanup` on, "um so I was thinking, no wait" tidies itself a moment later
+- [ ] With Ollama stopped, both features fail quietly and dictation is unaffected
 - [ ] Command mode disarms itself after 6s of silence
 - [ ] ? opens the help panel; esc closes it; it scrolls and lists every command
 - [ ] ⌃⌥↩ from Warp pastes the transcript straight into Warp
 - [ ] The ➤ button hides transvibe, restores the previous app, and pastes there
-- [ ] Window drags from anywhere but the buttons and transcript
-- [ ] Moving or resizing the window and relaunching restores it in place
-- [ ] Pin actually keeps it above full-screen apps
+- [ ] Opening a panel grows the strip; closing it shrinks back
 - [ ] `⌃⌥Space` toggles visibility from another app
 - [ ] Waveform icon appears in the menu bar and adapts to light/dark
-- [ ] × hides the window without quitting; the tray icon brings it back
+- [ ] × clears the transcript; the tray icon still shows and hides the strip
 - [ ] Clicking away fades the window and un-frosts the background behind it
 - [ ] Clicking back restores it smoothly
 - [ ] Buttons fade in on hover and away again when the pointer leaves

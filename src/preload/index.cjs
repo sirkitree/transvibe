@@ -7,14 +7,25 @@ contextBridge.exposeInMainWorld('transvibe', {
   getSettings: () => ipcRenderer.invoke('settings:get'),
   setSettings: patch => ipcRenderer.invoke('settings:set', patch),
   copy: text => ipcRenderer.invoke('clipboard:write', text),
+  /** tidy one settled utterance with the local assist model */
+  cleanup: text => ipcRenderer.invoke('assist:cleanup', text),
+  /** ask the assist model which known command phrase an utterance meant */
+  assistCommand: (text, phrases) => ipcRenderer.invoke('assist:command', text, phrases),
   send: text => ipcRenderer.invoke('send', text),
   hide: () => ipcRenderer.send('window:hide'),
-  minimize: () => ipcRenderer.send('window:minimize'),
+  /** the pointer is over something clickable, not over the strip's empty air */
+  setOverTarget: value => ipcRenderer.send('overlay:target', value),
+  /** keep the strip awake while a panel or field is in use */
+  setHold: value => ipcRenderer.send('overlay:hold', value),
+  /** how tall the strip's own content is, so the window can follow it */
+  setHeight: px => ipcRenderer.send('overlay:height', px),
+  /** a panel needs more room than the strip normally has */
+  setPanelOpen: open => ipcRenderer.send('overlay:panel', open),
+  onAwake: fn => ipcRenderer.on('awake', (_e, value) => fn(value)),
   setListening: value => ipcRenderer.send('listening', value),
   onStatus: fn => ipcRenderer.on('status', (_e, payload) => fn(payload)),
   onListening: fn => ipcRenderer.on('listening', (_e, value) => fn(value)),
   onCommand: fn => ipcRenderer.on('command', (_e, name) => fn(name)),
-  onFocus: fn => ipcRenderer.on('focus', (_e, focused) => fn(focused)),
   onCommandMode: fn => ipcRenderer.on('command-mode', (_e, active) => fn(active)),
   setCommandMode: active => ipcRenderer.send('command-mode', active)
 })

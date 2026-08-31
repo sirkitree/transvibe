@@ -3,6 +3,7 @@ import net from 'node:net'
 import { existsSync } from 'node:fs'
 import { encodeWav } from './wav.js'
 import { parseServerJson, parseCliOutput, cleanTranscript, createQueue } from './whisper-parse.js'
+import { buildPrompt, applyCorrections, isGlossaryEcho } from '../shared/glossary.js'
 
 const BIN_DIRS = ['/opt/homebrew/bin', '/usr/local/bin', '/usr/bin']
 
@@ -33,13 +34,20 @@ function freePort () {
  * around 110ms. Falls back to spawning `whisper-cli` per utterance if the
  * server binary is missing.
  */
-export function createEngine ({ modelPath, threads = 6, language = 'en' }) {
+export function createEngine ({
+  modelPath, threads = 6, language = 'en',
+  vocabulary = [], corrections = {}, dropGlossaryEcho = true
+}) {
   const serverBin = which('whisper-server')
   const cliBin = which('whisper-cli')
   if (!serverBin && !cliBin) {
     throw new Error('whisper.cpp not found — run: brew install whisper-cpp')
   }
 
+  let prompt = buildPrompt(vocabulary)
+  let fixups = corrections
+  let terms = vocabulary
+  let dropEcho = dropGlossaryEcho
   let proc = null
   let port = null
   let ready = null
@@ -98,6 +106,10 @@ export function createEngine ({ modelPath, threads = 6, language = 'en' }) {
     form.append('file', new Blob([wav], { type: 'audio/wav' }), 'chunk.wav')
     form.append('response_format', 'json')
     form.append('temperature', '0')
+    // The initial prompt biases the decoder toward glossary spellings. It is
+    // safe on interim passes too: `no_context` drops the *previous chunk's*
+    // text, not this field.
+    if (prompt) form.append('prompt', prompt)
     // Interim passes are thrown away as soon as the next one lands, so trade
     // accuracy for latency: greedy decode, no fallback retries.
     if (interim) {
@@ -112,9 +124,9 @@ export function createEngine ({ modelPath, threads = 6, language = 'en' }) {
 
   function viaCli (wav) {
     return new Promise((resolve, reject) => {
-      const p = spawn(cliBin, [
-        '-m', modelPath, '-f', '-', '-t', String(threads), '-l', language, '-np'
-      ])
+      const args = ['-m', modelPath, '-f', '-', '-t', String(threads), '-l', language, '-np']
+      if (prompt) args.push('--prompt', prompt)
+      const p = spawn(cliBin, args)
       let out = ''
       let err = ''
       p.stdout.on('data', d => { out += d })
@@ -130,7 +142,11 @@ export function createEngine ({ modelPath, threads = 6, language = 'en' }) {
   const queue = createQueue(async ({ samples, opts }) => {
     const wav = encodeWav(samples, 16000)
     const parsed = mode === 'server' ? await viaServer(wav, opts) : await viaCli(wav)
-    return { ...parsed, text: cleanTranscript(parsed.text) }
+    const text = applyCorrections(cleanTranscript(parsed.text), fixups)
+    // An utterance that is nothing but glossary words is the prompt coming
+    // back, not something that was said.
+    const echo = dropEcho && isGlossaryEcho(text, { vocabulary: terms, corrections: fixups })
+    return { ...parsed, text: echo ? '' : text }
   })
 
   return {
@@ -142,6 +158,12 @@ export function createEngine ({ modelPath, threads = 6, language = 'en' }) {
      */
     transcribe: (samples, opts = {}) => queue.push({ samples, opts }),
     get pending () { return queue.size },
+    /** Swap the glossary in place; takes effect on the next utterance. */
+    setGlossary ({ vocabulary, corrections, dropGlossaryEcho } = {}) {
+      if (dropGlossaryEcho !== undefined) dropEcho = !!dropGlossaryEcho
+      if (vocabulary !== undefined) { prompt = buildPrompt(vocabulary); terms = vocabulary }
+      if (corrections !== undefined) fixups = corrections || {}
+    },
     stop () {
       if (proc) { proc.kill('SIGTERM'); proc = null }
       ready = null

@@ -7,49 +7,112 @@ import { spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { createEngine } from './whisper.js'
+import { createAssist } from './assist.js'
 import { findModel, downloadModel } from './models.js'
 import * as config from './config.js'
-import { usableBounds, MIN_WIDTH, MIN_HEIGHT, DEFAULT_BOUNDS } from './bounds.js'
+import { stripBounds, contains, nextWake } from './overlay.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 let win = null
 let tray = null
 let engine = null
+let assist = null
 let settings = config.load()
 let listening = true
 let commandTimer = null
 let tapProc = null
 let holding = false
-let boundsTimer = null
 
-function rememberBounds () {
-  if (!win || win.isDestroyed() || win.isMinimized() || !win.isVisible()) return
-  clearTimeout(boundsTimer)
-  // resize and move fire continuously while dragging; only the last one matters
-  boundsTimer = setTimeout(() => {
-    if (!win || win.isDestroyed()) return
-    settings = config.save({ bounds: win.getBounds() })
-  }, 400)
+/* ------------------------------------------------------------------- overlay
+   The window is a full-width strip hanging from the top of the screen with no
+   chrome of its own, and it is click-through: every click lands in whatever is
+   behind it. Park the pointer on it and it wakes — solid, clickable — then
+   goes back to being a ghost the moment the pointer leaves.
+
+   Waking is driven by polling the cursor rather than by forwarded mouse
+   events. A click-through window is only told about movement *over* it, so it
+   can see the pointer arrive but never see it leave; the cursor position is
+   the one signal that answers both. */
+
+const POLL_MS = 90
+let wake = { awake: false, insideSince: null }
+let wakeTimer = null
+let holdOpen = false        // renderer is mid-interaction: panel or field open
+let overTarget = false      // renderer: the pointer is over something clickable
+let panelOpen = false
+let contentHeight = 0       // renderer: how tall its content actually is
+
+/* The strip stays on the display it was created on rather than chasing the
+   pointer between screens — a HUD that moves house while you glance at another
+   monitor is worse than one that stays where you left it. */
+function stripRect (height) {
+  const display = win && !win.isDestroyed()
+    ? screen.getDisplayMatching(win.getBounds())
+    : screen.getPrimaryDisplay()
+  // The strip is as tall as what it is showing. A three-line transcript that
+  // ran past a fixed height used to lose its last line and clip the buttons
+  // under it; the renderer measures its own content instead and the window
+  // follows. stripBounds still clamps to the display.
+  const want = height ?? (panelOpen
+    ? Math.max(settings.panelHeight, contentHeight)
+    : Math.max(settings.stripHeight, contentHeight))
+  return stripBounds(display, { height: want })
+}
+
+function applyStripBounds () {
+  if (!win || win.isDestroyed()) return
+  win.setBounds(stripRect())
+}
+
+function setAwake (value) {
+  if (!win || win.isDestroyed()) return
+  wake = { ...wake, awake: value }
+  // `forward` keeps mouse-move events coming while the strip is a ghost, which
+  // is what lets CSS hover states light up before the first click.
+  win.setIgnoreMouseEvents(!value, { forward: true })
+  send('awake', value)
+}
+
+function pollPointer () {
+  if (!win || win.isDestroyed() || !win.isVisible()) return
+  const point = screen.getCursorScreenPoint()
+  // Being over the strip is not enough — the strip is mostly empty air. The
+  // renderer says whether the pointer is actually over the text or a control,
+  // so a click in the gaps still reaches the app underneath even while the
+  // pointer is technically on the overlay.
+  const inside = contains(win.getBounds(), point) && overTarget
+  const next = nextWake(wake, {
+    inside,
+    hold: holdOpen,
+    now: Date.now(),
+    wakeDelayMs: settings.wakeDelayMs
+  })
+  const changed = next.awake !== wake.awake
+  wake = next
+  if (changed) setAwake(next.awake)
+}
+
+function startPointerWatch () {
+  clearInterval(wakeTimer)
+  wakeTimer = setInterval(pollPointer, POLL_MS)
 }
 
 function createWindow () {
-  const restored = usableBounds(settings.bounds, screen.getAllDisplays())
-
   win = new BrowserWindow({
-    ...DEFAULT_BOUNDS,
-    ...restored,
-    minWidth: MIN_WIDTH,
-    minHeight: MIN_HEIGHT,
+    ...stripBounds(screen.getPrimaryDisplay(), { height: settings.stripHeight }),
     frame: false,
     transparent: true,
     backgroundColor: '#00000000',
-    vibrancy: 'under-window',
-    visualEffectState: 'active',
-    hasShadow: true,
-    roundedCorners: true,
+    hasShadow: false,
+    roundedCorners: false,
+    resizable: false,
+    movable: false,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
     alwaysOnTop: settings.alwaysOnTop,
-    skipTaskbar: false,
+    skipTaskbar: true,
     webPreferences: {
       preload: path.join(__dirname, '..', 'preload', 'index.cjs'),
       contextIsolation: true,
@@ -58,9 +121,13 @@ function createWindow () {
     }
   })
 
-  if (settings.alwaysOnTop) win.setAlwaysOnTop(true, 'floating')
+  // 'screen-saver' floats above full-screen apps as well as ordinary windows,
+  // which is what a HUD hanging off the menu bar has to do to stay useful.
+  if (settings.alwaysOnTop) win.setAlwaysOnTop(true, 'screen-saver')
   win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+  win.setIgnoreMouseEvents(true, { forward: true })
   win.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'))
+  startPointerWatch()
 
   // Closing the window parks the app in the menu bar rather than quitting it;
   // only an explicit Quit tears things down.
@@ -71,34 +138,22 @@ function createWindow () {
       refreshTray()
     }
   })
-  win.on('show', refreshTray)
-  win.on('hide', refreshTray)
-  win.on('resize', rememberBounds)
-  win.on('move', rememberBounds)
-
-  /* Unfocused, the window gets out of the way. The vibrancy material has to go
-     with it — it frosts whatever is behind the window, which is exactly what
-     you are trying to read through. The window shadow goes too, since a CSS
-     opacity fade cannot touch it. */
-  win.on('blur', () => {
-    win.setVibrancy(null)
-    win.setHasShadow(false)
-    send('focus', false)
-  })
-
-  win.on('focus', () => {
-    win.setVibrancy('under-window')
-    win.setHasShadow(true)
-    send('focus', true)
+  win.on('show', () => { applyStripBounds(); refreshTray() })
+  win.on('hide', () => {
+    wake = { awake: false, insideSince: null }
+    setAwake(false)
+    refreshTray()
   })
 }
 
 /* ------------------------------------------------------------------- menu bar */
 
+/* showInactive, not show+focus: the strip appearing must never pull you out of
+   what you were typing in. It takes focus only when you click it. */
 function showWindow () {
-  if (!win || win.isDestroyed()) createWindow()
-  win.show()
-  win.focus()
+  if (!win || win.isDestroyed()) return createWindow()
+  applyStripBounds()
+  win.showInactive()
 }
 
 function toggleWindow () {
@@ -162,11 +217,29 @@ async function initEngine () {
   }
 
   try {
-    engine = createEngine({ modelPath, language: settings.language })
+    engine = createEngine({
+      modelPath,
+      language: settings.language,
+      vocabulary: settings.vocabulary,
+      corrections: settings.corrections,
+      dropGlossaryEcho: settings.dropGlossaryEcho
+    })
     await engine.start()
     send('status', { state: 'ready', message: path.basename(modelPath), mode: engine.mode })
+    initAssist()
   } catch (err) {
     send('status', { state: 'error', message: err.message })
+  }
+}
+
+/* The assist model is optional in the strongest sense: if Ollama is not
+   running or the model was never pulled, `check()` comes back false and every
+   later call short-circuits, leaving the app exactly as it was. */
+async function initAssist () {
+  if (!settings.cleanup && !settings.commandFallback) { assist = null; return }
+  assist = createAssist({ url: settings.assistUrl, model: settings.assistModel })
+  if (!(await assist.check())) {
+    send('status', { state: 'error', message: `assist model ${settings.assistModel} not available — is Ollama running?` })
   }
 }
 
@@ -350,10 +423,32 @@ ipcMain.handle('transcribe', async (_e, buffer, interim = false) => {
 ipcMain.handle('settings:get', () => settings)
 ipcMain.handle('settings:set', (_e, patch) => {
   settings = config.save(patch)
+  // Glossary edits apply to the next utterance — no need to restart the server.
+  if (engine && ('vocabulary' in patch || 'corrections' in patch || 'dropGlossaryEcho' in patch)) {
+    engine.setGlossary({
+      vocabulary: settings.vocabulary,
+      corrections: settings.corrections,
+      dropGlossaryEcho: settings.dropGlossaryEcho
+    })
+  }
+  if ('cleanup' in patch || 'commandFallback' in patch ||
+      'assistModel' in patch || 'assistUrl' in patch) {
+    initAssist()
+  }
   if ('alwaysOnTop' in patch && win) {
-    win.setAlwaysOnTop(settings.alwaysOnTop, 'floating')
+    win.setAlwaysOnTop(settings.alwaysOnTop, 'screen-saver')
   }
   return settings
+})
+
+ipcMain.handle('assist:cleanup', async (_e, text) => {
+  if (!assist || !settings.cleanup) return { text, used: false, reason: 'off' }
+  return assist.cleanup(text)
+})
+
+ipcMain.handle('assist:command', async (_e, text, phrases) => {
+  if (!assist || !settings.commandFallback) return null
+  return assist.command(text, phrases)
 })
 
 ipcMain.handle('clipboard:write', (_e, text) => {
@@ -362,7 +457,24 @@ ipcMain.handle('clipboard:write', (_e, text) => {
 })
 
 ipcMain.on('window:hide', () => win && win.hide())
-ipcMain.on('window:minimize', () => win && win.minimize())
+
+/* The renderer owns the two things the strip's geometry depends on: whether a
+   panel is open (so the strip needs room for it) and whether it is mid-
+   interaction (so it must stay awake even if the pointer strays). */
+ipcMain.on('overlay:hold', (_e, value) => { holdOpen = !!value })
+ipcMain.on('overlay:target', (_e, value) => { overTarget = !!value })
+ipcMain.on('overlay:panel', (_e, open) => {
+  if (panelOpen === !!open) return
+  panelOpen = !!open
+  applyStripBounds()
+})
+ipcMain.on('overlay:height', (_e, px) => {
+  const next = Math.max(0, Math.round(Number(px) || 0))
+  // A pixel of jitter is not worth a window resize.
+  if (Math.abs(next - contentHeight) < 2) return
+  contentHeight = next
+  applyStripBounds()
+})
 ipcMain.on('listening', (_e, value) => {
   listening = !!value
   refreshTray()
@@ -371,6 +483,7 @@ ipcMain.on('listening', (_e, value) => {
 app.on('before-quit', () => { app.isQuitting = true })
 
 app.on('will-quit', () => {
+  clearInterval(wakeTimer)
   globalShortcut.unregisterAll()
   if (tapProc) { tapProc.kill('SIGTERM'); tapProc = null }
   if (engine) engine.stop()
