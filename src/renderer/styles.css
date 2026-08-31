@@ -309,6 +309,22 @@ body.awake .bar {
   border-color: hsl(var(--accent) 70% 65% / 0.75);
 }
 
+.set-row select {
+  width: 100%;
+  border: 1px solid hsl(var(--accent) 60% 65% / 0.3);
+  border-radius: 7px;
+  background: hsl(var(--accent) 40% 12% / 0.85);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  padding: 5px 8px;
+  cursor: pointer;
+}
+.set-row select:focus {
+  outline: none;
+  border-color: hsl(var(--accent) 70% 65% / 0.75);
+}
+
 .set-check {
   display: flex;
   align-items: center;

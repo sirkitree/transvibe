@@ -28,7 +28,7 @@ describe('the settings schema against config.js', () => {
 
   it('gives every field a type the panel can build', () => {
     for (const field of FIELDS) {
-      expect(['toggle', 'range', 'text']).toContain(field.type)
+      expect(['toggle', 'range', 'text', 'select']).toContain(field.type)
       expect(field.label).toBeTruthy()
       if (field.type === 'range') {
         expect(field.min).toBeLessThan(field.max)
@@ -77,6 +77,15 @@ describe('coerce', () => {
     // "no forced target app", not the empty string — sendTarget is checked for
     // null, and '' would read as an app with no name.
     expect(coerce(nullable, '')).toBeNull()
+  })
+
+  it('takes a select value exactly as given', () => {
+    const select = { type: 'select', nullable: true }
+    // A model path is a filename, not prose: nothing about it is trimmable.
+    expect(coerce(select, '/Users/me/Library/ggml-small.en.bin'))
+      .toBe('/Users/me/Library/ggml-small.en.bin')
+    expect(coerce(select, '')).toBeNull()
+    expect(coerce({ type: 'select' }, '')).toBeUndefined()
   })
 
   it('reads a toggle as a boolean either way', () => {

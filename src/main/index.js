@@ -4,11 +4,11 @@ import {
 } from 'electron'
 import path from 'node:path'
 import { spawn } from 'node:child_process'
-import { existsSync } from 'node:fs'
+import fs, { existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { createEngine } from './whisper.js'
 import { createAssist } from './assist.js'
-import { findModel, downloadModel, MODELS_DIR } from './models.js'
+import { findModel, downloadModel, listModels, humanSize, MODELS_DIR } from './models.js'
 import * as config from './config.js'
 import { stripBounds, contains, nextWake } from './overlay.js'
 
@@ -197,7 +197,7 @@ function refreshTray () {
       checked: app.getLoginItemSettings().openAtLogin,
       click: item => setLoginItem(item.checked)
     },
-    { label: 'Reveal model folder', click: () => shell.openPath(MODELS_DIR) },
+    { label: 'Reveal model folder', click: revealModelFolder },
     { type: 'separator' },
     { label: 'Show/hide shortcut: ⌃⌥Space', enabled: false },
     { type: 'separator' },
@@ -210,6 +210,17 @@ function refreshTray () {
 function openPanel (name) {
   showWindow()
   send('command', name)
+}
+
+/* The folder worth opening is the one holding the model actually loaded —
+   which is usually another app's, because transvibe only downloads one if it
+   cannot find any. openPath on a directory that does not exist fails silently,
+   so our own is created on the way rather than opening nothing. */
+function revealModelFolder () {
+  const inUse = findModel(settings.modelPath)
+  if (inUse) return shell.showItemInFolder(inUse)
+  fs.mkdirSync(MODELS_DIR, { recursive: true })
+  shell.openPath(MODELS_DIR)
 }
 
 /* macOS files the login item against whatever bundle is running. Launched from
@@ -493,6 +504,15 @@ ipcMain.handle('clipboard:write', (_e, text) => {
   clipboard.writeText(text)
   return true
 })
+
+/* Read fresh every time rather than cached at startup: another app can
+   download a model while transvibe is running, and the point of the list is
+   that it says what is on the machine now. */
+ipcMain.handle('models:list', () => ({
+  // Sized here rather than in the renderer: one implementation of "487 MB".
+  models: listModels().map(m => ({ ...m, size: humanSize(m.bytes) })),
+  inUse: findModel(settings.modelPath)
+}))
 
 ipcMain.handle('login-item:get', () => app.getLoginItemSettings().openAtLogin)
 ipcMain.handle('login-item:set', (_e, value) => {

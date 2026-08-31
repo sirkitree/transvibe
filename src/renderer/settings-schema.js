@@ -60,9 +60,9 @@ export const SECTIONS = [
       },
       {
         key: 'modelPath',
-        label: 'Model file',
-        help: 'Leave empty to use the downloaded base.en model.',
-        type: 'text', placeholder: 'auto', nullable: true, restart: true
+        label: 'Model',
+        help: 'Every whisper model found on this Mac, including ones other apps downloaded. Bigger is more accurate and slower.',
+        type: 'select', options: 'models', nullable: true, restart: true
       }
     ]
   },
@@ -186,6 +186,9 @@ export function coerce (field, raw) {
     const n = Number(raw)
     return Number.isFinite(n) ? n : undefined
   }
+  // A select's values are exact paths — trimming one would be a way to break
+  // a filename that legitimately ends in a space.
+  if (field.type === 'select') return raw === '' ? (field.nullable ? null : undefined) : raw
   const text = String(raw).trim()
   if (!text) return field.nullable ? null : undefined
   return text

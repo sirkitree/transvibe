@@ -7,6 +7,8 @@ contextBridge.exposeInMainWorld('transvibe', {
   getSettings: () => ipcRenderer.invoke('settings:get'),
   /* Not a setting in settings.json: macOS owns this one, and the answer is
      whatever the login item list actually says. */
+  /** every whisper model on this machine, and which one is loaded */
+  listModels: () => ipcRenderer.invoke('models:list'),
   getLaunchAtLogin: () => ipcRenderer.invoke('login-item:get'),
   setLaunchAtLogin: value => ipcRenderer.invoke('login-item:set', value),
   setSettings: patch => ipcRenderer.invoke('settings:set', patch),

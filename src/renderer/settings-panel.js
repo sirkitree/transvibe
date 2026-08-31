@@ -15,7 +15,7 @@ import { SECTIONS, coerce } from './settings-schema.js'
  * not an optimistic guess a failed write would leave standing.
  */
 export function createSettingsPanel ({
-  body, note, getSettings, save, applyLive, open, getExternal, setExternal
+  body, note, getSettings, save, applyLive, open, getExternal, setExternal, getOptions
 }) {
   const el = (tag, cls, text) => {
     const n = document.createElement(tag)
@@ -37,7 +37,7 @@ export function createSettingsPanel ({
 
   function row (field) {
     const wrap = el('div', `set-row set-${field.type}`)
-    const input = el('input')
+    const input = field.type === 'select' ? el('select') : el('input')
     const value = el('span', 'set-value')
 
     if (field.type === 'toggle') {
@@ -55,6 +55,10 @@ export function createSettingsPanel ({
         input.min = field.min
         input.max = field.max
         input.step = field.step
+        head.append(value)
+      } else if (field.type === 'select') {
+        // Filled in by show(), which asks for the list every time the panel
+        // opens — another app can download a model while this one is running.
         head.append(value)
       } else {
         input.type = 'text'
@@ -89,7 +93,7 @@ export function createSettingsPanel ({
     if (field.type === 'range') {
       input.addEventListener('input', () => { value.textContent = format(field, input.value) })
       input.addEventListener('change', commit)
-    } else if (field.type === 'toggle') {
+    } else if (field.type === 'toggle' || field.type === 'select') {
       input.addEventListener('change', commit)
     } else {
       input.addEventListener('blur', commit)
@@ -110,7 +114,38 @@ export function createSettingsPanel ({
     else if (field.type === 'range') {
       entry.input.value = current
       entry.value.textContent = format(field, current)
+    } else if (field.type === 'select') {
+      await fillSelect(entry, current)
     } else entry.input.value = current == null ? '' : String(current)
+  }
+
+  /**
+   * A select is the one field whose choices come from outside the schema. The
+   * options are rebuilt on every open rather than once, and the readout beside
+   * the label says which one is actually loaded — with "Automatic" chosen,
+   * that is the only way to know which file the engine picked.
+   */
+  async function fillSelect (entry, current) {
+    const { field, input, value } = entry
+    const { options, chosen, note: readout } = await getOptions(field)
+    input.replaceChildren()
+    for (const option of options) {
+      const node = el('option', null, option.label)
+      node.value = option.value
+      if (option.disabled) node.disabled = true
+      input.append(node)
+    }
+    // A model that has since been deleted must not silently read as
+    // "Automatic": it is still what the file says, and saying so is how you
+    // find out why the engine did not start.
+    const want = current == null ? '' : String(current)
+    if (want && !options.some(o => o.value === want)) {
+      const missing = el('option', null, `${want} — missing`)
+      missing.value = want
+      input.append(missing)
+    }
+    input.value = want
+    value.textContent = readout ?? chosen ?? ''
   }
 
   function build () {

@@ -546,6 +546,33 @@ function openPanel () {
   return Object.keys(PANELS).find(name => !$(name).hidden) || null
 }
 
+/* The model list is the machine's, not the app's: transvibe downloads one
+   only when it cannot find any, so on a Mac that already runs another local
+   whisper app every entry here belongs to that app. Sizes are shown because
+   size is the trade — a small model is faster and wronger.
+
+   "Automatic" is first and is what the setting holds by default; the readout
+   beside it names the file that choice actually landed on, which is otherwise
+   invisible. */
+async function modelOptions () {
+  const { models, inUse } = await window.transvibe.listModels()
+  const options = [{ value: '', label: 'Automatic — first one found' }]
+  for (const model of models) {
+    options.push({
+      value: model.path,
+      label: `${model.name} · ${model.size} · ${model.from}`
+    })
+  }
+  if (!models.length) {
+    options.push({ value: '', label: 'no models on this Mac yet', disabled: true })
+  }
+  const loaded = models.find(m => m.path === inUse)
+  return {
+    options,
+    note: loaded ? `using ${loaded.name}` : (inUse ? 'using a model not in the list' : 'none loaded')
+  }
+}
+
 /* A setting is only worth a panel if changing it does something now. The main
    process already re-reads its own on every use and reapplies the ones the
    engine holds; these are the four the renderer captured at startup, plus the
@@ -600,7 +627,8 @@ async function main () {
     applyLive: applyLiveSetting,
     open: name => togglePanel(name, true),
     getExternal: () => window.transvibe.getLaunchAtLogin(),
-    setExternal: (_key, value) => window.transvibe.setLaunchAtLogin(value)
+    setExternal: (_key, value) => window.transvibe.setLaunchAtLogin(value),
+    getOptions: modelOptions
   })
   state.presence = createPresence({ idleFadeMs: state.settings.idleFadeMs })
   state.presence.activity(Date.now())
