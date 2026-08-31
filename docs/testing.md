@@ -65,3 +65,14 @@ Things the automated tests cannot cover:
 `models.test.js` builds a temporary Application Support tree rather than mocking `fs`, because the failures worth catching are all about what a real directory holds: a CoreML bundle whose `weight.bin` files are each larger than a small ggml model, and an OpenVINO encoder sitting beside its model under nearly its name. Both would list as models, and neither would load.
 
 `settings-schema.test.js` is the one that stops the settings panel drifting from the file behind it. It asserts in both directions — every key in `DEFAULTS` has a row, every row names a key that exists — so adding a setting to `config.js` and forgetting the panel is a failing test rather than a setting nobody can reach.
+
+## Screenshots
+
+The images in `docs/images/` are taken by `script/make-screenshots.mjs`, driving a running app over its CDP port:
+
+```sh
+npm run dev &
+node script/make-screenshots.mjs
+```
+
+Retake them after anything that changes what the strip or a panel looks like. Two things in there are staged rather than captured as found, and both on purpose: a plain dark backdrop stands in for whatever would really be behind a click-through window, and the glossary panel is rendered from a demo glossary held in memory, because the real one is full of the client names and jargon its owner has had to teach it. Nothing is written to `settings.json`, and the app is put back the way it was found.

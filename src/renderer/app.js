@@ -219,11 +219,19 @@ function syncHeight () {
   if (heightFrame) return
   heightFrame = requestAnimationFrame(() => {
     heightFrame = null
-    // Only the stage is measured, never an open panel: a panel is sized in
+    // The stage and the word fixer, never an open panel: a panel is sized in
     // percentages of the window, so measuring it would feed its own height
     // back in and the strip would grow without limit. The main process takes
     // the larger of this and its fixed panel height.
-    const bottom = document.querySelector('.stage').getBoundingClientRect().bottom
+    //
+    // The fixer has to be in here because it hangs below the row it belongs
+    // to: measuring the stage alone left its last two checkboxes outside the
+    // window, where they were not merely hidden but unclickable.
+    const fixer = $('fixer')
+    const bottom = Math.max(
+      document.querySelector('.stage').getBoundingClientRect().bottom,
+      fixer.hidden ? 0 : fixer.getBoundingClientRect().bottom
+    )
     window.transvibe.setHeight(Math.ceil(bottom + BOTTOM_MARGIN))
   })
 }
@@ -416,6 +424,7 @@ function wireGlossary () {
 function closeFixer () {
   $('fixer').hidden = true
   syncHold()
+  syncHeight()
 }
 
 function syncFixerOptions () {
@@ -451,6 +460,10 @@ function openFixer (wordEl) {
   fixer.style.left = `${left}px`
   fixer.style.top = `${top}px`
   syncHold()
+  // The window is grown after the fixer is placed, not before: where it goes
+  // is decided against the strip as it stands, and then the strip is made tall
+  // enough to hold it.
+  syncHeight()
   $('fixer-to').focus()
 }
 

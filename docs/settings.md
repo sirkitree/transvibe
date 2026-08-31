@@ -6,6 +6,10 @@ Two exceptions say so on the row: the speech model and the language are baked in
 
 Two settings are not in the panel. `vocabulary` and `corrections` have the glossary panel, which is a better editor for them than a text field; the panel links there. One setting in the panel is not in the file: **Launch at login** is macOS's, kept in its Login Items list.
 
+![The settings panel, Listening tab: the tab list down the left, sliders on the right, each with its value and a line saying what it does](images/settings.png)
+
+![The Transcription tab: a dropdown of the whisper models found on this machine, the language, and the glossary-echo toggle](images/settings-transcription.png)
+
 Behind it is `~/Library/Application Support/transvibe/settings.json`, written on change and merged over the defaults, so deleting the file resets everything. Editing it by hand still works; the panel reads it fresh each time it opens.
 
 | key | default | |

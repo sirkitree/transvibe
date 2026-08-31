@@ -11,6 +11,8 @@ Local voice-to-text for macOS. A click-through strip across the top of the scree
 - Every setting is a panel on the strip, applied as you change it
 - Lives in the menu bar
 
+![The strip across the top of the screen: a transcript with the in-flight words highlighted, a row of buttons under it, and the visualizer ribbon along the top edge](docs/images/strip.png)
+
 <!-- demo video goes here: drag the .mp4 into a GitHub comment box, paste the
      user-attachments URL on the next line. Script: docs/demo.md -->
 
@@ -68,6 +70,18 @@ Talk, and the text appears as you speak. The strip ignores your mouse until you 
 | Click a word | Fix what it heard, and teach it the right spelling |
 
 The **?** button opens the same reference in the app, generated from the parser itself.
+
+Click a word it got wrong and say what it should have been. Ticking *remember the fix* teaches it, so the correction and the spelling both stick:
+
+![The word fixer open under a mis-heard word, with the heard word on the left, an empty field for the right one, and two checkboxes: remember the fix, listen for it too](docs/images/fixer.png)
+
+Hold right ⌥ and the palette goes amber — the next thing you say is a command, not dictation:
+
+![The strip in command mode: an amber COMMAND badge, and the spoken command highlighted in amber rather than blue](docs/images/command-mode.png)
+
+Settings are a panel on the strip, tabbed down the left, saved and applied as you change them:
+
+![The settings panel, Listening tab: sliders for the speech threshold, the silence before an utterance ends, and the interim update interval](docs/images/settings.png)
 
 ## Docs
 

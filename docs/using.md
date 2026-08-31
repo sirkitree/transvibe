@@ -6,6 +6,8 @@ The day-to-day reference. [Run instructions are in the README](../README.md).
 
 There is no window to move, focus, or close. The app is a transparent band hanging from the top of the screen, above everything including full-screen apps, and **click-through** — every click goes to whatever is behind it.
 
+![The strip: transcript, the row of buttons beneath it, and the status line under those](images/strip.png)
+
 **Rest the pointer on it and it wakes**: the words become clickable and the buttons appear. Move away and it is a ghost again. Waking takes a deliberate dwell, so sweeping up to the menu bar never steals a click, and only the text, the buttons and the panels count — a click in the empty air between them reaches the app underneath even while the pointer is on the strip.
 
 **The text fades.** Six seconds after the last thing you said, the transcript fades out. It is still there to send with ⌃⌥↩, but it is now stale: the next thing you say starts a fresh transcript rather than appending to something you can no longer see. Speaking, or reaching for the strip, brings it back. `esc` clears it outright.
@@ -49,7 +51,9 @@ Releasing the key does not end command mode on its own: the utterance is usually
 
 Anything the rules cannot place is shown as `not a command: "…"` rather than guessed at, so nothing you said is silently swallowed. With [`commandFallback`](assist.md) on, that miss goes to the local assist model first, which makes phrasings like "nope, take that back" or "stick that on the clipboard for me" work without adding a rule for each one.
 
-The **?** button opens an in-app help panel with the full list (`esc` or `?` toggles it too).
+The **?** button opens an in-app help panel with the full list (`esc` or `?` toggles it too). It is generated from the parser, so it cannot describe a command the parser does not have.
+
+![The help panel: sections for the strip, the keys, the transcript and the buttons, then the full command list](images/help.png)
 
 ## The glossary
 
@@ -57,7 +61,11 @@ Names, jargon and product words are what a small Whisper model gets wrong most c
 
 **Click a word in the transcript** to say what it should have been. The rewrite always happens; what you keep is the opt-out. *Remember the fix* saves it as a rule, and *listen for it too* adds the corrected spelling to the terms — untick both and the word is simply fixed here and now, which is what a one-off mishearing deserves. Both checkboxes hold their setting for the rest of the session, so a run of throwaway fixes is one click, not one per word.
 
+![The word fixer, anchored under the word it was opened on](images/fixer.png)
+
 Esc, the *esc* button, or a click anywhere outside dismisses it without changing anything. Dragging still selects text; only a click that leaves no selection opens the fixer. The "heard" side stays editable, which is how a two-word phrase gets a rule.
+
+![The glossary panel: terms to listen for as removable chips, and the wrong-to-right fixes below them](images/glossary.png)
 
 The book button opens the glossary panel: terms on top, fixes below, added and removed in place. Every edit is written to the settings file and swapped into the running recogniser immediately — the model stays loaded, and the change takes effect on the next thing you say.
 
