@@ -1,86 +1,100 @@
-# Demo: sending a status update without leaving the app you are in
+# The demo video
 
-A two-minute scenario for showing transvibe to someone who has never seen it. The arc is *"I never opened a window and I never touched the keyboard"* — every feature shows up in service of that, rather than as a tour.
+The video that sits at the top of the README. Its whole job is to answer *what is this and how does it work* for someone who arrived from a link, has never heard of the project, and will give it about a minute.
 
-The premise: you are in Slack, mid-conversation, and you need to send Dave an update about the VINCI deploy.
+Target: **75–90 seconds**, no voiceover.
 
-## Before you start
+## Two things that shape the whole script
 
-- Ollama running, `gemma4:e2b` pulled.
-- `settings.json` has `"cleanup": true` and `"commandFallback": true`, and `"vocabulary": ["VINCI"]`.
-- Slack (or anything with a text field) open and focused, with something clickable near the top of the screen — a channel in the sidebar, a tab.
-- Say nothing for ten seconds first, so the strip is faded and the screen looks untouched.
+**It will be watched with the sound off.** A video embedded in a README is watched muted, in a browser tab, next to nine other tabs. Nothing can depend on hearing you.
 
-## Say what it is first
+That sounds fatal for a dictation app, and it is the opposite: the app puts what you said on screen as you say it. **The product is its own subtitle track.** The viewer watches words appear, which is exactly the thing being demonstrated. All the script has to add is a short caption card per beat saying what to notice.
 
-Fifteen seconds, before anything happens on screen. Someone who has not seen it has no idea what they are looking at — the whole opening is a thin line at the top of a screen that otherwise looks untouched, and without a frame for it they will spend the first minute trying to work out what changed.
+**The viewer has no context.** No Slack, no colleagues, no in-jokes, nothing from your setup. Every word on screen has to make sense to a stranger. That rules out internal names — which is why the glossary beat uses `whisper.cpp`, a word the viewer read in the README two lines above the video.
 
-Roughly:
+## What they should be able to say afterwards
 
-> This is a dictation app. That is the whole thing — it turns what I say into text.
->
-> Two things make it different from the one built into your Mac. It runs entirely on this machine, so nothing I say leaves the room. And it has no window.
+Three things, in this order. If a beat does not serve one of them, cut it.
 
-Then stop talking and let them look at the screen for a second. The second claim is the one they will not believe, and the next thirty seconds are spent proving it.
+1. It turns what I say into text, on screen, as I talk.
+2. It has no window and it gets out of the way — this is not another floating box to manage.
+3. It runs on the machine. Nothing I say goes anywhere.
 
-If you have thirty seconds rather than two minutes, say that much, do beat 1, and stop. The click-through moment is the demo; everything after it is detail.
+Everything else — the glossary, voice editing, the assist model — is evidence that someone thought about the details, not the point.
 
-**A variant, if you are feeling confident:** do not say any of it. Dictate the introduction *into the app* and send it into the Slack message box, then let them read it. It makes the point and demonstrates the product in the same breath. It also fails in front of an audience if the room is noisy, so have the spoken version ready.
+## Before you record
 
-## The beats
+- A clean desktop. One editor or browser window, no dock full of badges, no notifications. Do Not Disturb on.
+- Record at 1280×800 or 1440×900, not a 6K display scaled down — the strip's text has to be legible in a README's column width.
+- Whatever you record into needs a text field you can leave focused, for the paste at the end.
+- **Rehearse the glossary word.** `whisper.cpp` comes out as "Whisper CPP" reliably here, but it depends on your voice and your model. Say it a few times first and confirm it actually fails for you; if it does not, pick another word that does — a colleague's name usually works — and change the caption to match.
+- Clear the glossary of anything private before recording. It is on screen in beat 5.
+- Decide whether the assist model is on. Beat 4 needs `cleanup: true`; if you leave it off, cut that beat and the video is 70 seconds instead of 85.
+- Sit quietly for ten seconds before you start, so the strip has faded and the screen looks untouched.
 
-**1. The screen is not yours to give up.** Start on the quiet screen. The only thing visible is a thin line across the top. Move the pointer up and *click a Slack channel through the strip* — the click lands in Slack. Say the line out loud: there is no window here to move out of the way.
+## The script
 
-Then rest the pointer on the strip for a moment. It goes solid, the buttons appear. Move away and it is a ghost again. That contrast, right after you have claimed there is no window, is the whole product.
+Times are cumulative. Captions are short on purpose — they are read at a glance, over the top of the action.
 
-**2. Talk.** Do not touch anything. Say, with the pauses natural:
+| in | for | on screen | caption |
+|---|---|---|---|
+| 0:00 | 6s | A quiet desktop. One thin line across the very top. | **transvibe** — local voice-to-text for macOS |
+| 0:06 | 8s | Pointer moves up over the strip and clicks a tab or a link *behind* it. It works. | It has no window. Clicks pass straight through. |
+| 0:14 | 6s | Pointer rests on the strip: it goes solid, buttons appear. Pointer leaves: it is a ghost again. | Rest the pointer on it and it wakes. |
+| 0:20 | 12s | You speak. Blue text appears while you are still talking, then settles. | Text appears while you are still talking. |
+| 0:32 | 6s | The line rewrites itself, fillers gone. *(Optional — needs the assist model.)* | Optional: a second local model takes the fillers out. |
+| 0:38 | 12s | "Whisper CPP" appears. Click the word, type `whisper.cpp`, hit fix. It changes everywhere. | Click a word to fix it. It remembers for next time. |
+| 0:50 | 10s | Hold right ⌥ — the strip turns amber. Speak. The last sentence disappears. | Hold right ⌥ to edit by voice. |
+| 1:00 | 8s | ⌃⌥↩. The text lands in the editor you left focused. | ⌃⌥↩ pastes it where you were typing. |
+| 1:08 | 8s | Stop. The text fades. Back to one thin line. | Then it gets out of the way. |
+| 1:16 | 4s | Hold on the empty screen. | Nothing you say leaves your machine. |
 
-> Um so the VINCI deploy is uh is scheduled for Thursday morning.
+### The lines to say
 
-Two things to point at. The blue text appearing *while you are still talking* — that is the interim pass, not a wait-for-the-end transcription. And a quarter-second after you stop, the line rewrites itself:
+Verified against `small.en`. Say them at a normal pace with natural pauses; do not perform them.
 
-> So the VINCI deploy is scheduled for Thursday morning.
+**0:20** — one sentence, then stop talking so the final replaces the interim:
 
-The `um` and the `uh is` are gone. That is the second model, also local, tidying text the first one heard correctly.
+> Everything transvibe hears stays on the laptop.
 
-**3. Keep going**, so it does not look like a one-line trick:
+**0:32**, if the assist model is on, replace the above with a line that has something to take out:
 
-> I still need to double check the migration script before we uh before we ship it.
+> Um so transvibe runs uh runs entirely on this machine.
 
-> And uh can you let Dave know that the window moved.
+**0:38** — the glossary beat:
 
-**4. VINCI is spelled right.** Worth calling out explicitly, because it is the thing every dictation tool gets wrong. A small Whisper model has never seen the word and reaches for the nearest thing it has — "Vinci", "Vinchi", "Vinci's". It is in the glossary, so it is fed to the recogniser as it listens.
+> It is all in the whisper.cpp bindings.
 
-If you want the contrast on camera: open the glossary (the book button), delete the VINCI chip, say the line again, and watch it come back wrong. Then click the wrong word in the transcript, type `VINCI`, hit fix — the word is corrected everywhere on screen *and* the rule is saved. Reopen the glossary and it is there.
+Comes out as *"It is all in the Whisper CPP bindings."* Click **Whisper**, type `whisper.cpp`, fix. Both words collapse into the right one, and the rule is saved — reopen the glossary to show it landed, if the timing allows.
 
-**5. Fix it by voice.** Hold the right ⌥ key. The strip swings amber. Say:
+**0:50** — hold right ⌥, and use a phrasing no rule covers, so the assist model is doing the work:
 
 > actually chuck that last bit
 
-The rules have never heard that phrasing — before this it would have said *not a command*. The local model maps it to a command the app already implements and the last sentence goes. Release; it returns to transcribing on its own.
+If the assist model is off, say **"scratch that"** instead, which the rules handle on their own.
 
-Make the point that the rules run first and the model only ever sees speech you already declared to be a command. Dictate "I need to copy that file to the server" normally and watch it stay as text — a model asked cold treats that as a copy command, which is exactly why it sits behind the rules and not in front of them.
+## After recording
 
-**6. Land it.** Press ⌃⌥↩. The transcript pastes straight into Slack, in the field you left focused. You never clicked into transvibe, never alt-tabbed.
+Trim to the first frame of the desktop and the last frame of the empty strip — no title card, no fade in. A README video that opens on a logo has spent its first two seconds badly.
 
-**7. Walk away.** Stop talking. Six seconds later the text fades out on its own and the screen is back to the thin line. End the recording there — on nothing.
+Keep it under 10 MB if you can. GitHub renders an uploaded `.mp4` as a player: drag the file into any issue or PR comment box, GitHub uploads it and gives you back a URL, and that URL goes into the README. Paste it into the slot near the top:
 
-## If someone asks
+```html
+<!-- demo video: https://github.com/user-attachments/assets/... -->
+```
 
-**"Where does the audio go?"** Nowhere. Whisper runs on the machine, the assist model runs on the machine through Ollama on `127.0.0.1`, and the assist model is only ever sent text — never audio. The one network call the app can make is a one-time model download.
+A GIF is the fallback if the video will not play inline, but it will be several times the size for the same length and the text will be softer. Prefer the video.
 
-**"How fast?"** Interim text every 500ms while you talk. Inference around 110ms with the model resident. Cleanup adds 170–350ms *after* the text is already on screen, so it is never something you wait for.
+## Do not record this
 
-**"Why not Gemini 3.5 Transcribe?"** It is better at all of this, in one pass. It is also a cloud API with no open weights, and this app's only real property is that the audio never leaves the machine.
+**Spoken self-corrections.** "Ship it Friday, no wait, Thursday" *sometimes* comes back corrected and sometimes keeps both halves. It is a great party trick when it lands and a dead demo when it does not.
 
-**"Why two models?"** Whisper is better at hearing and worse at judgement; a small LLM is the reverse. Gemma 4 takes audio natively and was tried as a straight replacement — on the same clips it was slower and less accurate. So Whisper keeps the audio and the LLM only ever sees text.
+**A long monologue.** The transcript caps at four lines and older text scrolls away. One sentence per beat.
 
-## Do not demo this
+**A noisy room.** A short glossary makes every cough a candidate for one of its terms. The echo filter drops utterances that are only glossary words, but background chatter still produces stray text on screen.
 
-**Spoken self-corrections.** "Ship it Friday, no wait, Thursday" *sometimes* comes back as "ship it Thursday" and sometimes keeps both halves. E2B is not reliable at it. It is a great party trick when it lands and a dead demo when it doesn't, so leave it out and keep the filler-word removal, which is stable.
+**Anything you would mind a stranger reading.** The glossary panel is on screen in beat 5, the transcript throughout, and whatever you paste into lands in beat 8.
 
-Related, and worth knowing rather than showing: cleanup once turned "I still need to double check" into "I still need *you* to double-check". The guard rails catch a summary, a refusal, or a chatbot preamble, but not a single-word meaning change. Do not put the demo transcript straight into a real message without reading it.
+## One thing to know before you trust it
 
-**A long monologue.** The transcript caps at four lines and older text scrolls away. Keep each utterance to a sentence.
-
-**A noisy room.** A one-term glossary makes every cough a candidate for that term. The echo filter drops utterances that are *only* glossary words, but background chatter still produces stray text.
+Cleanup has turned "I still need to double check" into "I still need *you* to double-check" — a plausible sentence, the right length, and not what was said. The guards catch a summary, a refusal or a chatbot preamble, but not a single-word meaning change. Read what it produced before you send it anywhere that matters, and do not put a demo transcript straight into a real message.

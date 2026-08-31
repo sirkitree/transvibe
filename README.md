@@ -10,6 +10,9 @@ Local voice-to-text for macOS. A click-through strip across the top of the scree
 - Optionally, a second local model tidies the fillers out and makes command mode understand phrasings the rules never learned
 - Lives in the menu bar
 
+<!-- demo video goes here: drag the .mp4 into a GitHub comment box, paste the
+     user-attachments URL on the next line. Script: docs/demo.md -->
+
 **No cloud service.** Audio never leaves the machine — there is no network call anywhere in the transcription path. The only outbound request the app can ever make is a one-time model download from Hugging Face, and only if it cannot find a Whisper model already on disk. The optional assist model runs locally too, through Ollama on `127.0.0.1`, and is only ever sent text.
 
 ## Requirements
@@ -61,7 +64,7 @@ The **?** button opens the same reference in the app, generated from the parser 
 | [Architecture](docs/architecture.md) | The pipeline, interim results, the overlay, project layout |
 | [Testing](docs/testing.md) | What the 351 tests cover, and the manual checklist |
 | [Performance](docs/performance.md) | Where the visualizer's cost went |
-| [Demo](docs/demo.md) | A two-minute scenario for showing it to someone |
+| [Demo video](docs/demo.md) | The script for the video at the top of this page |
 
 ## Develop
 
