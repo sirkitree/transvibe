@@ -1,6 +1,12 @@
 # Settings
 
-`~/Library/Application Support/transvibe/settings.json`, written on change and merged over the defaults, so deleting the file resets everything.
+The gear on the strip, or **Settings…** in the menu bar (⌘,). Tabs down the left, one section at a time; every change saves and takes hold as you make it, which is the point — the speech threshold and the fade delay are settings you tune by watching what they do, not by editing a file and relaunching.
+
+Two exceptions say so on the row: the speech model and the language are baked into a running whisper server and take effect on restart.
+
+Two settings are not in the panel. `vocabulary` and `corrections` have the glossary panel, which is a better editor for them than a text field; the panel links there. One setting in the panel is not in the file: **Launch at login** is macOS's, kept in its Login Items list.
+
+Behind it is `~/Library/Application Support/transvibe/settings.json`, written on change and merged over the defaults, so deleting the file resets everything. Editing it by hand still works; the panel reads it fresh each time it opens.
 
 | key | default | |
 |---|---|---|

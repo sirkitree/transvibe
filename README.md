@@ -8,6 +8,7 @@ Local voice-to-text for macOS. A click-through strip across the top of the scree
 - Hold right ⌥ to speak an editing command instead of dictating
 - ⌃⌥↩ pastes the transcript straight into whatever app is in front
 - Optionally, a second local model tidies the fillers out and makes command mode understand phrasings the rules never learned
+- Every setting is a panel on the strip, applied as you change it
 - Lives in the menu bar
 
 <!-- demo video goes here: drag the .mp4 into a GitHub comment box, paste the
@@ -29,7 +30,21 @@ npm install
 npm start          # or: npm run dev  (opens a CDP port on 9333)
 ```
 
-On first launch it asks for microphone access, then finds a Whisper model: its own `~/Library/Application Support/transvibe/models/`, else one another local Whisper app already downloaded (superwhisper, MacWhisper, `~/.cache/whisper.cpp` — read only), else it downloads `ggml-base.en.bin` (~148 MB).
+## Install it as an app
+
+`npm start` needs a terminal to stay open, and the checkout to be findable. This puts transvibe in `~/Applications` with an icon, launchable from Spotlight or the Dock:
+
+```sh
+./script/install-launcher.sh
+```
+
+The bundle it builds runs **this working tree** — Electron's own `.app`, copied and renamed, with `Resources/app` symlinked back to the repo — so an ordinary source edit needs a relaunch and not a rebuild. Re-run the script after `npm install` pulls a new Electron; moving the checkout breaks the symlink.
+
+`npm run dist` builds a self-contained `.app` instead, and is **not** currently usable: `electron-builder` seals `bin/` inside the asar, where the app cannot spawn the two Swift helpers, so the right-⌥ hotkey and pasting on send both fail. Packaging also does not run `build:native`. The app is unsigned either way and does not bundle `whisper-cpp`.
+
+On first launch it asks for microphone access, then finds a Whisper model. It looks for `ggml-*.bin` in its own `~/Library/Application Support/transvibe/models/` and then, read only, a few folders deep through `~/Library/Application Support`, `~/Library/Caches` and `~/.cache` — which is where superwhisper, MacWhisper, Highlight and whisper.cpp keep theirs. Failing all of that it downloads `ggml-base.en.bin` (~148 MB). The Transcription tab lists everything it found, with the size and whose folder it came from.
+
+Only whisper.cpp's ggml format is listed, because that is all the engine can load — MacWhisper and its kin also keep WhisperKit CoreML models, often the larger ones, and those need a different runtime.
 
 Three macOS permissions are involved, each degrading on its own rather than taking the app down with it:
 
@@ -60,21 +75,23 @@ The **?** button opens the same reference in the app, generated from the parser 
 |---|---|
 | [Using transvibe](docs/using.md) | The strip, every control, command mode, the glossary, sending text |
 | [The assist model](docs/assist.md) | Optional local LLM: filler-word cleanup, smarter command mode |
-| [Settings](docs/settings.md) | Every key in `settings.json` |
+| [Settings](docs/settings.md) | The settings panel, and every key behind it |
 | [Architecture](docs/architecture.md) | The pipeline, interim results, the overlay, project layout |
-| [Testing](docs/testing.md) | What the 351 tests cover, and the manual checklist |
+| [Testing](docs/testing.md) | What the 382 tests cover, and the manual checklist |
 | [Performance](docs/performance.md) | Where the visualizer's cost went |
 | [Demo video](docs/demo.md) | The script for the video at the top of this page |
 
 ## Develop
 
 ```sh
-npm test               # 351
-npm run test:unit      # pure modules only, no whisper binary needed
-npm run dev            # CDP on 9333
-npm run dist           # -> dist/mac-arm64/transvibe.app
+npm test                      # 382
+npm run test:unit             # pure modules only, no whisper binary needed
+npm run dev                   # CDP on 9333
+./script/install-launcher.sh  # -> ~/Applications/Transvibe.app, running this tree
 ```
 
 Most of the interesting logic lives in modules that take no DOM, Electron, filesystem or network dependency — the VAD's segment boundaries, the command parser's false positives, the guards on the assist model's replies — which is what makes them testable under plain Node rather than only discoverable by hand.
 
-Packaging does not run `build:native`, so build the helpers first. The app is unsigned and does not bundle `whisper-cpp`.
+The settings panel is generated from `src/renderer/settings-schema.js`, and a test holds that schema and `config.js` to each other in both directions: a setting added to one without the other fails rather than becoming quietly unreachable.
+
+`script/make-icon.py` draws `build/icon.icns` — the visualizer's bars on the strip's scrim — rather than the repo carrying a designed one.

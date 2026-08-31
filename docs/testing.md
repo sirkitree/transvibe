@@ -1,7 +1,7 @@
 # Tests
 
 ```sh
-npm test          # 351
+npm test          # 382
 npm run test:unit # pure modules only, no whisper binary needed
 ```
 
@@ -11,12 +11,16 @@ npm run test:unit # pure modules only, no whisper binary needed
 | `wav.test.js` | 26 | header byte-exactness, clamping, overflow guards |
 | `glossary-edit.test.js` | 23 | glossary panel edits, word splitting |
 | `whisper-parse.test.js` | 21 | output parsing, artifact filter, FIFO queue |
-| `glossary.test.js` | 18 | prompt budget, whole-word corrections, echo filter |
+| `glossary.test.js` | 21 | prompt budget, whole-word corrections, echo filter |
 | `assist.test.js` | 18 | assist prompts, and the guards on its replies |
+| `overlay.test.js` | 17 | strip geometry, hover-wake dwell, the sleep grace |
 | `vad.test.js` | 16 | segment boundaries, hangover, force-flush, bad options |
-| `overlay.test.js` | 16 | strip geometry, hover-wake dwell |
 | `band.test.js` | 15 | visualizer math stays finite and in-bounds |
+| `settings-schema.test.js` | 13 | the panel's schema against `config.js`, both directions |
+| `modules.test.js` | 13 | every module imports, and exports what it claims |
 | `presence.test.js` | 11 | when the transcript fades, and what un-fades it |
+| `models.test.js` | 11 | model discovery against a real directory tree |
+| `assist-models.test.js` | 6 | listing what Ollama has, and what an absent Ollama reads as |
 | `engine.integration.test.js` | 4 | the real engine, end to end |
 
 The bulk sits in `commands.test.js` because a command parser's worst failure is silent: a false positive eats dictation the user meant to keep. Over 60 of the cases there are ordinary sentences — "I need to copy that file", "let's undo the last commit", "send that email to Bob" — asserted to parse as *nothing*.
@@ -57,3 +61,7 @@ Things the automated tests cannot cover:
 - [ ] `⌃⌥Space` toggles visibility from another app
 - [ ] Waveform icon appears in the menu bar and adapts to light/dark
 - [ ] × clears the transcript; the tray icon still shows and hides the strip
+
+`models.test.js` builds a temporary Application Support tree rather than mocking `fs`, because the failures worth catching are all about what a real directory holds: a CoreML bundle whose `weight.bin` files are each larger than a small ggml model, and an OpenVINO encoder sitting beside its model under nearly its name. Both would list as models, and neither would load.
+
+`settings-schema.test.js` is the one that stops the settings panel drifting from the file behind it. It asserts in both directions — every key in `DEFAULTS` has a row, every row names a key that exists — so adding a setting to `config.js` and forgetting the panel is a failing test rather than a setting nobody can reach.

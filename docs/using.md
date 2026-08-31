@@ -24,6 +24,7 @@ The controls only exist while the strip is awake. They sit in a row directly und
 | ➤ | Send the transcript to the frontmost app |
 | Click a word | Correct it, optionally saving the fix to the glossary |
 | Book | Glossary — terms to recognise, and fixes for the ones it misses |
+| Gear | [Settings](settings.md) — everything else, applied as you change it |
 | ? | In-app help — keys, buttons, and the full command list |
 | hovering any button | Describes it on the status line under the row |
 | Pause | Stop feeding segments to the recogniser |
@@ -93,6 +94,8 @@ This needs **Accessibility** permission to post the keystroke — a different gr
 
 ## Menu bar
 
-transvibe lives in the macOS menu bar as a waveform icon. Left-click toggles the strip; right-click opens a menu with show/hide, a listening checkbox, copy and clear, and Quit.
+transvibe lives in the macOS menu bar as a waveform icon. Left-click toggles the strip; right-click opens a menu with show/hide, a listening checkbox, copy and clear, the three panels (Settings ⌘,, Glossary, Keys & commands), Launch at login, Reveal model folder, and Quit.
+
+The three panel entries show the strip on the way, since a panel opened onto a hidden window is nothing to look at.
 
 Hiding parks the app in the menu bar with the model still resident, so bringing it back is instant rather than a fresh model load. It comes back without stealing focus from what you were typing in. Only Quit (or `⌘Q`) actually tears down the engine.

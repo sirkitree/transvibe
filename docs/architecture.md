@@ -95,13 +95,15 @@ src/main/       index.js      window, tray, shortcuts, IPC, send
                 whisper.js    engine lifecycle + serialised inference queue
                 whisper-parse.js  output parsing, artifact filter, queue
                 wav.js        Float32 → 16-bit PCM WAV
-                models.js     locate or download a ggml model
+                models.js     find or download a ggml model
                 overlay.js    strip geometry + hover-wake rule (pure)
                 config.js     settings persistence
                 assist.js     optional local LLM pass (Ollama)
 src/shared/     glossary.js   vocabulary prompt + corrections (pure)
                 assist.js     assist prompts + reply guards (pure)
 src/renderer/   app.js        transcript UI, command dispatch, help panel
+                settings-schema.js  what settings.json holds (pure)
+                settings-panel.js   the settings panel, built from the schema
                 audio.js      mic graph, ring buffer, segment slicing
                 vad.js        voice-activity state machine (pure)
                 presence.js   when the transcript fades (pure)
@@ -112,6 +114,8 @@ src/renderer/   app.js        transcript UI, command dispatch, help panel
                 pcm-worklet.js
 src/native/     rightopt.swift   right-⌥ hold detection via CGEventTap
                 sendkeys.swift   posts ⌘V to the frontmost app
+script/         install-launcher.sh  build ~/Applications/Transvibe.app
+                make-icon.py         draw build/icon.icns
 ```
 
-The pure modules — `vad`, `commands`, `band`, `wav`, `overlay`, `presence`, `glossary`, `glossary-edit`, `assist`, `whisper-parse` — take no DOM, Electron, filesystem or network dependency, which is what makes the awkward parts (segment boundaries, command false positives, model replies) testable under plain Node rather than only discoverable by hand.
+The pure modules — `vad`, `commands`, `band`, `wav`, `overlay`, `presence`, `glossary`, `glossary-edit`, `assist`, `whisper-parse`, `settings-schema` — take no DOM, Electron, filesystem or network dependency, which is what makes the awkward parts (segment boundaries, command false positives, model replies) testable under plain Node rather than only discoverable by hand.
