@@ -1,0 +1,31 @@
+import { describe, it, expect } from 'vitest'
+
+/* Main-process modules are only loaded by Electron at launch, so a syntax
+   error in one shows up as a blank window rather than a failing test. Import
+   every module that does not need Electron or the DOM, so breakage surfaces
+   here first. */
+const MODULES = [
+  '../src/main/config.js',
+  '../src/main/bounds.js',
+  '../src/main/wav.js',
+  '../src/main/whisper-parse.js',
+  '../src/main/models.js',
+  '../src/renderer/vad.js',
+  '../src/renderer/band.js',
+  '../src/renderer/commands.js'
+]
+
+describe('modules load', () => {
+  for (const path of MODULES) {
+    it(`imports ${path.split('/').pop()}`, async () => {
+      const mod = await import(path)
+      expect(Object.keys(mod).length).toBeGreaterThan(0)
+    })
+  }
+
+  it('every default setting is JSON-serialisable', async () => {
+    const { DEFAULTS } = await import('../src/main/config.js')
+    expect(() => JSON.stringify(DEFAULTS)).not.toThrow()
+    expect(JSON.parse(JSON.stringify(DEFAULTS))).toEqual(DEFAULTS)
+  })
+})

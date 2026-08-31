@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'">
+  <title>transvibe</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="shell">
+    <div class="trim top"></div>
+    <div class="trim right"></div>
+
+    <div class="bar">
+      <button class="btn close" id="close" title="Close to menu bar">
+        <svg viewBox="0 0 16 16"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7"/></svg>
+      </button>
+      <button class="btn send" id="send" title="Send to the frontmost app (⌃⌥↩)">
+        <svg viewBox="0 0 16 16"><path d="M14 2L7 9M14 2l-4.5 12-2.5-5-5-2.5L14 2z"/></svg>
+      </button>
+      <button class="btn" id="copy" title="Copy transcript">
+        <svg viewBox="0 0 16 16"><rect x="5" y="5" width="8" height="9" rx="1.5"/><path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2h-6A1.5 1.5 0 0 0 2 3.5v6A1.5 1.5 0 0 0 3.5 11H5"/></svg>
+      </button>
+      <button class="btn" id="clear" title="Clear">
+        <svg viewBox="0 0 16 16"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8a1 1 0 0 0 1 .9h3.8a1 1 0 0 0 1-.9l.6-8"/></svg>
+      </button>
+      <button class="btn on" id="pin" title="Always on top">
+        <svg viewBox="0 0 16 16"><path d="M6 2h4l-.6 4.2 2.6 2.3H4l2.6-2.3z"/><path d="M8 8.5V14"/></svg>
+      </button>
+      <button class="btn" id="help-btn" title="Help">
+        <svg viewBox="0 0 16 16"><path d="M6 6a2 2 0 1 1 2.6 1.9c-.4.15-.6.5-.6.9v.7"/><circle cx="8" cy="12" r=".9" fill="currentColor" stroke="none"/></svg>
+      </button>
+      <button class="btn" id="mute" title="Pause listening">
+        <svg viewBox="0 0 16 16"><rect x="6" y="2" width="4" height="7" rx="2"/><path d="M3.5 7.5a4.5 4.5 0 0 0 9 0M8 12v2"/></svg>
+      </button>
+    </div>
+
+    <div class="mode"><span class="dot"></span><span>Command</span></div>
+    <div class="transcript" id="transcript"></div>
+
+    <div class="help" id="help" hidden>
+      <div class="help-head">
+        <span>transvibe</span>
+        <button class="help-close" id="help-close" title="Close (esc)">esc</button>
+      </div>
+      <div class="help-body" id="help-body"></div>
+    </div>
+
+    <canvas id="viz"></canvas>
+
+    <div class="footer">
+      <div class="hint" id="hint">starting…</div>
+      <div class="title">transvibe</div>
+    </div>
+  </div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.DS_Store
+*.log
+models/
+
+# compiled Swift helpers — rebuilt by `npm run build:native`
+bin/

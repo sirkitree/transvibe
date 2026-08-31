@@ -1,0 +1,54 @@
+{
+  "name": "transvibe",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local voice-to-text with a translucent HUD and an electric audio visualizer.",
+  "main": "src/main/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "npm run build:native && electron .",
+    "dev": "npm run build:native && electron . --remote-debugging-port=9333",
+    "test": "vitest run",
+    "test:unit": "vitest run --exclude \"**/*.integration.test.js\"",
+    "test:watch": "vitest",
+    "dist": "electron-builder --mac --arm64",
+    "build:native": "swiftc -O -o bin/rightopt src/native/rightopt.swift && swiftc -O -o bin/sendkeys src/native/sendkeys.swift"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^44.0.0",
+    "electron-builder": "^26.15.3",
+    "vitest": "^4.1.11"
+  },
+  "build": {
+    "appId": "com.sirkitree.transvibe",
+    "productName": "transvibe",
+    "files": [
+      "src/**/*",
+      "bin/**",
+      "package.json"
+    ],
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": [
+        {
+          "target": "dir",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ],
+      "hardenedRuntime": true,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "transvibe transcribes your speech to text entirely on this Mac. Audio never leaves the device.",
+        "LSUIElement": false
+      }
+    }
+  }
+}
