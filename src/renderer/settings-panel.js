@@ -148,57 +148,66 @@ export function createSettingsPanel ({
     value.textContent = readout ?? chosen ?? ''
   }
 
-  /* The panel is seven sections long and the one you want is rarely the one on
-     screen. A column of section names down the left turns that scroll into a
-     click; it also makes the shape of the thing visible, which a long scroll
-     never does. The list tracks what you are looking at as you scroll, so it
-     reads as a position rather than only as a set of buttons. */
-  function buildNav (headings) {
-    const nav = el('nav', 'set-nav')
-    const links = new Map()
+  /* Tabs down the left rather than one long scroll. Eight sections of settings
+     is more than a scroll bar communicates, and scrolling past six of them to
+     reach the seventh means reading six you did not come for. One section at a
+     time also means the panel is as tall as what you are looking at.
 
-    for (const [title, heading] of headings) {
-      const link = el('button', null, title)
-      link.type = 'button'
-      link.onclick = () => heading.scrollIntoView({ block: 'start', behavior: 'smooth' })
-      links.set(heading, link)
-      nav.append(link)
+     The tab stays put across closes and reopens: changing a setting, watching
+     what it did, and coming back to change it again is the whole reason this
+     panel exists, and landing back on the first section every time would make
+     that a chore. */
+  let currentTab = null
+
+  function buildTabs (panes) {
+    const nav = el('nav', 'set-nav')
+    const tabs = new Map()
+
+    const select = title => {
+      currentTab = title
+      for (const [name, pane] of panes) pane.hidden = name !== title
+      for (const [name, tab] of tabs) {
+        tab.classList.toggle('on', name === title)
+        tab.setAttribute('aria-selected', String(name === title))
+      }
+      // A tab is a different page, not a scroll position: it starts at the top.
+      body.scrollTop = 0
     }
 
-    // The topmost heading still in view is the section you are in. An observer
-    // rather than a scroll handler: the panel scrolls at 60fps and this needs
-    // to run nowhere near that often.
-    const visible = new Set()
-    const observer = new IntersectionObserver(entries => {
-      for (const entry of entries) {
-        if (entry.isIntersecting) visible.add(entry.target)
-        else visible.delete(entry.target)
-      }
-      const first = headings.map(([, h]) => h).find(h => visible.has(h))
-      for (const [heading, link] of links) link.classList.toggle('on', heading === first)
-    }, { root: body, rootMargin: '0px 0px -60% 0px' })
-    for (const heading of links.keys()) observer.observe(heading)
+    for (const [title] of panes) {
+      const tab = el('button', null, title)
+      tab.type = 'button'
+      tab.role = 'tab'
+      tab.onclick = () => select(title)
+      tabs.set(title, tab)
+      nav.append(tab)
+    }
 
-    return nav
+    return { nav, select, has: title => tabs.has(title) }
   }
+
+  let tabs = null
 
   function build () {
     const content = el('div', 'set-sections')
-    const headings = []
+    const panes = []
 
     for (const section of SECTIONS) {
-      const heading = el('h3', null, section.title)
-      content.append(heading)
-      headings.push([section.title, heading])
-      if (section.note) content.append(el('p', 'note', section.note))
-      for (const field of section.fields) content.append(row(field))
+      // No heading inside the pane: the tab beside it, lit, at the same height,
+      // is already the title. Two of them was just the word twice.
+      const pane = el('section', 'set-pane')
+      if (section.note) pane.append(el('p', 'note lead', section.note))
+      for (const field of section.fields) pane.append(row(field))
+      content.append(pane)
+      panes.push([section.title, pane])
     }
 
     // The two settings with an editor of their own, and the reference for the
     // rest of the app: reachable from here rather than only from the strip.
-    const elsewhere = el('h3', null, 'Elsewhere')
-    content.append(elsewhere)
-    headings.push(['Elsewhere', elsewhere])
+    const elsewhere = el('section', 'set-pane')
+    elsewhere.append(el('p', 'note lead',
+      'Words to listen for and fixes for the ones it mishears live in the ' +
+      'glossary, which is a better editor for them than a text field.'))
     const links = el('div', 'set-links')
     for (const [label, panel] of [['Glossary', 'glossary'], ['Keys & commands', 'help']]) {
       const button = el('button', null, label)
@@ -206,12 +215,13 @@ export function createSettingsPanel ({
       button.onclick = () => open(panel)
       links.append(button)
     }
-    content.append(links)
-    content.append(el('p', 'note',
-      'Words to listen for and fixes for the ones it mishears live in the ' +
-      'glossary, which is a better editor for them than a text field.'))
+    elsewhere.append(links)
+    content.append(elsewhere)
+    panes.push(['Elsewhere', elsewhere])
 
-    body.append(buildNav(headings), content)
+    tabs = buildTabs(panes)
+    body.append(tabs.nav, content)
+    tabs.select(currentTab && tabs.has(currentTab) ? currentTab : panes[0][0])
 
     built = true
   }

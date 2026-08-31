@@ -249,9 +249,9 @@ body.awake .bar {
 }
 
 /* ------------------------------------------------------------------- settings
-   Two columns: the section list, which stays put, and the settings, which
-   scroll. The list is the panel's table of contents — seven sections is more
-   than a scroll bar communicates. */
+   Two columns: the tabs, which stay put, and one section's settings beside
+   them. Everything not in the open section is hidden rather than scrolled
+   past — the panel is a place you come to change one thing. */
 .panel-body.set-body {
   display: grid;
   grid-template-columns: 128px 1fr;
@@ -265,8 +265,8 @@ body.awake .bar {
   display: flex;
   flex-direction: column;
   gap: 1px;
-  /* Its own scroll ends where the panel's begins: the list is never taller
-     than the panel, so it never needs one of its own. */
+  border-right: 1px solid hsl(var(--accent) 60% 65% / 0.16);
+  padding-right: 8px;
 }
 
 .set-nav button {
@@ -289,8 +289,11 @@ body.awake .bar {
   background: hsl(var(--accent) 60% 50% / 0.18);
 }
 
-/* The first heading sits flush with the first nav entry rather than under it. */
+/* One pane is visible at a time; the rest are `hidden`. */
 .set-sections { min-width: 0; }
+.set-pane[hidden] { display: none; }
+/* The pane's opening line sits level with its tab. */
+.set-pane > .lead { margin-top: 2px; }
 
 /* Wider than the other panels: the section list takes a column the settings
    themselves used to have, and a range with its label wrapping is a range you

@@ -31,8 +31,8 @@ export const GLOSSARY_KEYS = ['vocabulary', 'corrections']
 
 export const SECTIONS = [
   {
-    title: 'Hearing you',
-    note: 'How much sound counts as speech, and when an utterance is over.',
+    title: 'Listening',
+    note: 'What counts as speech, and when an utterance is over. These three decide whether a pause for breath is the end of a sentence.',
     fields: [
       {
         key: 'threshold',
@@ -51,6 +51,18 @@ export const SECTIONS = [
         label: 'Interim update every',
         help: 'How often the open utterance is re-transcribed so text appears while you talk. Shorter costs more CPU.',
         type: 'range', min: 200, max: 2000, step: 100, unit: 'ms'
+      }
+    ]
+  },
+  {
+    title: 'Transcription',
+    note: 'What turns the audio into words. All of it runs on this Mac.',
+    fields: [
+      {
+        key: 'modelPath',
+        label: 'Speech model',
+        help: 'Every whisper model found on this Mac, including ones other apps downloaded. Bigger is more accurate and slower.',
+        type: 'select', options: 'models', nullable: true, restart: true
       },
       {
         key: 'language',
@@ -59,15 +71,16 @@ export const SECTIONS = [
         type: 'text', placeholder: 'en', restart: true
       },
       {
-        key: 'modelPath',
-        label: 'Speech model',
-        help: 'Every whisper model found on this Mac, including ones other apps downloaded. Bigger is more accurate and slower.',
-        type: 'select', options: 'models', nullable: true, restart: true
+        key: 'dropGlossaryEcho',
+        label: 'Drop utterances that are only glossary words',
+        help: 'Glossary terms are fed to the recogniser as it listens, and over noise it sometimes hands them straight back. Turn this off if you need to dictate a single glossary term on its own.',
+        type: 'toggle'
       }
     ]
   },
   {
     title: 'Sending',
+    note: 'Where the transcript goes when you send it, and what happens to it afterwards.',
     fields: [
       {
         key: 'sendTarget',
@@ -80,13 +93,26 @@ export const SECTIONS = [
       {
         key: 'autoCopy',
         label: 'Copy every utterance to the clipboard',
-        help: 'Settled text only, never an interim pass.',
+        help: 'Without sending anything. Settled text only, never an interim pass.',
         type: 'toggle'
       }
     ]
   },
   {
+    title: 'Command mode',
+    note: 'Hold right ⌥ or press ⌃⌥C and the next thing you say is a command rather than dictation. Holding the key has no deadline — the hold is the deadline; this is for the other way in.',
+    fields: [
+      {
+        key: 'commandTimeoutMs',
+        label: 'Disarms after',
+        help: 'If you say nothing at all.',
+        type: 'range', min: 1000, max: 20000, step: 500, unit: 'ms'
+      }
+    ]
+  },
+  {
     title: 'The strip',
+    note: 'The strip has no window. It hangs off the top of the screen and every click lands in whatever is behind it, until the pointer rests on it.',
     fields: [
       {
         key: 'wakeDelayMs',
@@ -100,34 +126,17 @@ export const SECTIONS = [
         help: 'It stays in memory — ⌃⌥↩ still sends a faded transcript.',
         type: 'range', min: 1000, max: 60000, step: 1000, unit: 'ms'
       },
+      { key: 'alwaysOnTop', label: 'Float above full-screen apps', type: 'toggle' },
       {
         key: 'stripHeight',
         label: 'Minimum strip height',
-        help: 'The strip grows past this to fit what it is showing.',
+        help: 'The strip measures its own contents and grows past this to fit them.',
         type: 'range', min: 90, max: 400, step: 10, unit: 'px'
       },
       {
         key: 'panelHeight',
         label: 'Height with a panel open',
         type: 'range', min: 320, max: 900, step: 20, unit: 'px'
-      },
-      { key: 'alwaysOnTop', label: 'Float above full-screen apps', type: 'toggle' }
-    ]
-  },
-  {
-    title: 'Commands',
-    fields: [
-      {
-        key: 'commandTimeoutMs',
-        label: 'Command mode disarms after',
-        help: 'If you say nothing. Holding right ⌥ has no deadline — the hold is the deadline.',
-        type: 'range', min: 1000, max: 20000, step: 500, unit: 'ms'
-      },
-      {
-        key: 'dropGlossaryEcho',
-        label: 'Drop utterances that are only glossary words',
-        help: 'Almost always the recogniser echoing its own prompt back over noise.',
-        type: 'toggle'
       }
     ]
   },
@@ -147,19 +156,8 @@ export const SECTIONS = [
     ]
   },
   {
-    title: 'System',
-    fields: [
-      {
-        key: 'launchAtLogin',
-        label: 'Launch transvibe at login',
-        help: 'Kept by macOS in Login Items, not in settings.json.',
-        type: 'toggle', external: true
-      }
-    ]
-  },
-  {
-    title: 'Local assist model',
-    note: 'Optional, and still on this machine — an Ollama model asked to tidy text or to guess at a command it did not recognise. Each adds a few hundred milliseconds after an utterance settles.',
+    title: 'Assist model',
+    note: 'Optional, and still on this machine — an Ollama model asked to tidy text or to guess at a command it did not recognise. Each adds a few hundred milliseconds after an utterance settles. Both are off until you turn them on.',
     fields: [
       { key: 'cleanup', label: 'Tidy fillers out of settled text', type: 'toggle' },
       { key: 'commandFallback', label: 'Guess what an unrecognised command meant', type: 'toggle' },
@@ -170,6 +168,17 @@ export const SECTIONS = [
         type: 'select', options: 'ollama', missingSuffix: '— not pulled'
       },
       { key: 'assistUrl', label: 'Ollama at', type: 'text', placeholder: 'http://127.0.0.1:11434' }
+    ]
+  },
+  {
+    title: 'System',
+    fields: [
+      {
+        key: 'launchAtLogin',
+        label: 'Launch transvibe at login',
+        help: 'Kept by macOS in Login Items, not in settings.json.',
+        type: 'toggle', external: true
+      }
     ]
   }
 ]
