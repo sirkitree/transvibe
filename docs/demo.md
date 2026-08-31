@@ -1,6 +1,6 @@
 # Demo: sending a status update without leaving the app you are in
 
-A two-minute scenario. The arc is *"I never opened a window and I never touched the keyboard"* — every feature shows up in service of that, rather than as a tour.
+A two-minute scenario for showing transvibe to someone who has never seen it. The arc is *"I never opened a window and I never touched the keyboard"* — every feature shows up in service of that, rather than as a tour.
 
 The premise: you are in Slack, mid-conversation, and you need to send Dave an update about the VINCI deploy.
 
@@ -11,11 +11,27 @@ The premise: you are in Slack, mid-conversation, and you need to send Dave an up
 - Slack (or anything with a text field) open and focused, with something clickable near the top of the screen — a channel in the sidebar, a tab.
 - Say nothing for ten seconds first, so the strip is faded and the screen looks untouched.
 
+## Say what it is first
+
+Fifteen seconds, before anything happens on screen. Someone who has not seen it has no idea what they are looking at — the whole opening is a thin line at the top of a screen that otherwise looks untouched, and without a frame for it they will spend the first minute trying to work out what changed.
+
+Roughly:
+
+> This is a dictation app. That is the whole thing — it turns what I say into text.
+>
+> Two things make it different from the one built into your Mac. It runs entirely on this machine, so nothing I say leaves the room. And it has no window.
+
+Then stop talking and let them look at the screen for a second. The second claim is the one they will not believe, and the next thirty seconds are spent proving it.
+
+If you have thirty seconds rather than two minutes, say that much, do beat 1, and stop. The click-through moment is the demo; everything after it is detail.
+
+**A variant, if you are feeling confident:** do not say any of it. Dictate the introduction *into the app* and send it into the Slack message box, then let them read it. It makes the point and demonstrates the product in the same breath. It also fails in front of an audience if the room is noisy, so have the spoken version ready.
+
 ## The beats
 
 **1. The screen is not yours to give up.** Start on the quiet screen. The only thing visible is a thin line across the top. Move the pointer up and *click a Slack channel through the strip* — the click lands in Slack. Say the line out loud: there is no window here to move out of the way.
 
-Then rest the pointer on the strip for a moment. It goes solid, the buttons appear. Move away and it is a ghost again. That contrast in the first fifteen seconds is the whole product.
+Then rest the pointer on the strip for a moment. It goes solid, the buttons appear. Move away and it is a ghost again. That contrast, right after you have claimed there is no window, is the whole product.
 
 **2. Talk.** Do not touch anything. Say, with the pauses natural:
 
