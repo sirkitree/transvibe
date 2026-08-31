@@ -8,17 +8,32 @@ const APP_SUPPORT = path.join(HOME, 'Library', 'Application Support')
 
 export const MODELS_DIR = path.join(APP_SUPPORT, 'transvibe', 'models')
 
-/* Where whisper models turn up on a Mac. Directories rather than the exact
-   filenames they held when this was written: these are other apps' folders,
-   and whatever they downloaded last is what is actually there. We only ever
-   read them — nothing is written outside MODELS_DIR. */
-const SEARCH = [
-  { dir: MODELS_DIR, from: 'downloaded here' },
-  { dir: path.join(APP_SUPPORT, 'superwhisper'), from: 'superwhisper' },
-  { dir: path.join(APP_SUPPORT, 'MacWhisper', 'models'), from: 'MacWhisper' },
-  { dir: path.join(HOME, '.cache', 'whisper.cpp'), from: 'whisper.cpp' },
-  { dir: path.join(HOME, 'Library', 'Caches', 'whisper.cpp'), from: 'whisper.cpp' }
+/* Where to look for whisper models, and how deep.
+   
+   Named directories were wrong twice over: they went stale the moment an app
+   changed its layout, and they could only ever know about apps that existed
+   when this was written. A bounded walk of the few places a Mac app is allowed
+   to keep data finds what is actually there — MacWhisper nests its ggml model
+   one level down, Highlight nests its three — and costs about twenty
+   milliseconds, which is affordable for something asked only when the settings
+   panel opens or the engine starts. */
+const ROOTS = [
+  { dir: MODELS_DIR, depth: 1, from: 'downloaded here' },
+  { dir: APP_SUPPORT, depth: 4 },
+  { dir: path.join(HOME, 'Library', 'Caches'), depth: 3 },
+  { dir: path.join(HOME, '.cache'), depth: 3 }
 ]
+
+/* Folders with nothing in them but weight and are expensive to descend. The
+   .mlmodelc test is the one that matters: a CoreML bundle is full of
+   multi-hundred-megabyte weight.bin files that would otherwise read as
+   models. */
+const SKIP_DIR = /^(RecordedMeetings|Database|Logs|Backups|node_modules|\.git|weights)$|\.mlmodelc$|\.mlpackage$/
+
+/* Sidecars that sit beside a model under a name close enough to be mistaken
+   for one: an OpenVINO or CoreML encoder is half a model and loading it fails
+   in a way that reads like a corrupt file. */
+const SKIP_FILE = /-encoder-|openvino/i
 
 /* Anything smaller is a VAD or embedding blob sharing the folder, not a model
    that can transcribe. */
@@ -62,38 +77,60 @@ export function humanSize (bytes) {
 
 /**
  * Every whisper model on this machine that transvibe could load, in the order
- * it would pick them: what we downloaded first, then other apps'.
+ * it would pick them: what we downloaded first, then whatever other apps have.
  *
+ * Only whisper.cpp's ggml format is listed, because that is all the engine can
+ * load. MacWhisper and its kin also keep WhisperKit CoreML models — whole
+ * directories of .mlmodelc bundles, often the larger and better ones — and
+ * those are deliberately not offered: they need a different runtime, and a
+ * list that showed them would be a list of things that fail to load.
+ *
+ * @param {{roots?: {dir: string, depth: number, from?: string}[]}} [options] where
+ *   to look; the default is the real ones, and tests pass a directory of their own.
  * @returns {{path: string, file: string, name: string, bytes: number, from: string}[]}
  */
-export function listModels () {
+export function listModels ({ roots = ROOTS } = {}) {
   const seen = new Set()
   const out = []
-  for (const { dir, from } of SEARCH) {
-    let files
+
+  const walk = (dir, depth, from) => {
+    if (depth < 0) return
+    let entries
     try {
-      files = fs.readdirSync(dir)
+      entries = fs.readdirSync(dir, { withFileTypes: true })
     } catch {
-      continue          // the folder belongs to an app that is not installed
+      return          // not installed, or not ours to read
     }
-    for (const file of files.sort()) {
-      if (!file.endsWith('.bin')) continue
-      const full = path.join(dir, file)
+    for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+      const full = path.join(dir, entry.name)
+      if (entry.isDirectory()) {
+        if (SKIP_DIR.test(entry.name)) continue
+        // The app the model belongs to is the first folder under the root, so
+        // the list can say whose it is.
+        walk(full, depth - 1, from ?? entry.name)
+        continue
+      }
+      if (!entry.isFile()) continue
+      if (!entry.name.endsWith('.bin')) continue
+      if (SKIP_FILE.test(entry.name)) continue
       let bytes
       try {
         const stat = fs.statSync(full)
-        if (!stat.isFile() || stat.size < MIN_BYTES) continue
+        if (stat.size < MIN_BYTES) continue
         bytes = stat.size
       } catch {
-        continue        // vanished between readdir and stat
+        continue      // vanished between readdir and stat
       }
-      // Two apps can hold the same file; the copy we would load is the first.
-      const key = `${modelName(file)}:${bytes}`
+      // The same model in two apps' folders is one model; the copy we would
+      // load is the first one found.
+      const key = `${modelName(entry.name)}:${bytes}`
       if (seen.has(key)) continue
       seen.add(key)
-      out.push({ path: full, file, name: modelName(file), bytes, from })
+      out.push({ path: full, file: entry.name, name: modelName(entry.name), bytes, from: from ?? 'elsewhere' })
     }
   }
+
+  for (const root of roots) walk(root.dir, root.depth - 1, root.from)
   return out
 }
 

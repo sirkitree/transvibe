@@ -249,6 +249,55 @@ body.awake .bar {
 }
 
 /* ------------------------------------------------------------------- settings
+   Two columns: the section list, which stays put, and the settings, which
+   scroll. The list is the panel's table of contents — seven sections is more
+   than a scroll bar communicates. */
+.panel-body.set-body {
+  display: grid;
+  grid-template-columns: 128px 1fr;
+  gap: 18px;
+  align-items: start;
+}
+
+.set-nav {
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  /* Its own scroll ends where the panel's begins: the list is never taller
+     than the panel, so it never needs one of its own. */
+}
+
+.set-nav button {
+  border: 0;
+  background: transparent;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 11.5px;
+  text-align: left;
+  padding: 5px 8px;
+  border-radius: 7px;
+  border-left: 2px solid transparent;
+  cursor: pointer;
+  transition: color 120ms ease, background 120ms ease;
+}
+.set-nav button:hover { color: var(--text); background: hsl(var(--accent) 60% 50% / 0.14); }
+.set-nav button.on {
+  color: hsl(var(--accent) 60% 82%);
+  border-left-color: hsl(var(--accent) 70% 60%);
+  background: hsl(var(--accent) 60% 50% / 0.18);
+}
+
+/* The first heading sits flush with the first nav entry rather than under it. */
+.set-sections { min-width: 0; }
+
+/* Wider than the other panels: the section list takes a column the settings
+   themselves used to have, and a range with its label wrapping is a range you
+   cannot read while you drag it. */
+#settings { width: min(760px, calc(100% - 48px)); }
+
+/* ------------------------------------------------------------------- settings
    One row per setting, built from the schema. Ranges carry their value in the
    header rather than in a tooltip, because the number is the point: you are
    dragging until 350ms reads right, not until the strip feels right. */

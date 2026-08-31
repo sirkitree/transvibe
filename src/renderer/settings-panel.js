@@ -148,16 +148,57 @@ export function createSettingsPanel ({
     value.textContent = readout ?? chosen ?? ''
   }
 
+  /* The panel is seven sections long and the one you want is rarely the one on
+     screen. A column of section names down the left turns that scroll into a
+     click; it also makes the shape of the thing visible, which a long scroll
+     never does. The list tracks what you are looking at as you scroll, so it
+     reads as a position rather than only as a set of buttons. */
+  function buildNav (headings) {
+    const nav = el('nav', 'set-nav')
+    const links = new Map()
+
+    for (const [title, heading] of headings) {
+      const link = el('button', null, title)
+      link.type = 'button'
+      link.onclick = () => heading.scrollIntoView({ block: 'start', behavior: 'smooth' })
+      links.set(heading, link)
+      nav.append(link)
+    }
+
+    // The topmost heading still in view is the section you are in. An observer
+    // rather than a scroll handler: the panel scrolls at 60fps and this needs
+    // to run nowhere near that often.
+    const visible = new Set()
+    const observer = new IntersectionObserver(entries => {
+      for (const entry of entries) {
+        if (entry.isIntersecting) visible.add(entry.target)
+        else visible.delete(entry.target)
+      }
+      const first = headings.map(([, h]) => h).find(h => visible.has(h))
+      for (const [heading, link] of links) link.classList.toggle('on', heading === first)
+    }, { root: body, rootMargin: '0px 0px -60% 0px' })
+    for (const heading of links.keys()) observer.observe(heading)
+
+    return nav
+  }
+
   function build () {
+    const content = el('div', 'set-sections')
+    const headings = []
+
     for (const section of SECTIONS) {
-      body.append(el('h3', null, section.title))
-      if (section.note) body.append(el('p', 'note', section.note))
-      for (const field of section.fields) body.append(row(field))
+      const heading = el('h3', null, section.title)
+      content.append(heading)
+      headings.push([section.title, heading])
+      if (section.note) content.append(el('p', 'note', section.note))
+      for (const field of section.fields) content.append(row(field))
     }
 
     // The two settings with an editor of their own, and the reference for the
     // rest of the app: reachable from here rather than only from the strip.
-    body.append(el('h3', null, 'Elsewhere'))
+    const elsewhere = el('h3', null, 'Elsewhere')
+    content.append(elsewhere)
+    headings.push(['Elsewhere', elsewhere])
     const links = el('div', 'set-links')
     for (const [label, panel] of [['Glossary', 'glossary'], ['Keys & commands', 'help']]) {
       const button = el('button', null, label)
@@ -165,10 +206,12 @@ export function createSettingsPanel ({
       button.onclick = () => open(panel)
       links.append(button)
     }
-    body.append(links)
-    body.append(el('p', 'note',
+    content.append(links)
+    content.append(el('p', 'note',
       'Words to listen for and fixes for the ones it mishears live in the ' +
       'glossary, which is a better editor for them than a text field.'))
+
+    body.append(buildNav(headings), content)
 
     built = true
   }
