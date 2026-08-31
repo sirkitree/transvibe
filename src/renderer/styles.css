@@ -195,6 +195,11 @@ body.command-mode .mode { display: flex; }
 .bar {
   display: flex;
   gap: 7px;
+  /* The row's hit box reaches up through the gap above it, so the pointer
+     travelling down from the last word is never over dead space on the way.
+     The negative margin cancels the padding: the layout is unchanged. */
+  padding-top: 7px;
+  margin-top: -7px;
   z-index: 5;
   opacity: 0;
   pointer-events: none;

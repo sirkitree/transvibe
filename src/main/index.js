@@ -36,7 +36,7 @@ let holding = false
    the one signal that answers both. */
 
 const POLL_MS = 90
-let wake = { awake: false, insideSince: null }
+let wake = { awake: false, insideSince: null, outsideSince: null }
 let wakeTimer = null
 let holdOpen = false        // renderer is mid-interaction: panel or field open
 let overTarget = false      // renderer: the pointer is over something clickable
@@ -140,7 +140,7 @@ function createWindow () {
   })
   win.on('show', () => { applyStripBounds(); refreshTray() })
   win.on('hide', () => {
-    wake = { awake: false, insideSince: null }
+    wake = { awake: false, insideSince: null, outsideSince: null }
     setAwake(false)
     refreshTray()
   })

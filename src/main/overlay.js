@@ -49,24 +49,36 @@ export function contains (rect, point) {
  * One step of the hover-to-wake machine.
  *
  * Waking is deliberate — the pointer has to dwell — so sweeping past the top of
- * the screen on the way to a menu never steals a click. Sleeping is immediate,
- * because a strip that stays solid after the pointer has gone is exactly the
- * "in the way" this whole layout exists to avoid. `hold` is the renderer
+ * the screen on the way to a menu never steals a click. Sleeping is nearly as
+ * quick, because a strip that stays solid after the pointer has gone is
+ * exactly the "in the way" this whole layout exists to avoid — but not
+ * instant: the trip from the transcript down to the buttons crosses a few
+ * pixels that belong to neither, and sleeping on that crossing pulled the
+ * buttons out from under the pointer before it arrived. `hold` is the renderer
  * saying it is mid-interaction (a panel open, a field focused); that outranks
  * the pointer having wandered off.
  *
- * @param {{awake: boolean, insideSince: number|null}} prev
- * @param {{inside: boolean, hold?: boolean, now: number, wakeDelayMs?: number}} input
- * @returns {{awake: boolean, insideSince: number|null}}
+ * @param {{awake: boolean, insideSince: number|null, outsideSince?: number|null}} prev
+ * @param {{inside: boolean, hold?: boolean, now: number, wakeDelayMs?: number, sleepDelayMs?: number}} input
+ * @returns {{awake: boolean, insideSince: number|null, outsideSince: number|null}}
  */
-export function nextWake (prev, { inside, hold = false, now, wakeDelayMs = 200 }) {
-  const was = prev || { awake: false, insideSince: null }
+export function nextWake (prev, { inside, hold = false, now, wakeDelayMs = 200, sleepDelayMs = 250 }) {
+  const was = prev || { awake: false, insideSince: null, outsideSince: null }
 
   if (!inside) {
-    if (hold) return { awake: was.awake, insideSince: null }
-    return { awake: false, insideSince: null }
+    if (hold) return { awake: was.awake, insideSince: null, outsideSince: null }
+    if (!was.awake) return { awake: false, insideSince: null, outsideSince: null }
+    // Awake and off target: start (or continue) the grace window. The dwell is
+    // kept, so coming straight back does not re-earn the wake.
+    const left = was.outsideSince == null ? now : was.outsideSince
+    if (now - left >= sleepDelayMs) return { awake: false, insideSince: null, outsideSince: null }
+    return { awake: true, insideSince: was.insideSince, outsideSince: left }
   }
 
   const since = was.insideSince == null ? now : was.insideSince
-  return { awake: was.awake || now - since >= wakeDelayMs, insideSince: since }
+  return {
+    awake: was.awake || now - since >= wakeDelayMs,
+    insideSince: since,
+    outsideSince: null
+  }
 }

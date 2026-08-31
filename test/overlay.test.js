@@ -53,11 +53,11 @@ describe('contains', () => {
 })
 
 describe('nextWake', () => {
-  const sleeping = { awake: false, insideSince: null }
+  const sleeping = { awake: false, insideSince: null, outsideSince: null }
 
   it('does not wake the instant the pointer arrives', () => {
     const s = nextWake(sleeping, { inside: true, now: 1000, wakeDelayMs: 200 })
-    expect(s).toEqual({ awake: false, insideSince: 1000 })
+    expect(s).toEqual({ awake: false, insideSince: 1000, outsideSince: null })
   })
 
   it('wakes once the pointer has dwelled long enough', () => {
@@ -71,21 +71,35 @@ describe('nextWake', () => {
   it('restarts the dwell after a pass-through', () => {
     let s = nextWake(sleeping, { inside: true, now: 1000, wakeDelayMs: 200 })
     s = nextWake(s, { inside: false, now: 1100, wakeDelayMs: 200 })
-    expect(s).toEqual({ awake: false, insideSince: null })
+    expect(s).toEqual({ awake: false, insideSince: null, outsideSince: null })
     s = nextWake(s, { inside: true, now: 1150, wakeDelayMs: 200 })
     s = nextWake(s, { inside: true, now: 1300, wakeDelayMs: 200 })
     expect(s.awake).toBe(false)   // dwell measured from 1150, not from 1000
   })
 
-  it('sleeps as soon as the pointer leaves', () => {
-    const awake = { awake: true, insideSince: 1000 }
-    expect(nextWake(awake, { inside: false, now: 2000 })).toEqual({ awake: false, insideSince: null })
+  it('holds the wake briefly when the pointer crosses a gap', () => {
+    // the trip from the transcript down to the button row
+    const awake = { awake: true, insideSince: 1000, outsideSince: null }
+    let s = nextWake(awake, { inside: false, now: 2000, sleepDelayMs: 250 })
+    expect(s).toEqual({ awake: true, insideSince: 1000, outsideSince: 2000 })
+    s = nextWake(s, { inside: false, now: 2100, sleepDelayMs: 250 })
+    expect(s.awake).toBe(true)
+    // back on a control before the grace runs out: still awake, still dwelled
+    s = nextWake(s, { inside: true, now: 2150, sleepDelayMs: 250 })
+    expect(s).toEqual({ awake: true, insideSince: 1000, outsideSince: null })
+  })
+
+  it('sleeps once the pointer has been gone longer than the grace', () => {
+    const awake = { awake: true, insideSince: 1000, outsideSince: null }
+    let s = nextWake(awake, { inside: false, now: 2000, sleepDelayMs: 250 })
+    s = nextWake(s, { inside: false, now: 2250, sleepDelayMs: 250 })
+    expect(s).toEqual({ awake: false, insideSince: null, outsideSince: null })
   })
 
   it('stays awake off-strip while the renderer holds it', () => {
-    const awake = { awake: true, insideSince: 1000 }
+    const awake = { awake: true, insideSince: 1000, outsideSince: null }
     expect(nextWake(awake, { inside: false, hold: true, now: 2000 }))
-      .toEqual({ awake: true, insideSince: null })
+      .toEqual({ awake: true, insideSince: null, outsideSince: null })
   })
 
   it('does not let a hold wake a sleeping strip on its own', () => {
@@ -93,6 +107,7 @@ describe('nextWake', () => {
   })
 
   it('tolerates a missing previous state', () => {
-    expect(nextWake(undefined, { inside: false, now: 5 })).toEqual({ awake: false, insideSince: null })
+    expect(nextWake(undefined, { inside: false, now: 5 }))
+      .toEqual({ awake: false, insideSince: null, outsideSince: null })
   })
 })
