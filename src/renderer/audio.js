@@ -57,7 +57,7 @@ export async function startCapture ({ onSegment, onPartial, onLevel, onError, se
 
   /* Interim passes over the still-open utterance, so text appears while you
      are talking instead of only after the hangover expires. */
-  const interimFrames = Math.max(
+  let interimFrames = Math.max(
     1, Math.round((settings.interimMs ?? 700) / FRAME_MS))
   const minInterimFrames = Math.round(500 / FRAME_MS)
   let openStart = null
@@ -112,6 +112,12 @@ export async function startCapture ({ onSegment, onPartial, onLevel, onError, se
     analyser,
     vad,
     setThreshold: t => vad.setThreshold(t),
+    setHangoverMs: ms => vad.setHangoverMs(ms),
+    /* The settings panel retunes a live microphone rather than reopening it:
+       getUserMedia again would drop the utterance in progress. */
+    setInterimMs (ms) {
+      if (Number.isFinite(ms) && ms > 0) interimFrames = Math.max(1, Math.round(ms / FRAME_MS))
+    },
     stop () {
       collector.port.onmessage = null
       collector.disconnect()

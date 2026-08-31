@@ -33,6 +33,9 @@
         <button class="btn" id="glossary-btn" data-hint="Glossary — words to listen for, and fixes">
           <svg viewBox="0 0 16 16"><path d="M3 3.5A1.5 1.5 0 0 1 4.5 2H12v10.5H4.5A1.5 1.5 0 0 0 3 14z"/><path d="M6 5.5h3.5M6 8h3.5"/></svg>
         </button>
+        <button class="btn" id="settings-btn" data-hint="Settings — everything the app can be told to do differently">
+          <svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.6v1.5M8 12.9v1.5M14.4 8h-1.5M3.1 8H1.6M12.5 3.5l-1.1 1.1M4.6 11.4l-1.1 1.1M12.5 12.5l-1.1-1.1M4.6 4.6L3.5 3.5"/></svg>
+        </button>
         <button class="btn" id="help-btn" data-hint="Keys, buttons and the command list">
           <svg viewBox="0 0 16 16"><path d="M6 6a2 2 0 1 1 2.6 1.9c-.4.15-.6.5-.6.9v.7"/><circle cx="8" cy="12" r=".9" fill="currentColor" stroke="none"/></svg>
         </button>
@@ -93,6 +96,15 @@
         </form>
       </div>
       <div class="panel-foot" id="glossary-note">Changes apply to the next thing you say.</div>
+    </div>
+
+    <div class="panel" id="settings" hidden>
+      <div class="panel-head">
+        <span>Settings</span>
+        <button class="panel-close" id="settings-close" title="Close (esc)">esc</button>
+      </div>
+      <div class="panel-body" id="settings-body"></div>
+      <div class="panel-foot" id="settings-note">Saved as you change them.</div>
     </div>
 
     <div class="panel" id="help" hidden>

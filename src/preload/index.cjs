@@ -5,6 +5,10 @@ contextBridge.exposeInMainWorld('transvibe', {
   transcribe: (samples, interim = false) =>
     ipcRenderer.invoke('transcribe', samples.buffer, interim),
   getSettings: () => ipcRenderer.invoke('settings:get'),
+  /* Not a setting in settings.json: macOS owns this one, and the answer is
+     whatever the login item list actually says. */
+  getLaunchAtLogin: () => ipcRenderer.invoke('login-item:get'),
+  setLaunchAtLogin: value => ipcRenderer.invoke('login-item:set', value),
   setSettings: patch => ipcRenderer.invoke('settings:set', patch),
   copy: text => ipcRenderer.invoke('clipboard:write', text),
   /** tidy one settled utterance with the local assist model */

@@ -16,12 +16,18 @@
  * something the screen no longer shows.
  */
 export function createPresence ({ idleFadeMs = 6000 } = {}) {
+  let fadeAfter = idleFadeMs
   let lastActivity = 0
   let awake = false
   let held = false
   let faded = false
 
   return {
+    /** Changed from the settings panel while the strip is running. */
+    setIdleFadeMs (ms) {
+      if (Number.isFinite(ms) && ms >= 0) fadeAfter = ms
+    },
+
     /** Something happened that is worth showing. Un-fades immediately. */
     activity (now) {
       lastActivity = now
@@ -47,7 +53,7 @@ export function createPresence ({ idleFadeMs = 6000 } = {}) {
      */
     tick (now) {
       const before = faded
-      faded = !awake && !held && now - lastActivity >= idleFadeMs
+      faded = !awake && !held && now - lastActivity >= fadeAfter
       return { faded, changed: faded !== before }
     },
 

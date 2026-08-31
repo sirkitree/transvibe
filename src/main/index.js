@@ -1,6 +1,6 @@
 import {
   app, BrowserWindow, ipcMain, clipboard, systemPreferences,
-  globalShortcut, Tray, Menu, nativeImage, screen
+  globalShortcut, Tray, Menu, nativeImage, screen, shell
 } from 'electron'
 import path from 'node:path'
 import { spawn } from 'node:child_process'
@@ -8,7 +8,7 @@ import { existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { createEngine } from './whisper.js'
 import { createAssist } from './assist.js'
-import { findModel, downloadModel } from './models.js'
+import { findModel, downloadModel, MODELS_DIR } from './models.js'
 import * as config from './config.js'
 import { stripBounds, contains, nextWake } from './overlay.js'
 
@@ -184,10 +184,47 @@ function refreshTray () {
     { label: 'Copy transcript', click: () => send('command', 'copy') },
     { label: 'Clear transcript', click: () => send('command', 'clear') },
     { type: 'separator' },
+    // The panels live on the strip, which is hidden half the time — so the
+    // menu shows the strip on the way, rather than opening a panel onto
+    // nothing.
+    { label: 'Settings…', accelerator: 'Command+,', click: () => openPanel('settings') },
+    { label: 'Glossary…', click: () => openPanel('glossary') },
+    { label: 'Keys & commands…', click: () => openPanel('help') },
+    { type: 'separator' },
+    {
+      label: 'Launch at login',
+      type: 'checkbox',
+      checked: app.getLoginItemSettings().openAtLogin,
+      click: item => setLoginItem(item.checked)
+    },
+    { label: 'Reveal model folder', click: () => shell.openPath(MODELS_DIR) },
+    { type: 'separator' },
     { label: 'Show/hide shortcut: ⌃⌥Space', enabled: false },
     { type: 'separator' },
     { label: 'Quit transvibe', accelerator: 'Command+Q', click: () => app.quit() }
   ]))
+}
+
+/* A panel is the renderer's to open; all the menu does is make sure there is
+   something to open it onto. */
+function openPanel (name) {
+  showWindow()
+  send('command', name)
+}
+
+/* macOS files the login item against whatever bundle is running. Launched from
+   Transvibe.app that is the app; launched with `npm start` it is Electron
+   itself, which is worth saying out loud rather than quietly registering the
+   wrong thing. */
+function setLoginItem (openAtLogin) {
+  app.setLoginItemSettings({ openAtLogin })
+  refreshTray()
+  if (openAtLogin && !app.isPackaged) {
+    send('status', {
+      state: 'error',
+      message: 'Login item registered against Electron — install Transvibe.app (script/install-launcher.sh) for this to open the real app.'
+    })
+  }
 }
 
 function createTray () {
@@ -438,6 +475,7 @@ ipcMain.handle('settings:set', (_e, patch) => {
   if ('alwaysOnTop' in patch && win) {
     win.setAlwaysOnTop(settings.alwaysOnTop, 'screen-saver')
   }
+  if ('stripHeight' in patch || 'panelHeight' in patch) applyStripBounds()
   return settings
 })
 
@@ -454,6 +492,12 @@ ipcMain.handle('assist:command', async (_e, text, phrases) => {
 ipcMain.handle('clipboard:write', (_e, text) => {
   clipboard.writeText(text)
   return true
+})
+
+ipcMain.handle('login-item:get', () => app.getLoginItemSettings().openAtLogin)
+ipcMain.handle('login-item:set', (_e, value) => {
+  setLoginItem(!!value)
+  return app.getLoginItemSettings().openAtLogin
 })
 
 ipcMain.on('window:hide', () => win && win.hide())

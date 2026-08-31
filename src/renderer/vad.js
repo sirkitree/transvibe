@@ -11,7 +11,7 @@ const nonNegative = (v, fallback) => (Number.isFinite(v) && v >= 0 ? v : fallbac
 
 export function createVad (options = {}) {
   const frameMs = positive(options.frameMs, 20)
-  const hangoverMs = nonNegative(options.hangoverMs, 700)
+  let hangoverMs = nonNegative(options.hangoverMs, 700)
   const minSegmentMs = nonNegative(options.minSegmentMs, 400)
   const maxSegmentMs = positive(options.maxSegmentMs, 15000)
   const noiseFloorAdapt = Number.isFinite(options.noiseFloorAdapt) &&
@@ -124,8 +124,15 @@ export function createVad (options = {}) {
     setThreshold (t) {
       if (Number.isFinite(t)) level = Math.max(0, t)
     },
+    /* Both of these are live-tunable because the settings panel changes them
+       while the microphone is open; a bad value is ignored rather than
+       allowed to wedge detection, same as at construction. */
+    setHangoverMs (ms) {
+      if (Number.isFinite(ms) && ms >= 0) hangoverMs = ms
+    },
     get state () { return state },
     get threshold () { return level },
+    get hangoverMs () { return hangoverMs },
     get noiseFloor () { return noiseFloor },
     get frame () { return frame }
   }

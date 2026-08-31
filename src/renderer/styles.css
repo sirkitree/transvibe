@@ -248,6 +248,95 @@ body.awake .bar {
   color: hsl(2 90% 90%);
 }
 
+/* ------------------------------------------------------------------- settings
+   One row per setting, built from the schema. Ranges carry their value in the
+   header rather than in a tooltip, because the number is the point: you are
+   dragging until 350ms reads right, not until the strip feels right. */
+.set-row { margin: 0 0 13px; }
+
+.set-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 5px;
+}
+.set-head label { font-size: 12.5px; color: var(--text); }
+
+.set-value {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: hsl(var(--accent) 60% 76%);
+}
+
+.set-help {
+  margin: 4px 0 0;
+  font-size: 10.5px;
+  line-height: 1.45;
+  color: var(--text-dim);
+}
+.set-help.restart { color: hsl(38 80% 70% / 0.85); }
+
+.set-row input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 3px;
+  border-radius: 2px;
+  background: hsl(var(--accent) 40% 40% / 0.4);
+  cursor: pointer;
+}
+.set-row input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 13px; height: 13px;
+  border-radius: 50%;
+  background: hsl(var(--accent) 70% 62%);
+  box-shadow: 0 0 8px hsl(var(--accent) 90% 60% / 0.5);
+}
+
+.set-row input[type="text"] {
+  width: 100%;
+  border: 1px solid hsl(var(--accent) 60% 65% / 0.3);
+  border-radius: 7px;
+  background: hsl(var(--accent) 40% 12% / 0.85);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  padding: 5px 8px;
+}
+.set-row input[type="text"]:focus {
+  outline: none;
+  border-color: hsl(var(--accent) 70% 65% / 0.75);
+}
+
+.set-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--text);
+  cursor: pointer;
+}
+.set-check input { accent-color: hsl(var(--accent) 70% 50%); }
+
+/* The way out of settings and into the two things that are not settings. */
+.set-links {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.set-links button {
+  border: 1px solid hsl(var(--accent) 60% 65% / 0.4);
+  background: transparent;
+  color: hsl(var(--accent) 60% 82%);
+  border-radius: 8px;
+  padding: 5px 11px;
+  font: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+}
+.set-links button:hover { background: hsl(var(--accent) 60% 50% / 0.25); }
+
 /* --------------------------------------------------------------------- panels
    Help and glossary. They need room the strip does not normally have, so
    opening one asks the main process to grow the window; closing it shrinks

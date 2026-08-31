@@ -6,6 +6,7 @@ import {
 } from './glossary-edit.js'
 import { applyCorrections } from '../shared/glossary.js'
 import { createPresence } from './presence.js'
+import { createSettingsPanel } from './settings-panel.js'
 
 const $ = id => document.getElementById(id)
 // Breathing room under the last thing on the strip, so nothing sits flush
@@ -274,7 +275,8 @@ function buildHelp () {
     ['hold right ⌥', 'Speak one command instead of dictating'],
     ['⌃⌥C', 'Same, without holding a key'],
     ['⌃⌥↩', 'Send the transcript to the app in front'],
-    ['⌃⌥Space', 'Show or hide the strip']
+    ['⌃⌥Space', 'Show or hide the strip'],
+    ['⌘,', 'Settings, from the menu bar icon']
   ])
 
   section('Transcript', [
@@ -289,6 +291,7 @@ function buildHelp () {
     ['copy', 'Copy the whole transcript'],
     ['trash', 'Clear the transcript'],
     ['book', 'Glossary — words to recognise, and fixes for the ones it misses'],
+    ['gear', 'Settings — everything else, applied as you change it'],
     ['?', 'This panel'],
     ['mic', 'Pause and resume listening']
   ])
@@ -425,7 +428,7 @@ function syncFixerOptions () {
 
 function openFixer (wordEl) {
   const fixer = $('fixer')
-  const shell = document.querySelector('.shell')
+  const shell = document.querySelector('.strip')
   const box = wordEl.getBoundingClientRect()
   const frame = shell.getBoundingClientRect()
 
@@ -522,7 +525,8 @@ async function doSend () {
    click-through while you are typing into it. */
 const PANELS = {
   help: { btn: 'help-btn', open: buildHelp },
-  glossary: { btn: 'glossary-btn', open: renderGlossary }
+  glossary: { btn: 'glossary-btn', open: renderGlossary },
+  settings: { btn: 'settings-btn', open: () => state.settingsPanel.render() }
 }
 
 function togglePanel (name, show) {
@@ -542,6 +546,38 @@ function openPanel () {
   return Object.keys(PANELS).find(name => !$(name).hidden) || null
 }
 
+/* A setting is only worth a panel if changing it does something now. The main
+   process already re-reads its own on every use and reapplies the ones the
+   engine holds; these are the four the renderer captured at startup, plus the
+   visualizer, which is cheap enough to simply rebuild.
+
+   `language` and `modelPath` are not here: they are baked into a running
+   whisper server, and the panel says so on the row rather than pretending. */
+function applyLiveSetting (key) {
+  const value = state.settings[key]
+  const capture = state.capture
+
+  if (key === 'threshold' && capture) capture.setThreshold(value)
+  if (key === 'hangoverMs' && capture) capture.setHangoverMs(value)
+  if (key === 'interimMs' && capture) capture.setInterimMs(value)
+  if (key === 'idleFadeMs' && state.presence) state.presence.setIdleFadeMs(value)
+  if (key.startsWith('viz')) rebuildVisualizer()
+}
+
+function rebuildVisualizer () {
+  if (!state.capture) return
+  if (state.viz) state.viz.destroy()
+  state.viz = createVisualizer($('viz'), {
+    analyser: state.capture.analyser,
+    centerRatio: 0.46,
+    linesPerFamily: state.settings.vizLinesPerFamily,
+    points: state.settings.vizPoints,
+    fps: state.settings.vizFps,
+    quietFps: state.settings.vizQuietFps
+  })
+  state.viz.start()
+}
+
 /* One place decides whether the strip is mid-interaction: any panel, or the
    word fixer. Both the hold (stay awake) and the height (make room) follow
    from it, so they can never disagree. */
@@ -556,6 +592,16 @@ function syncHold () {
 
 async function main () {
   state.settings = await window.transvibe.getSettings()
+  state.settingsPanel = createSettingsPanel({
+    body: $('settings-body'),
+    note: text => { $('settings-note').textContent = text },
+    getSettings: () => state.settings,
+    save: async patch => { state.settings = await window.transvibe.setSettings(patch) },
+    applyLive: applyLiveSetting,
+    open: name => togglePanel(name, true),
+    getExternal: () => window.transvibe.getLaunchAtLogin(),
+    setExternal: (_key, value) => window.transvibe.setLaunchAtLogin(value)
+  })
   state.presence = createPresence({ idleFadeMs: state.settings.idleFadeMs })
   state.presence.activity(Date.now())
 
@@ -685,17 +731,11 @@ async function main () {
   // after poking at it
   window.__transvibe = { state, render }
 
-  state.viz = createVisualizer($('viz'), {
-    analyser: capture.analyser,
-    // The ribbon rides high in its canvas so it reads as hanging off the top
-    // edge of the screen, with the glow spreading down over the text.
-    centerRatio: 0.46,
-    linesPerFamily: state.settings.vizLinesPerFamily,
-    points: state.settings.vizPoints,
-    fps: state.settings.vizFps,
-    quietFps: state.settings.vizQuietFps
-  })
-  state.viz.start()
+  // The ribbon rides high in its canvas so it reads as hanging off the top
+  // edge of the screen, with the glow spreading down over the text. Built
+  // through the same path a visualizer setting change takes, so there is one
+  // description of it rather than two that can drift.
+  rebuildVisualizer()
 
   $('copy').onclick = async () => {
     const text = fullText()
@@ -721,6 +761,8 @@ async function main () {
   $('help-close').onclick = () => togglePanel('help', false)
   $('glossary-btn').onclick = () => togglePanel('glossary')
   $('glossary-close').onclick = () => togglePanel('glossary', false)
+  $('settings-btn').onclick = () => togglePanel('settings')
+  $('settings-close').onclick = () => togglePanel('settings', false)
   wireGlossary()
   wireFixer()
   wireButtonHints()
@@ -772,6 +814,7 @@ async function main () {
     if (name === 'copy') $('copy').click()
     if (name === 'clear') $('clear').click()
     if (name === 'send') doSend()
+    if (name in PANELS) togglePanel(name, true)
   })
 
   render()
