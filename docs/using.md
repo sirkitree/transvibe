@@ -16,6 +16,8 @@ The ribbon along the top edge is the audio itself — three families of lines ov
 
 **The text fades.** Six seconds after the last thing you said, the transcript fades out. It is still there to send with ⌃⌥↩, but it is now stale: the next thing you say starts a fresh transcript rather than appending to something you can no longer see. Speaking, or reaching for the strip, brings it back. `esc` clears it outright.
 
+**And then it is forgotten.** Twenty seconds after it fades, a transcript nobody has come back to is thrown away — the text, and the undo history with it. The mic hears the whole room, and music, a podcast, or someone stopping by to ask you something all get transcribed the same as dictation; none of it should still be sitting on the strip an hour later waiting for a ⌃⌥↩ meant for something else. Speaking again, or resting the pointer on the strip, restarts the clock. Settings › The strip sets the delay, or drags it all the way left to keep the text until you clear it yourself.
+
 The strip grows to fit what it is showing, and the transcript itself caps at four lines — older text scrolls off the top.
 
 ## Controls

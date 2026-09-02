@@ -106,7 +106,7 @@ src/renderer/   app.js        transcript UI, command dispatch, help panel
                 settings-panel.js   the settings panel, built from the schema
                 audio.js      mic graph, ring buffer, segment slicing
                 vad.js        voice-activity state machine (pure)
-                presence.js   when the transcript fades (pure)
+                presence.js   when the transcript fades and expires (pure)
                 commands.js   voice-command parser + applier (pure)
                 glossary-edit.js  glossary panel edit rules (pure)
                 band.js       visualizer math (pure)

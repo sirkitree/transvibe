@@ -27,10 +27,13 @@ export function createSettingsPanel ({
   const inputs = new Map()   // key -> the element showing it
   let built = false
 
-  /** Range labels read as what they are — 350ms, 0.020, 24 — not as raw floats. */
+  /** Range labels read as what they are — 350ms, 0.020, 24 — not as raw floats.
+      A range whose bottom end means "off" says so in words: `0ms` reads like a
+      timer set to fire instantly, which is the opposite of what it does. */
   const format = (field, value) => {
     const n = Number(value)
     if (!Number.isFinite(n)) return '—'
+    if (n === 0 && field.zero) return field.zero
     const text = field.decimals != null ? n.toFixed(field.decimals) : String(n)
     return field.unit ? `${text}${field.unit}` : text
   }

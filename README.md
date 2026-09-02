@@ -4,7 +4,7 @@ Local voice-to-text for macOS. A click-through strip across the top of the scree
 
 - **No window.** Clicks land in whatever is behind it until you park the pointer on it
 - Text appears **while you are still talking**, not after you stop
-- The transcript fades a few seconds after you stop; esc clears it now
+- The transcript fades a few seconds after you stop, and is forgotten entirely twenty seconds later; esc clears it now
 - Hold right ⌥ to speak an editing command instead of dictating
 - ⌃⌥↩ pastes the transcript straight into whatever app is in front
 - Optionally, a second local model tidies the fillers out and makes command mode understand phrasings the rules never learned
@@ -60,7 +60,7 @@ Three macOS permissions are involved, each degrading on its own rather than taki
 
 ![The strip: the transcript with the in-flight words highlighted, the row of buttons under it, and the status line below those](docs/images/strip.png)
 
-Talk, and the text appears as you speak. The strip ignores your mouse until you rest the pointer on it; then the words become clickable and a row of buttons appears under them. Six seconds after you stop talking the text fades away on its own.
+Talk, and the text appears as you speak. The strip ignores your mouse until you rest the pointer on it; then the words become clickable and a row of buttons appears under them. Six seconds after you stop talking the text fades away on its own, and twenty seconds after that it is thrown away — the room walking past the mic never becomes something you can paste.
 
 | | |
 |---|---|

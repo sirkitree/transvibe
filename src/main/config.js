@@ -17,11 +17,17 @@ export const DEFAULTS = {
   /* The overlay strip. It hangs from the top of the screen, click-through
      until the pointer has rested on it for `wakeDelayMs`, and the transcript
      fades once nothing has been said for `idleFadeMs`. `panelHeight` is how
-     tall the strip grows while the help or glossary panel is open. */
+     tall the strip grows while the help or glossary panel is open.
+
+     `idleClearMs` is the second stage: a faded transcript nobody has come back
+     to is thrown away rather than kept, because the mic hears music and
+     passers-by too and none of that should still be sitting there waiting for
+     ⌃⌥↩. `0` keeps it until something else clears it. */
   stripHeight: 180,
   panelHeight: 560,
   wakeDelayMs: 320,
   idleFadeMs: 6000,
+  idleClearMs: 20000,
 
   /* Visualizer cost. Measured on an M-series Mac, stroke count barely moves
      the needle once shadowBlur is gone — 36 lines and 54 lines both land at

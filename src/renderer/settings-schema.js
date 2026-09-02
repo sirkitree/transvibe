@@ -126,6 +126,12 @@ export const SECTIONS = [
         help: 'It stays in memory — ⌃⌥↩ still sends a faded transcript.',
         type: 'range', min: 1000, max: 60000, step: 1000, unit: 'ms'
       },
+      {
+        key: 'idleClearMs',
+        label: 'Transcript is forgotten after',
+        help: 'The mic hears music and people walking in too. A faded transcript nobody came back to is thrown away, undo included. All the way left keeps it until you clear it.',
+        type: 'range', min: 0, max: 300000, step: 5000, unit: 'ms', zero: 'never'
+      },
       { key: 'alwaysOnTop', label: 'Float above full-screen apps', type: 'toggle' },
       {
         key: 'stripHeight',

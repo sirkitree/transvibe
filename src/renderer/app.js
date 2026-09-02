@@ -236,6 +236,20 @@ function syncHeight () {
   })
 }
 
+/* The idle window ran out with the text already faded and nobody reaching for
+   it. Whatever the strip heard — a song, a conversation that was not aimed at
+   it — was not dictation, so it goes rather than sitting there waiting to be
+   pasted somewhere by mistake. The undo stack goes with it: "forgotten" that
+   ⌘Z brings back is not forgotten. */
+function forgetTranscript () {
+  if (!state.finals.length && !state.live) return
+  state.finals = []
+  state.live = ''
+  state.liveSeq++
+  state.undoStack = []
+  render()
+}
+
 /* Esc with nothing else open means "get out of the way": the transcript goes,
    and the strip is a bare ribbon again. */
 function dismiss () {
@@ -620,6 +634,7 @@ function applyLiveSetting (key) {
   if (key === 'hangoverMs' && capture) capture.setHangoverMs(value)
   if (key === 'interimMs' && capture) capture.setInterimMs(value)
   if (key === 'idleFadeMs' && state.presence) state.presence.setIdleFadeMs(value)
+  if (key === 'idleClearMs' && state.presence) state.presence.setIdleClearMs(value)
   if (key.startsWith('viz')) rebuildVisualizer()
 }
 
@@ -662,7 +677,10 @@ async function main () {
     setExternal: (_key, value) => window.transvibe.setLaunchAtLogin(value),
     getOptions: fieldOptions
   })
-  state.presence = createPresence({ idleFadeMs: state.settings.idleFadeMs })
+  state.presence = createPresence({
+    idleFadeMs: state.settings.idleFadeMs,
+    idleClearMs: state.settings.idleClearMs
+  })
   state.presence.activity(Date.now())
 
   /* The strip is click-through until the main process says the pointer has
@@ -701,7 +719,9 @@ async function main () {
   // Idle is checked on a slow timer rather than on a fresh timeout per word —
   // one interval is cheaper than restarting a timer on every interim result.
   setInterval(() => {
-    if (state.presence.tick(Date.now()).changed) applyFade()
+    const { changed, expired } = state.presence.tick(Date.now())
+    if (changed) applyFade()
+    if (expired) forgetTranscript()
   }, 400)
 
   window.transvibe.onStatus(s => {

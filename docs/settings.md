@@ -25,6 +25,7 @@ Behind it is `~/Library/Application Support/transvibe/settings.json`, written on
 | `panelHeight` | `560` | height while the help or glossary panel is open |
 | `wakeDelayMs` | `320` | pointer dwell before the strip stops being click-through |
 | `idleFadeMs` | `6000` | silence before the transcript fades |
+| `idleClearMs` | `20000` | silence before it is forgotten entirely; `0` never |
 | `alwaysOnTop` | `true` | keep above other windows |
 | `autoCopy` | `false` | copy every finished utterance automatically |
 | `modelPath` | `null` | pin a specific ggml model |

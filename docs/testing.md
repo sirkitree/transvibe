@@ -18,7 +18,7 @@ npm run test:unit # pure modules only, no whisper binary needed
 | `band.test.js` | 15 | visualizer math stays finite and in-bounds |
 | `settings-schema.test.js` | 13 | the panel's schema against `config.js`, both directions |
 | `modules.test.js` | 13 | every module imports, and exports what it claims |
-| `presence.test.js` | 11 | when the transcript fades, and what un-fades it |
+| `presence.test.js` | 19 | when the transcript fades, when it is forgotten, and what un-fades it |
 | `models.test.js` | 11 | model discovery against a real directory tree |
 | `assist-models.test.js` | 6 | listing what Ollama has, and what an absent Ollama reads as |
 | `engine.integration.test.js` | 4 | the real engine, end to end |
@@ -36,6 +36,7 @@ Things the automated tests cannot cover:
 - [ ] Sweeping up to the menu bar does not wake it
 - [ ] The strip floats over a full-screen app
 - [ ] Transcript fades ~6s after you stop talking, and esc clears it now
+- [ ] Transcript disappears ~20s after that; hovering the strip in the meantime keeps it
 - [ ] After a fade, the next thing you say starts a fresh transcript
 - [ ] ⌃⌥↩ still sends a faded transcript
 - [ ] Microphone permission prompt appears on first launch
