@@ -74,15 +74,26 @@ export async function startCapture ({ onSegment, onPartial, onLevel, onError, se
     return out
   }
 
+  /* Deaf while the app is talking back. The frames still arrive and are still
+     pushed — the VAD's frame counter has to stay in lockstep with the ring, and
+     the ring itself must not gain a hole — but they are pushed as silence, so
+     what comes out of the speakers cannot open a segment and be transcribed
+     back at us. Echo cancellation alone does not survive a laptop speaker at
+     arm's length. */
+  let deaf = false
+
   /* vad.frame advances in lockstep with writeFrame, so a segment event's
      frame indices are already absolute indices into the ring. */
   collector.port.onmessage = ({ data }) => {
     ring.set(data.pcm, (writeFrame % ringFrames) * frameSize)
     writeFrame++
 
-    onLevel(data.rms)
+    onLevel(deaf ? 0 : data.rms)
 
-    const ev = vad.push(data.rms)
+    const ev = vad.push(deaf ? 0 : data.rms)
+    // Silence still closes whatever was open when we went deaf; that event is
+    // the app's own doing and nothing should be transcribed from it.
+    if (deaf) return
 
     if (ev && ev.type === 'start') {
       openStart = ev.startFrame
@@ -111,6 +122,20 @@ export async function startCapture ({ onSegment, onPartial, onLevel, onError, se
   return {
     analyser,
     vad,
+    /* Anything half-heard when the app started speaking is abandoned rather
+       than resumed: the words either side of a spoken confirmation are two
+       different thoughts, and stitching them into one utterance is worse than
+       losing the syllable. */
+    setDeaf (value) {
+      const next = !!value
+      if (next === deaf) return
+      deaf = next
+      if (next) {
+        openStart = null
+        lastInterim = writeFrame
+      }
+    },
+    get deaf () { return deaf },
     setThreshold: t => vad.setThreshold(t),
     setHangoverMs: ms => vad.setHangoverMs(ms),
     /* The settings panel retunes a live microphone rather than reopening it:

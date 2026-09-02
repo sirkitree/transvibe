@@ -1,6 +1,6 @@
 import { startCapture } from './audio.js'
 import { createVisualizer } from './visualizer.js'
-import { parseCommand, applyCommand, COMMANDS } from './commands.js'
+import { parseCommand, applyCommand, spokenFor, COMMANDS } from './commands.js'
 import { splitWakeWord } from './wake.js'
 import {
   addTerms, removeTerm, addCorrection, removeCorrection, sortedEntries, splitWords
@@ -34,6 +34,10 @@ const state = {
   fixListen: true,
   awake: false,
   presence: null,
+  // How many spoken replies are in flight. A count rather than a flag: two
+  // commands in quick succession must not have the first one's reply un-deafen
+  // the microphone while the second is still talking.
+  deaf: 0,
   // The open utterance starts with the wake phrase: the strip goes amber
   // while you are still speaking, so you can see it landed before you commit
   // to the rest of the sentence.
@@ -156,11 +160,13 @@ async function runCommand (utterance, { retry = true, keep = null } = {}) {
     if (keep) {
       keep()
       hint(`not a command — kept "${utterance}"`)
+      say('kept as dictation')
       render()
       return
     }
 
     hint(`not a command: "${utterance}"`)
+    say(spokenFor(null))
     return
   }
 
@@ -169,9 +175,13 @@ async function runCommand (utterance, { retry = true, keep = null } = {}) {
 
   if (result.effect === 'undo') {
     const previous = state.undoStack.pop()
-    if (previous === undefined) return hint('nothing to undo')
+    if (previous === undefined) {
+      say('nothing to undo')
+      return hint('nothing to undo')
+    }
     setText(previous)
     hint('undone')
+    say(spokenFor(cmd, result))
     render()
     return
   }
@@ -181,6 +191,11 @@ async function runCommand (utterance, { retry = true, keep = null } = {}) {
     if (state.undoStack.length > 20) state.undoStack.shift()
     setText(result.text)
   }
+
+  // Said before the effect runs, not after: 'send' hands focus to another app
+  // and never comes back here, and 'hide' takes the strip away, so a
+  // confirmation queued behind either would be a confirmation of nothing.
+  say(spokenFor(cmd, result))
 
   switch (result.effect) {
     case 'copy': window.transvibe.copy(fullText()); break
@@ -225,6 +240,57 @@ async function tidy (original, index) {
   if (!result.used || state.finals[index] !== original) return
   state.finals[index] = result.text
   render()
+}
+
+/* The room keeps ringing for a moment after `say` exits, and the VAD's onset
+   run is only three frames. */
+const SPEECH_TAIL_MS = 250
+
+/* Say what just happened, and go deaf while saying it.
+ *
+ * The strip already shows this line, but the strip is not what you are looking
+ * at: the wake phrase exists so you can edit a transcript without leaving the
+ * app you are dictating into, and a confirmation you have to look up to read
+ * gives that back. So it is spoken as well.
+ *
+ * The microphone is stopped for exactly the length of the reply. Echo
+ * cancellation is on and still not enough — the speakers are a foot from the
+ * mic — and an app that transcribes its own confirmations, then hears the wake
+ * phrase in one of them, is an app that talks to itself. */
+async function voice (line) {
+  if (!line || !state.settings.speakReplies) return
+  await whileDeaf(() => window.transvibe.speak(line))
+}
+
+/* Everything that makes noise goes through here, so there is one place that
+   owns the microphone being off and one place that guarantees it comes back
+   on. `speak` resolves when the speaker is quiet; the tail covers the room. */
+async function whileDeaf (speaking) {
+  state.deaf++
+  if (state.capture) state.capture.setDeaf(true)
+  try {
+    await speaking()
+    await new Promise(resolve => setTimeout(resolve, SPEECH_TAIL_MS))
+  } finally {
+    state.deaf = Math.max(0, state.deaf - 1)
+    // Whatever went wrong, the microphone comes back on: deaf is a state no
+    // failure is allowed to leave the app stuck in.
+    if (state.capture && state.deaf === 0) state.capture.setDeaf(false)
+  }
+}
+
+/** Fire-and-forget: nothing waits on the app finishing its sentence. */
+function say (line) {
+  voice(line).catch(err => console.warn('[transvibe] speech failed:', err.message))
+}
+
+/* A voice is chosen by ear. Changing it — or the rate — says one line back in
+   it there and then, rather than making you go and run a command to find out
+   what you picked. It plays even with replies switched off: picking a voice is
+   a question about the voice, not a change of mind about the feature. */
+function previewVoice () {
+  whileDeaf(() => window.transvibe.previewVoice())
+    .catch(err => console.warn('[transvibe] voice preview failed:', err.message))
 }
 
 function applyFade () {
@@ -322,6 +388,7 @@ function buildHelp () {
     ['hold right ⌥', 'Speak one command instead of dictating'],
     ['⌃⌥C', 'Same, without holding a key'],
     ['say the wake phrase', 'Same again, no key at all — “hey Claude, delete that” until you change it'],
+    ['it answers back', 'Spoken aloud after each command; the mic is deaf while it talks. Settings › Spoken replies'],
     ['⌃⌥↩', 'Send the transcript to the app in front'],
     ['⌃⌥Space', 'Show or hide the strip'],
     ['⌘,', 'Settings, from the menu bar icon']
@@ -608,7 +675,31 @@ function openPanel () {
    beside it names the file that choice actually landed on, which is otherwise
    invisible. */
 async function fieldOptions (field) {
-  return field.options === 'ollama' ? assistModelOptions() : speechModelOptions()
+  if (field.options === 'ollama') return assistModelOptions()
+  if (field.options === 'voices') return voiceOptions()
+  return speechModelOptions()
+}
+
+/* macOS's own voice list, cut down to the ones that speak English — 183
+   installed here, 43 of them English. The lines being read are the app's own
+   and are written in English; a Polish voice reading "deleted the last three
+   words" is not a choice worth scrolling past forty others to avoid making.
+   Region is kept, because that is the whole difference between the ones that
+   are left.
+
+   "System voice" is first and is the default: whatever `say` uses with no `-v`
+   at all, which is also the way to reach a voice this filter hides — set
+   `speakVoice` in settings.json by hand and the panel shows it rather than
+   silently resetting it. */
+const SPOKEN_LOCALE = /^en/i
+
+async function voiceOptions () {
+  const all = await window.transvibe.listVoices()
+  const voices = all.filter(v => SPOKEN_LOCALE.test(v.locale))
+  const options = [{ value: '', label: 'System voice' }]
+  for (const v of voices) options.push({ value: v.name, label: `${v.name} · ${v.locale}` })
+  if (!voices.length) options.push({ value: '', label: 'no English voices found', disabled: true })
+  return { options, note: `${voices.length} English voices` }
 }
 
 /* The assist model is Ollama's, and Ollama is optional in the strongest sense:
@@ -651,7 +742,11 @@ async function speechModelOptions () {
    visualizer, which is cheap enough to simply rebuild.
 
    `language` and `modelPath` are not here: they are baked into a running
-   whisper server, and the panel says so on the row rather than pretending. */
+   whisper server, and the panel says so on the row rather than pretending.
+
+   The two voice settings are here for a different reason: nothing needs
+   applying — the main process reads them on every reply — but they are worth
+   hearing the moment they change. */
 function applyLiveSetting (key) {
   const value = state.settings[key]
   const capture = state.capture
@@ -661,6 +756,7 @@ function applyLiveSetting (key) {
   if (key === 'interimMs' && capture) capture.setInterimMs(value)
   if (key === 'idleFadeMs' && state.presence) state.presence.setIdleFadeMs(value)
   if (key === 'idleClearMs' && state.presence) state.presence.setIdleClearMs(value)
+  if (key === 'speakVoice' || key === 'speakRate') previewVoice()
   if (key.startsWith('viz')) rebuildVisualizer()
 }
 

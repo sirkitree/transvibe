@@ -73,6 +73,16 @@ The phrase has to come first. A keyword recognised anywhere would turn "I told h
 
 Because the app decided this was a command rather than you, an utterance that reaches the parser and means nothing to it is **put back into the transcript** rather than dropped: `not a command — kept "…"`. The key path does not do that — there you meant a command, so being told is better than a stray sentence appearing.
 
+### It answers out loud
+
+A command you gave with your voice gets an answer in the same key: **"deleted the last three words"**, "copied", "not found". The point is the same one the wake phrase is making — while you are dictating you are looking at the app the words are going into, and a confirmation you have to look up at the strip to read is one you will not read.
+
+The microphone stops listening for exactly as long as the reply takes, plus a fraction for the room's echo, so the app never transcribes itself. (Echo cancellation is on and is not enough on its own — the speakers are a foot from the mic, and an app that hears the wake phrase in its own confirmation is an app that talks to itself.) Nothing is lost while it is deaf: what you say next opens a fresh utterance.
+
+The wording is the assist model's when [it is running](assist.md) — it shortens the strip's own line into something worth hearing — and the strip's line as written when it is not. Either way it is describing what already happened; the model is handed the outcome, so it cannot announce one that did not occur.
+
+Turn it off, pick a voice, or set the speed under **Settings › Spoken replies** — changing the voice or the rate says one line back in it straight away, which is the only way to choose a voice. (That preview plays even with replies switched off: picking a voice is a question about the voice.) The list is the English voices this Mac has — the replies are written in English, so the other 140 are not offered. More install under System Settings › Accessibility › Spoken Content and show up without a restart; a non-English one can still be named by hand in `settings.json`.
+
 The **?** button opens an in-app help panel with the full list (`esc` or `?` toggles it too). It is generated from the parser, so it cannot describe a command the parser does not have.
 
 ![The help panel: sections for the strip, the keys, the transcript and the buttons, then the full command list](images/help.png)

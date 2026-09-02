@@ -100,6 +100,7 @@ src/main/       index.js      window, tray, shortcuts, IPC, send
                 overlay.js    strip geometry + hover-wake rule (pure)
                 config.js     settings persistence
                 assist.js     optional local LLM pass (Ollama)
+                speech.js     saying a confirmation out loud via `say`
 src/shared/     glossary.js   vocabulary prompt + corrections (pure)
                 assist.js     assist prompts + reply guards (pure)
 src/renderer/   app.js        transcript UI, command dispatch, help panel

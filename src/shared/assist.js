@@ -1,7 +1,7 @@
 /**
  * Prompts and reply-handling for the local assist model.
  *
- * A second model, run locally through Ollama, does the two things a small
+ * A second model, run locally through Ollama, does the three things a small
  * whisper model and a rule parser each do badly:
  *
  *   cleanup   filler words, false starts and spoken self-corrections, rewritten
@@ -12,6 +12,8 @@
  *             is explicitly armed, so this is only ever asked about speech the
  *             user already declared to be a command — the model never gets the
  *             chance to mistake dictation for one.
+ *   speak     the confirmation the applier wrote, shortened into something
+ *             worth hearing out loud. Four words spoken beats twelve read.
  *
  * Pure: prompt text in, parsed answer out. Nothing here talks to a process or
  * a socket, so the guard rails below are unit-testable, which matters — an
@@ -128,4 +130,53 @@ export function parseCommandReply (reply, phrases) {
     }
   }
   return best ? best[1] : null
+}
+
+/* Saying what just happened is the third job, and the smallest: the applier
+   already produces an English message, but it is written to be read on the
+   strip — quoted operands, exact counts — and read aloud that is a mouthful.
+   The model's only task here is to shorten it. It cannot invent an outcome,
+   because the outcome is what it is being handed. */
+
+export const SPEAK_PROMPT = [
+  'Say this confirmation out loud in as few words as possible. Four words at',
+  'most. Keep the same meaning, drop the quoted text, no punctuation beyond a',
+  'final period. Output only the spoken words.'
+].join(' ')
+
+export function buildSpeakMessage (message) {
+  return `${SPEAK_PROMPT}\n\n${String(message == null ? '' : message)}`
+}
+
+/** Words a model reaches for when it is talking about the task rather than
+    doing it. Any of them means the reply is commentary, not a confirmation. */
+const SPEAK_PREAMBLE = /^(here('s| is)|sure|okay|of course|the (spoken|shortened)|i (can|cannot|can't|would))\b/i
+
+/**
+ * Decide whether a spoken rephrasing is safe to say.
+ *
+ * Weaker consequences than `acceptCleanup` — a bad line here is a wrong four
+ * words out of the speakers, not the user's own text overwritten — so the bar
+ * is only that it is short, plain, and one line. Anything else falls back to
+ * the message the applier wrote, which is always sayable.
+ *
+ * @param {string} fallback the applier's own message
+ * @param {string} reply    whatever the model returned
+ * @returns {{text: string, used: boolean, reason?: string}}
+ */
+export function acceptSpoken (fallback, reply) {
+  const before = squash(fallback)
+  const after = unwrap(reply)
+  const keep = reason => ({ text: before, used: false, reason })
+
+  if (!after) return keep('empty')
+  if (after === before) return keep('unchanged')
+  if (SPEAK_PREAMBLE.test(after)) return keep('preamble')
+  if (after.includes('```')) return keep('markup')
+  // Terse was the whole instruction. A model that ignored it once is not to be
+  // trusted with the next four words either.
+  if (WORDS(after) > 6) return keep('too long')
+  if (after.length > 48) return keep('too long')
+
+  return { text: after, used: true }
 }

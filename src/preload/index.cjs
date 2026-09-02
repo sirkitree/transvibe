@@ -19,6 +19,13 @@ contextBridge.exposeInMainWorld('transvibe', {
   cleanup: text => ipcRenderer.invoke('assist:cleanup', text),
   /** ask the assist model which known command phrase an utterance meant */
   assistCommand: (text, phrases) => ipcRenderer.invoke('assist:command', text, phrases),
+  /* Say a line out loud. Resolves when the speaker is quiet again, which is
+     what the renderer needs: it stops listening for exactly that long. */
+  speak: message => ipcRenderer.invoke('speak', message),
+  /** say one fixed line in the voice just chosen, off-switch and all */
+  previewVoice: () => ipcRenderer.invoke('speak:preview'),
+  /** every macOS voice on this machine, for the voice picker */
+  listVoices: () => ipcRenderer.invoke('voices:list'),
   send: text => ipcRenderer.invoke('send', text),
   hide: () => ipcRenderer.send('window:hide'),
   /** the pointer is over something clickable, not over the strip's empty air */

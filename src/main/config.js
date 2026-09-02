@@ -19,6 +19,15 @@ export const DEFAULTS = {
   wakeWord: 'hey claude',
   wakeWordFuzzy: true,
 
+  /* Saying what it just did. A command you gave with your voice deserves an
+     answer in kind — you are looking at the app you are dictating into, not at
+     the strip. `speakVoice` is a macOS voice name (`say -v '?'` lists them);
+     null uses whatever the system speaks with. The microphone goes deaf for
+     the length of the reply, so the app never transcribes itself. */
+  speakReplies: true,
+  speakVoice: null,
+  speakRate: 0,             // words per minute; 0 = the voice's own pace
+
   sendTarget: null,         // app name to focus before pasting; null = frontmost
   sendPressesEnter: false,  // also hit Return after pasting
   clearAfterSend: true,

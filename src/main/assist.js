@@ -1,4 +1,7 @@
-import { buildCleanupMessage, acceptCleanup, buildCommandMessage, parseCommandReply } from '../shared/assist.js'
+import {
+  buildCleanupMessage, acceptCleanup, buildCommandMessage, parseCommandReply,
+  buildSpeakMessage, acceptSpoken
+} from '../shared/assist.js'
 
 /**
  * The local assist model, served by Ollama.
@@ -108,6 +111,29 @@ export function createAssist ({
       if (!before.trim() || available === false) return { text: before, used: false, reason: 'skipped' }
       try {
         return acceptCleanup(before, await chat(buildCleanupMessage(before)))
+      } catch (err) {
+        return { text: before, used: false, reason: err.name === 'AbortError' ? 'timed out' : err.message }
+      }
+    },
+
+    /**
+     * Shorten a confirmation into something worth hearing out loud.
+     *
+     * On a much tighter leash than the other two: the reply is spoken while
+     * the microphone is deaf, so a slow answer costs the user the start of
+     * their next sentence. A second and a bit, then the plain message wins.
+     *
+     * @param {string} message the applier's own wording
+     * @returns {Promise<{text: string, used: boolean, reason?: string}>}
+     *   `text` is always sayable — the model's line, or the one passed in.
+     */
+    async speak (message) {
+      const before = String(message == null ? '' : message)
+      if (!before.trim() || available === false) {
+        return { text: before, used: false, reason: 'skipped' }
+      }
+      try {
+        return acceptSpoken(before, await chat(buildSpeakMessage(before), 1200))
       } catch (err) {
         return { text: before, used: false, reason: err.name === 'AbortError' ? 'timed out' : err.message }
       }

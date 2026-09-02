@@ -9,6 +9,7 @@ const MODULES = [
   '../src/main/overlay.js',
   '../src/main/wav.js',
   '../src/main/whisper-parse.js',
+  '../src/main/speech.js',
   '../src/main/models.js',
   '../src/shared/glossary.js',
   '../src/shared/assist.js',

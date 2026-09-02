@@ -520,6 +520,87 @@ export function applyCommand(cmd, text) {
 }
 
 /* ------------------------------------------------------------------ *
+ * saying it out loud
+ * ------------------------------------------------------------------ */
+
+/* `message` is written to be read: it quotes the exact text that moved, which
+   is what you want on the strip and exactly what you do not want in your ear —
+   "deleted the cat sat on the mat" is the machine reading your own sentence
+   back at you. Spoken, the useful part is the verb and the target. */
+
+const SPOKEN_TARGETS = {
+  all: 'everything',
+  'last-word': 'the last word',
+  'last-sentence': 'that',
+  'last-n-words': null      // filled in with the count
+}
+
+const SPOKEN_VERBS = {
+  delete: 'deleted',
+  capitalize: 'capitalised',
+  uppercase: 'uppercased',
+  lowercase: 'lowercased'
+}
+
+function spokenTarget (cmd) {
+  if (cmd.target === 'last-n-words') {
+    const n = Math.max(1, cmd.count || 1)
+    return n === 1 ? 'the last word' : `the last ${n} words`
+  }
+  return SPOKEN_TARGETS[cmd.target] || 'that'
+}
+
+/**
+ * What to say after a command ran.
+ *
+ * Short on purpose, and never a quotation: this is spoken while the microphone
+ * is deaf, and every extra word is time you cannot talk. Returns '' for the
+ * cases not worth a sound — a command that changed nothing because it was
+ * already that way.
+ *
+ * @param {object|null} cmd    the parsed command, or null if none was recognised
+ * @param {object} result      what applyCommand returned
+ * @returns {string} a line to speak, or '' for silence
+ */
+export function spokenFor (cmd, result) {
+  if (!cmd) return 'not a command'
+  if (!result) return ''
+
+  switch (result.effect) {
+    case 'undo': return 'undone'
+    case 'copy': return 'copied'
+    case 'send': return 'sent'
+    case 'clear': return 'cleared'
+    case 'pause': return 'paused'
+    case 'resume': return 'listening'
+    case 'hide': return 'hidden'
+  }
+
+  const verb = SPOKEN_VERBS[cmd.action]
+  if (verb) {
+    // A miss is worth hearing: nothing on screen changed and you need to know
+    // it was not simply ignored. Uppercasing what is already uppercase is the
+    // case that produces a message quoting the text back, which is exactly the
+    // thing this must never say out loud.
+    if (!result.changed) {
+      const why = result.message || ''
+      return why && !why.includes('"') ? why : 'no change'
+    }
+    return `${verb} ${spokenTarget(cmd)}`
+  }
+
+  if (cmd.action === 'replace') {
+    return result.changed ? 'replaced' : 'not found'
+  }
+  if (cmd.action === 'punctuate') {
+    return result.changed ? 'punctuated' : ''
+  }
+  if (cmd.action === 'newParagraph') return 'new paragraph'
+
+  return result.changed ? (result.message || '') : ''
+}
+
+/* ------------------------------------------------------------------ *
  * documentation — kept in sync with the parser (tests assert this)
  * ------------------------------------------------------------------ */
 

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
-  buildCleanupMessage, acceptCleanup, buildCommandMessage, parseCommandReply
+  buildCleanupMessage, acceptCleanup, buildCommandMessage, parseCommandReply,
+  buildSpeakMessage, acceptSpoken
 } from '../src/shared/assist.js'
 
 describe('buildCleanupMessage', () => {
@@ -120,5 +121,57 @@ describe('parseCommandReply', () => {
     expect(parseCommandReply('', phrases)).toBe(null)
     expect(parseCommandReply(null, phrases)).toBe(null)
     expect(parseCommandReply('undo that', undefined)).toBe(null)
+  })
+})
+
+describe('buildSpeakMessage', () => {
+  it('asks for the confirmation back, shorter', () => {
+    const msg = buildSpeakMessage('deleted the last 3 words')
+    expect(msg).toContain('deleted the last 3 words')
+    expect(msg.toLowerCase()).toContain('four words')
+  })
+})
+
+describe('acceptSpoken', () => {
+  const fallback = 'deleted the last 3 words'
+
+  it('takes a terse rephrasing', () => {
+    const r = acceptSpoken(fallback, 'Three words gone.')
+    expect(r.used).toBe(true)
+    expect(r.text).toBe('Three words gone.')
+  })
+
+  it('unwraps a quoted reply', () => {
+    expect(acceptSpoken(fallback, '"Three words gone."').text).toBe('Three words gone.')
+  })
+
+  it('refuses a model that ignored the word limit', () => {
+    const r = acceptSpoken(fallback, 'I have removed the last three words from your transcript')
+    expect(r.used).toBe(false)
+    expect(r.reason).toBe('too long')
+    expect(r.text).toBe(fallback)
+  })
+
+  it('refuses commentary about the task', () => {
+    expect(acceptSpoken(fallback, "Here's a shorter version: gone").used).toBe(false)
+    expect(acceptSpoken(fallback, 'Sure, deleted.').reason).toBe('preamble')
+    expect(acceptSpoken(fallback, 'The spoken reply is deleted').reason).toBe('preamble')
+  })
+
+  it('unwraps a fenced reply, and refuses one with a fence left in it', () => {
+    expect(acceptSpoken(fallback, '```\ndeleted\n```').text).toBe('deleted')
+    expect(acceptSpoken(fallback, 'deleted ``` three words').used).toBe(false)
+  })
+
+  it('falls back on an empty or missing reply', () => {
+    expect(acceptSpoken(fallback, '').reason).toBe('empty')
+    expect(acceptSpoken(fallback, null).reason).toBe('empty')
+    expect(acceptSpoken(fallback, '   ').text).toBe(fallback)
+  })
+
+  it('always returns something sayable', () => {
+    for (const reply of ['', null, undefined, '```x```', 'a'.repeat(200), 'gone']) {
+      expect(acceptSpoken(fallback, reply).text).toBeTruthy()
+    }
   })
 })

@@ -4,6 +4,7 @@ import {
   applyCommand,
   splitSentences,
   splitWords,
+  spokenFor,
   COMMANDS
 } from '../src/renderer/commands.js'
 
@@ -773,5 +774,72 @@ describe('splitSentences — more speech-shaped edge cases', () => {
 
   it('splits on a blank line', () => {
     expect(splitSentences('one\n\ntwo. three')).toEqual(['one', 'two.', 'three'])
+  })
+})
+
+describe('spokenFor', () => {
+  const run = (utterance, text) => {
+    const cmd = parseCommand(utterance)
+    return spokenFor(cmd, applyCommand(cmd, text))
+  }
+  const TEXT = 'The cat sat on the mat. It was a good mat.'
+
+  it('says the verb and the target, never the text itself', () => {
+    const line = run('delete the last sentence', TEXT)
+    expect(line).toBe('deleted that')
+    expect(line).not.toContain('mat')
+  })
+
+  it('counts the words it acted on', () => {
+    expect(run('delete the last three words', TEXT)).toBe('deleted the last 3 words')
+    expect(run('uppercase the last word', TEXT)).toBe('uppercased the last word')
+    expect(run('delete everything', TEXT)).toBe('deleted everything')
+  })
+
+  it('names the effect for the commands that do something elsewhere', () => {
+    expect(run('copy that', TEXT)).toBe('copied')
+    expect(run('send it', TEXT)).toBe('sent')
+    expect(run('clear everything', TEXT)).toBe('cleared')
+    expect(run('stop listening', TEXT)).toBe('paused')
+    expect(run('resume listening', TEXT)).toBe('listening')
+    expect(run('hide', TEXT)).toBe('hidden')
+    expect(run('undo', TEXT)).toBe('undone')
+  })
+
+  it('says so when a replace found nothing', () => {
+    expect(run('replace dog with fox', TEXT)).toBe('not found')
+    expect(run('replace cat with fox', TEXT)).toBe('replaced')
+  })
+
+  it('has a line for an utterance that was not a command at all', () => {
+    expect(spokenFor(null, null)).toBe('not a command')
+  })
+
+  it('never reads the transcript back, even when the applier quotes it', () => {
+    // "uppercase that" on text that is already uppercase leaves the applier
+    // saying: uppercased "THE MAT" — fine to read, wrong to hear.
+    const line = run('uppercase that', 'THE MAT')
+    expect(line).toBe('no change')
+    expect(line).not.toContain('MAT')
+  })
+
+  it('stays quiet when nothing happened and there is nothing to report', () => {
+    // The transcript already ends in a period: adding one changed nothing.
+    expect(run('period', 'Already done.')).toBe('')
+  })
+
+  it('is short enough to be worth hearing, for every command there is', () => {
+    for (const { examples } of COMMANDS) {
+      for (const example of examples) {
+        const line = run(example, TEXT)
+        expect(typeof line, example).toBe('string')
+        expect(line.split(/\s+/).filter(Boolean).length, example).toBeLessThanOrEqual(6)
+      }
+    }
+  })
+
+  it('never throws on a half-formed result', () => {
+    expect(spokenFor({ action: 'delete', target: 'last-word' }, null)).toBe('')
+    expect(spokenFor({ action: 'nonsense' }, { changed: false })).toBe('')
   })
 })

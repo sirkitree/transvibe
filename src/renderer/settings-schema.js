@@ -123,6 +123,25 @@ export const SECTIONS = [
     ]
   },
   {
+    title: 'Spoken replies',
+    note: 'After a command runs, the app says what it did. You are looking at the app you are dictating into, not at the strip, which is the whole reason the wake phrase exists — so the answer comes back the same way you asked. The microphone stops listening for as long as the reply takes, so it never transcribes itself.',
+    fields: [
+      { key: 'speakReplies', label: 'Say what it just did', type: 'toggle' },
+      {
+        key: 'speakVoice',
+        label: 'Voice',
+        help: 'The English voices installed on this Mac — the replies are written in English, so the rest are not offered. More can be added in System Settings › Accessibility › Spoken Content, and they show up here without a restart.',
+        type: 'select', options: 'voices', nullable: true, missingSuffix: '— not installed'
+      },
+      {
+        key: 'speakRate',
+        label: 'Speaking rate',
+        help: 'Words per minute. All the way left leaves the voice at its own pace.',
+        type: 'range', min: 0, max: 400, step: 10, unit: ' wpm', zero: 'the voice’s own'
+      }
+    ]
+  },
+  {
     title: 'The strip',
     note: 'The strip has no window. It hangs off the top of the screen and every click lands in whatever is behind it, until the pointer rests on it.',
     fields: [

@@ -20,6 +20,9 @@ Behind it is `~/Library/Application Support/transvibe/settings.json`, written on
 | `commandTimeoutMs` | `6000` | command mode disarms itself after this |
 | `wakeWord` | `'hey claude'` | open a sentence with this and the rest of it is a command; empty turns it off |
 | `wakeWordFuzzy` | `true` | forgive near-misses in the wake phrase ("hey cloud") |
+| `speakReplies` | `true` | say what a command just did, out loud |
+| `speakVoice` | `null` | macOS voice name; null = the system voice |
+| `speakRate` | `0` | words per minute; `0` = the voice's own pace |
 | `sendTarget` | `null` | app to focus before pasting; null = whatever is in front |
 | `sendPressesEnter` | `false` | also hit Return after pasting |
 | `clearAfterSend` | `true` | empty the transcript once delivered |

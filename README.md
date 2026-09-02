@@ -6,6 +6,7 @@ Local voice-to-text for macOS. A click-through strip across the top of the scree
 - Text appears **while you are still talking**, not after you stop
 - The transcript fades a few seconds after you stop, and is forgotten entirely twenty seconds later; esc clears it now
 - Hold right ⌥ — or just say "hey Claude" — to speak an editing command instead of dictating
+- It **says what it did** after a command — you are looking at the app you are dictating into, not at the strip
 - ⌃⌥↩ pastes the transcript straight into whatever app is in front
 - Optionally, a second local model tidies the fillers out and makes command mode understand phrasings the rules never learned
 - Every setting is a panel on the strip, applied as you change it

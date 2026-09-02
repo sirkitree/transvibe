@@ -8,6 +8,7 @@ import fs, { existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { createEngine } from './whisper.js'
 import { createAssist, listOllamaModels } from './assist.js'
+import { speak, stopSpeaking, listVoices } from './speech.js'
 import { findModel, downloadModel, listModels, humanSize, MODELS_DIR } from './models.js'
 import * as config from './config.js'
 import { stripBounds, contains, nextWake } from './overlay.js'
@@ -284,9 +285,16 @@ async function initEngine () {
    running or the model was never pulled, `check()` comes back false and every
    later call short-circuits, leaving the app exactly as it was. */
 async function initAssist () {
-  if (!settings.cleanup && !settings.commandFallback) { assist = null; return }
+  const asked = settings.cleanup || settings.commandFallback
+  // Spoken replies will use the model to shorten a line if it happens to be
+  // there, but they work without it, so wanting them is not a reason to go
+  // looking for Ollama on someone who never asked for it — only a reason to
+  // keep the handle if one of the other two already did.
+  if (!asked && !settings.speakReplies) { assist = null; return }
   assist = createAssist({ url: settings.assistUrl, model: settings.assistModel })
-  if (!(await assist.check())) {
+  const ok = await assist.check()
+  // Only the features that cannot work without it are worth an error.
+  if (!ok && asked) {
     send('status', { state: 'error', message: `assist model ${settings.assistModel} not available — is Ollama running?` })
   }
 }
@@ -484,9 +492,11 @@ ipcMain.handle('settings:set', (_e, patch) => {
     })
   }
   if ('cleanup' in patch || 'commandFallback' in patch ||
-      'assistModel' in patch || 'assistUrl' in patch) {
+      'assistModel' in patch || 'assistUrl' in patch || 'speakReplies' in patch) {
     initAssist()
   }
+  // Turning replies off mid-sentence should stop the sentence.
+  if ('speakReplies' in patch && !settings.speakReplies) stopSpeaking()
   if ('alwaysOnTop' in patch && win) {
     win.setAlwaysOnTop(settings.alwaysOnTop, 'screen-saver')
   }
@@ -503,6 +513,49 @@ ipcMain.handle('assist:command', async (_e, text, phrases) => {
   if (!assist || !settings.commandFallback) return null
   return assist.command(text, phrases)
 })
+
+/* Say what just happened.
+ *
+ * The renderer hands over the line it would have written on the strip and
+ * waits for this to resolve, because it is deaf to the microphone until it
+ * does. So every path here has to answer, including the ones that decide not
+ * to speak at all.
+ *
+ * The model shortens the line when it is running; when it is not, the strip's
+ * own wording is spoken as-is. Either way the outcome being announced is the
+ * one that already happened — nothing here can invent a result. */
+ipcMain.handle('speak', async (_e, message) => {
+  if (!settings.speakReplies) return { spoken: false, reason: 'off' }
+  const line = String(message == null ? '' : message).trim()
+  if (!line) return { spoken: false, reason: 'nothing to say' }
+
+  const phrased = assist ? await assist.speak(line) : { text: line, used: false }
+  const result = await speak(phrased.text, {
+    voice: settings.speakVoice,
+    rate: settings.speakRate
+  })
+  return { spoken: result.ok, said: phrased.text, error: result.error }
+})
+
+/* A voice is a thing you pick by ear, not by name: "Karen" and "Moira" mean
+   nothing until you have heard them say something. So changing the voice — or
+   the rate — says one line back in it immediately.
+ *
+ * Deliberately not routed through the handler above: this ignores the
+ * off-switch, because someone who just picked a voice while replies are off is
+ * asking what it sounds like, not turning the feature on. The model is not
+ * asked either — there is nothing here to shorten. */
+const PREVIEW_LINE = 'This is how a reply sounds.'
+
+ipcMain.handle('speak:preview', () => speak(PREVIEW_LINE, {
+  voice: settings.speakVoice,
+  rate: settings.speakRate
+}))
+
+/* The voices macOS has, for the settings panel. Read on every open like the
+   model lists are: voices are downloadable, and one added in System Settings
+   should show up here without a restart. */
+ipcMain.handle('voices:list', () => listVoices())
 
 ipcMain.handle('clipboard:write', (_e, text) => {
   clipboard.writeText(text)
