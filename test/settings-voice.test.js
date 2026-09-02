@@ -230,7 +230,7 @@ describe('the aliases themselves', () => {
   it('reaches every toggle and slider the panel has', () => {
     const reachable = FIELDS.filter(f => f.spoken).map(f => f.key)
     const panelOnly = FIELDS.filter(f => !f.spoken).map(f => f.key)
-    expect(reachable).toHaveLength(25)
+    expect(reachable).toHaveLength(26)
     // Free text and paths, and nothing else.
     expect(panelOnly.sort()).toEqual(
       ['assistModel', 'assistUrl', 'language', 'modelPath', 'sendTarget', 'wakeWord'])

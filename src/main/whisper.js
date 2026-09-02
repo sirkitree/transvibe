@@ -2,7 +2,9 @@ import { spawn } from 'node:child_process'
 import net from 'node:net'
 import { existsSync } from 'node:fs'
 import { encodeWav } from './wav.js'
-import { parseServerJson, parseCliOutput, cleanTranscript, createQueue } from './whisper-parse.js'
+import {
+  parseServerJson, parseCliOutput, cleanTranscript, isConfident, createQueue
+} from './whisper-parse.js'
 import { buildPrompt, applyCorrections, isGlossaryEcho } from '../shared/glossary.js'
 
 const BIN_DIRS = ['/opt/homebrew/bin', '/usr/local/bin', '/usr/bin']
@@ -36,7 +38,7 @@ function freePort () {
  */
 export function createEngine ({
   modelPath, threads = 6, language = 'en',
-  vocabulary = [], corrections = {}, dropGlossaryEcho = true
+  vocabulary = [], corrections = {}, dropGlossaryEcho = true, confidenceFloor = 0
 }) {
   const serverBin = which('whisper-server')
   const cliBin = which('whisper-cli')
@@ -48,6 +50,7 @@ export function createEngine ({
   let fixups = corrections
   let terms = vocabulary
   let dropEcho = dropGlossaryEcho
+  let floor = confidenceFloor
   let proc = null
   let port = null
   let ready = null
@@ -104,7 +107,9 @@ export function createEngine ({
     await start()
     const form = new FormData()
     form.append('file', new Blob([wav], { type: 'audio/wav' }), 'chunk.wav')
-    form.append('response_format', 'json')
+    // verbose_json rather than json: same text, plus the per-segment
+    // avg_logprob that says whether it was speech at all.
+    form.append('response_format', 'verbose_json')
     form.append('temperature', '0')
     // The initial prompt biases the decoder toward glossary spellings. It is
     // safe on interim passes too: `no_context` drops the *previous chunk's*
@@ -142,6 +147,12 @@ export function createEngine ({
   const queue = createQueue(async ({ samples, opts }) => {
     const wav = encodeWav(samples, 16000)
     const parsed = mode === 'server' ? await viaServer(wav, opts) : await viaCli(wav)
+    /* Music the room was playing, confidently turned into words. The decoder
+       is the one that knows: this is the same text it produced, thrown away
+       on its own numbers. */
+    if (!isConfident(parsed.confidence, floor)) {
+      return { ...parsed, text: '', dropped: 'not speech' }
+    }
     const text = applyCorrections(cleanTranscript(parsed.text), fixups)
     // An utterance that is nothing but glossary words is the prompt coming
     // back, not something that was said.
@@ -159,8 +170,9 @@ export function createEngine ({
     transcribe: (samples, opts = {}) => queue.push({ samples, opts }),
     get pending () { return queue.size },
     /** Swap the glossary in place; takes effect on the next utterance. */
-    setGlossary ({ vocabulary, corrections, dropGlossaryEcho } = {}) {
+    setGlossary ({ vocabulary, corrections, dropGlossaryEcho, confidenceFloor } = {}) {
       if (dropGlossaryEcho !== undefined) dropEcho = !!dropGlossaryEcho
+      if (confidenceFloor !== undefined) floor = Number(confidenceFloor) || 0
       if (vocabulary !== undefined) { prompt = buildPrompt(vocabulary); terms = vocabulary }
       if (corrections !== undefined) fixups = corrections || {}
     },

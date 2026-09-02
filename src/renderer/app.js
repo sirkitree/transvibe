@@ -1055,6 +1055,9 @@ async function main () {
       try {
         const res = await window.transvibe.transcribe(samples)
         if (res.error) hint(res.error)
+        /* Said out loud on the strip rather than dropped in silence: the floor
+           is a setting, and the only way to tune it is to see it working. */
+        else if (res.dropped) hint(`ignored — ${res.dropped}`)
         else if (!res.text) { /* silence or a filtered artifact */ }
         // Not awaited: command mode has to disarm the moment the utterance is
         // consumed, and the assist fallback may still be thinking.

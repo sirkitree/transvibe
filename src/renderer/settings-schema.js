@@ -83,6 +83,13 @@ export const SECTIONS = [
         type: 'text', placeholder: 'en', restart: true
       },
       {
+        key: 'confidenceFloor',
+        label: 'Ignore anything less certain than',
+        help: 'Whisper says how sure it was. Real speech scores about -0.05; music, a fan or a passing car score about -0.7, which is how music playing in the room turns into words. Lower is more permissive; all the way right turns the check off.',
+        spoken: ['the confidence floor', 'the confidence', 'how certain it has to be'],
+        type: 'range', min: -1, max: 0, step: 0.05, decimals: 2, zero: 'off'
+      },
+      {
         key: 'dropGlossaryEcho',
         label: 'Drop utterances that are only glossary words',
         spoken: ['the glossary echo', 'glossary echo'],

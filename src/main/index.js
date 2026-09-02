@@ -271,7 +271,8 @@ async function initEngine () {
       language: settings.language,
       vocabulary: settings.vocabulary,
       corrections: settings.corrections,
-      dropGlossaryEcho: settings.dropGlossaryEcho
+      dropGlossaryEcho: settings.dropGlossaryEcho,
+      confidenceFloor: settings.confidenceFloor
     })
     await engine.start()
     send('status', { state: 'ready', message: path.basename(modelPath), mode: engine.mode })
@@ -484,11 +485,13 @@ ipcMain.handle('settings:get', () => settings)
 ipcMain.handle('settings:set', (_e, patch) => {
   settings = config.save(patch)
   // Glossary edits apply to the next utterance — no need to restart the server.
-  if (engine && ('vocabulary' in patch || 'corrections' in patch || 'dropGlossaryEcho' in patch)) {
+  if (engine && ('vocabulary' in patch || 'corrections' in patch ||
+      'dropGlossaryEcho' in patch || 'confidenceFloor' in patch)) {
     engine.setGlossary({
       vocabulary: settings.vocabulary,
       corrections: settings.corrections,
-      dropGlossaryEcho: settings.dropGlossaryEcho
+      dropGlossaryEcho: settings.dropGlossaryEcho,
+      confidenceFloor: settings.confidenceFloor
     })
   }
   if ('cleanup' in patch || 'commandFallback' in patch ||

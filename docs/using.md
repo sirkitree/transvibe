@@ -114,6 +114,14 @@ The **?** button opens an in-app help panel with the full list (`esc` or `?` tog
 
 ![The help panel: sections for the strip, the keys, the transcript and the buttons, then the full command list](images/help.png)
 
+## Music in the room
+
+A microphone that listens all the time hears the room, and a small Whisper model will happily turn a song into a sentence. Two things stop that, and neither of them touches the visualizer — the ribbon still dances to whatever is playing, because it is fed from the microphone directly rather than from the transcript.
+
+**The recogniser's own confidence.** Whisper reports how sure it was, per utterance, and the gap is not subtle. Measured against this app's own server: real speech comes back at an average log probability of −0.01 to −0.08, while a chord, a fan and a pure tone land at −0.65, −0.76 and −0.64. Anything below **Settings › Transcription › Ignore anything less certain than** (−0.5 by default) is thrown away, and the strip says `ignored — not speech` so you can see it working while you tune it. All the way right turns the check off. (`no_speech_prob`, which sounds like the field for exactly this job, reads 0.0000 for music and is no use at all.)
+
+**A noise floor that keeps learning.** The detector adapts to how loud the room is, but it used to do that only while the room was quiet — so music playing continuously read as speech forever, and the floor stayed frozen at whatever the room was when the track started. Now a level that has stayed up for twenty seconds without a single dip is treated as the room rather than as a sentence: nobody talks that long without a gap. The floor climbs, the music stops registering, and talking over it still works because speech has to clear the background by a margin rather than clear a fixed number.
+
 ## The glossary
 
 Names, jargon and product words are what a small Whisper model gets wrong most consistently — it has never seen them, so it reaches for the nearest thing it has. Two lists attack that from opposite ends: **terms** are fed to the recogniser as it listens, so the spelling wins while you are still talking; **fixes** rewrite what it got wrong anyway.

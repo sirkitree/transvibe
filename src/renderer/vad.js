@@ -22,6 +22,14 @@ export function createVad (options = {}) {
     ? Math.max(1, Math.floor(options.onsetFrames))
     : 3
 
+  /* How long a run of "speech" has to get before the noise floor starts
+     learning from it anyway. Music playing in the room reads as speech
+     forever, and a floor that only adapts while idle would sit at whatever the
+     room was when the track started — so every max-length flush hands the
+     recogniser another chunk of the song. Well past any real sentence, so
+     ordinary talking never drags the floor up under itself. */
+  const relearnMs = positive(options.relearnMs, 20000)
+
   let level = nonNegative(options.threshold, 0.02)
   let noiseFloor = 0
 
@@ -32,6 +40,7 @@ export function createVad (options = {}) {
   let segStart = 0         // first frame of the open segment
   let lastSpeech = 0       // last frame in the open segment that was speech
   let hangFrames = 0
+  let loudSince = null     // frame the current unbroken loud run began on
 
   const speechThreshold = () => Math.max(level, noiseFloor * SPEECH_FLOOR_RATIO)
 
@@ -43,6 +52,7 @@ export function createVad (options = {}) {
     segStart = 0
     lastSpeech = 0
     hangFrames = 0
+    loudSince = null
   }
 
   const endEvent = (at, reason) => {
@@ -62,6 +72,17 @@ export function createVad (options = {}) {
     const f = frame++
     const value = Number.isFinite(rms) ? Math.max(0, rms) : 0
     const isSpeech = value > speechThreshold()
+
+    if (!isSpeech) loudSince = null
+    else if (loudSince === null) loudSince = f
+
+    /* Nothing has been quiet for a long time. Whatever is above the threshold
+       is not a sentence — nobody talks for twenty seconds without a gap the
+       hangover would catch — so it is the room, and the floor learns it. Once
+       the floor is up past the music the state machine falls back to idle on
+       its own and the ordinary rule takes over again. */
+    const droning = loudSince !== null && (f - loudSince + 1) * frameMs >= relearnMs
+    if (droning) noiseFloor = noiseFloor * noiseFloorAdapt + value * (1 - noiseFloorAdapt)
 
     if (state === 'idle') {
       if (!isSpeech) {
@@ -130,6 +151,8 @@ export function createVad (options = {}) {
     setHangoverMs (ms) {
       if (Number.isFinite(ms) && ms >= 0) hangoverMs = ms
     },
+    /** Frames since the level last dropped below the speech threshold. */
+    get loudMs () { return loudSince === null ? 0 : (frame - loudSince) * frameMs },
     get state () { return state },
     get threshold () { return level },
     get hangoverMs () { return hangoverMs },

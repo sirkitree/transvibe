@@ -5,6 +5,7 @@ import {
   parseServerJson,
   isArtifact,
   cleanTranscript,
+  isConfident,
   createQueue
 } from '../src/main/whisper-parse.js'
 
@@ -254,5 +255,72 @@ describe('parse edge cases', () => {
       { startMs: null, endMs: null, text: 'b' }
     ])
     expect(parseCliOutput('').segments).toEqual([])
+  })
+})
+
+/* Real replies from this app's own whisper-server, verbose_json. The numbers
+   are what make the check possible: speech and not-speech are an order of
+   magnitude apart, with nothing in between. */
+const SPOKEN = {
+  text: ' Let me know what you think about the new design before Friday.',
+  segments: [{
+    id: 0,
+    text: ' Let me know what you think about the new design before Friday.',
+    avg_logprob: -0.0138,
+    no_speech_prob: 0.0000020
+  }]
+}
+
+const MUSIC = {
+  text: ' (light music)',
+  segments: [{ id: 0, text: ' (light music)', avg_logprob: -0.652, no_speech_prob: 0.0000004 }]
+}
+
+describe('parseServerJson — verbose_json', () => {
+  it('reads the text exactly as the plain format did', () => {
+    expect(parseServerJson(SPOKEN).text)
+      .toBe('Let me know what you think about the new design before Friday.')
+  })
+
+  it('carries the decoder’s own confidence out with it', () => {
+    expect(parseServerJson(SPOKEN).confidence).toBeCloseTo(-0.0138, 4)
+    expect(parseServerJson(MUSIC).confidence).toBeCloseTo(-0.652, 3)
+  })
+
+  it('scores an utterance by its worst segment, not its average', () => {
+    const mixed = {
+      text: 'one two',
+      segments: [
+        { text: 'one', avg_logprob: -0.02 },
+        { text: 'two', avg_logprob: -0.9 }
+      ]
+    }
+    expect(parseServerJson(mixed).confidence).toBe(-0.9)
+  })
+
+  it('says nothing about confidence when the server did not', () => {
+    expect(parseServerJson({ text: 'hello' }).confidence).toBeUndefined()
+    expect(parseServerJson({ transcription: [{ text: 'hello' }] }).confidence).toBeUndefined()
+  })
+})
+
+describe('isConfident', () => {
+  it('keeps speech and drops music at the default floor', () => {
+    expect(isConfident(-0.0138, -0.5)).toBe(true)
+    expect(isConfident(-0.081, -0.5)).toBe(true)
+    expect(isConfident(-0.652, -0.5)).toBe(false)   // a chord
+    expect(isConfident(-0.764, -0.5)).toBe(false)   // a fan
+  })
+
+  it('passes anything when the check is off', () => {
+    expect(isConfident(-0.9, 0)).toBe(true)
+    expect(isConfident(-0.9, null)).toBe(true)
+  })
+
+  it('passes when there is no confidence to judge', () => {
+    // The CLI path says nothing about it, and a missing signal must never
+    // cost someone their words.
+    expect(isConfident(null, -0.5)).toBe(true)
+    expect(isConfident(undefined, -0.5)).toBe(true)
   })
 })

@@ -78,6 +78,14 @@ export const DEFAULTS = {
   assistModel: 'gemma4:e2b',
   assistUrl: 'http://127.0.0.1:11434',
 
+  /* How sure the recogniser has to have been that it was hearing speech.
+     Whisper reports an average log probability per utterance, and the gap is
+     wide: measured on this app's own server, real speech comes back at -0.01
+     to -0.08 while music, a fan and a pure tone land at -0.65, -0.76 and
+     -0.64. Anything below the floor is thrown away, which is what stops music
+     in the room becoming words on the strip. `0` turns the check off. */
+  confidenceFloor: -0.5,
+
   /* Drop an utterance that is nothing but glossary words — almost always the
      initial prompt echoing back over noise. Turn it off if you genuinely need
      to dictate a single glossary term on its own. */

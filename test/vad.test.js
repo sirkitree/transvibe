@@ -250,3 +250,51 @@ describe('createVad', () => {
     expect(events[1].durationMs).toBe(200)
   })
 })
+
+/* Music playing in the room reads as speech and never stops, which used to
+   freeze the noise floor at whatever the room was when the track started —
+   every max-length flush then handed whisper another chunk of the song. */
+describe('a room that never goes quiet', () => {
+  const MUSIC = 0.06
+
+  it('learns a steady background as the new floor', () => {
+    const vad = createVad({ frameMs: 20, threshold: 0.02 })
+    // A minute of unbroken music, well past any real sentence.
+    drive(vad, rep(3000, MUSIC))
+    expect(vad.noiseFloor).toBeGreaterThan(MUSIC * 0.4)
+    expect(vad.threshold).toBe(0.02)   // the setting itself is untouched
+  })
+
+  it('stops calling the music speech once it has learnt it', () => {
+    const vad = createVad({ frameMs: 20, threshold: 0.02 })
+    drive(vad, rep(3000, MUSIC))
+    const after = drive(vad, rep(600, MUSIC))
+    expect(after).toEqual([])
+    expect(vad.state).toBe('idle')
+  })
+
+  it('still hears someone talking over it', () => {
+    const vad = createVad({ frameMs: 20, threshold: 0.02 })
+    drive(vad, rep(3000, MUSIC))
+    const events = drive(vad, [...rep(40, 0.35), ...rep(HANG_FRAMES + 2, MUSIC)])
+    expect(events.map(e => e.type)).toEqual(['start', 'end'])
+    expect(events[1].reason).toBe('silence')
+  })
+
+  it('leaves ordinary speech alone — it is never loud for that long', () => {
+    const vad = createVad({ frameMs: 20, threshold: 0.02 })
+    // Ten sentences with breaths between them: the floor stays where it was.
+    for (let i = 0; i < 10; i++) {
+      drive(vad, [...rep(100, SPEECH), ...rep(HANG_FRAMES + 5, SILENCE)])
+    }
+    expect(vad.noiseFloor).toBeLessThan(0.01)
+  })
+
+  it('reports how long it has been loud, for anyone tuning this', () => {
+    const vad = createVad({ frameMs: 20, threshold: 0.02 })
+    drive(vad, rep(50, SPEECH))
+    expect(vad.loudMs).toBe(1000)
+    drive(vad, rep(1, SILENCE))
+    expect(vad.loudMs).toBe(0)
+  })
+})

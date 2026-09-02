@@ -6,6 +6,7 @@ Local voice-to-text for macOS. A click-through strip across the top of the scree
 - Text appears **while you are still talking**, not after you stop
 - The transcript fades a few seconds after you stop, and is forgotten entirely twenty seconds later; esc clears it now
 - Hold right ⌥ — or just say "hey Claude" — to speak an editing command instead of dictating
+- Ignores music and background noise rather than transcribing it, while the visualizer still reacts to it
 - Commands chain: "open settings and change the voice to Karen"
 - Settings change by voice too — "turn off spoken replies", "set the fade to ten seconds", "what's the threshold"
 - It **says what it did** after a command — you are looking at the app you are dictating into, not at the strip
