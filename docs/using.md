@@ -46,12 +46,19 @@ The controls only exist while the strip is awake. They sit in a row directly und
 
 By default everything you say is transcribed. **Hold the right ⌥ key** and the strip swings amber — speak one editing command, release, and it drops straight back to transcribing. (**⌃⌥C** does the same thing without the hold, for when the key is awkward.) If you say nothing it disarms itself after 6 seconds.
 
+    "open settings"                "close the panel"
     "capitalize that"              "delete the last three words"
     "uppercase that"               "delete that" / "scratch that"
     "lowercase that"               "undo that" / "never mind"
     "new paragraph"                "replace whisper with Whisper"
     "question mark"                "copy that" / "clear everything"
     "send that" / "ship it"
+
+### Two in one breath
+
+Commands chain: **"open settings and change the voice to Karen"**, "copy that then clear everything", "delete the last word, then capitalize that". Joined with *and*, *then*, *and then* or a comma, up to four in a sentence, run left to right, with one spoken confirmation at the end rather than one per part.
+
+It is all or nothing. Every part has to parse as a real command before any of them runs, because "and" is a word that turns up inside commands as well as between them — half a chain executed on a misreading is worse than no chain. The split is only tried after the whole sentence has failed to parse on its own, so "replace cat and dog with pets" is still one replace, and "set the rate to two hundred and fifty" is still one number.
 
 Releasing the key does not end command mode on its own: the utterance is usually still open when your thumb comes up, and the recogniser needs its silence window to close it. Release just starts the idle timeout — the command is consumed when the utterance actually finishes.
 
@@ -72,6 +79,26 @@ Said on its own, "hey Claude" just arms command mode for the next thing you say,
 The phrase has to come first. A keyword recognised anywhere would turn "I told him hey Claude was down" into a command; recognised only at the front, after fillers like "um" and "so", it stays out of ordinary speech. Near misses are forgiven, because a small model hears an unusual name loosely — "hey cloud" and "hey claud" both count. Change the phrase, or turn either behaviour off, under Settings › Command mode.
 
 Because the app decided this was a command rather than you, an utterance that reaches the parser and means nothing to it is **put back into the transcript** rather than dropped: `not a command — kept "…"`. The key path does not do that — there you meant a command, so being told is better than a stray sentence appearing.
+
+### Settings, by voice
+
+**"open settings"** brings the panel up — the strip is shown first if it was hidden, so it always opens onto something you can see — and **"close the panel"** puts it away, which is what esc does for hands that are on the keyboard.
+
+The same sentence that edits the transcript can change the app. Say the setting's name and what you want done with it:
+
+    "hey Claude, turn off spoken replies"      any on/off setting
+    "hey Claude, set the fade to ten seconds"  any slider
+    "hey Claude, raise the threshold"          a nudge either way
+    "hey Claude, make the voice Karen"         any English voice on this Mac
+    "hey Claude, what's the threshold"         ask instead of change
+
+Sliders take the number however you say it — "zero point zero three", "0.03", "two hundred", "a thousand" — and are clamped to the range the panel allows, so "set the frame rate to a thousand" gets you 60 rather than an unusable app. A bare number on a setting measured in milliseconds is read as seconds, because "set the fade to ten" is how people say it and nobody wants a ten-millisecond fade. A nudge is a quarter of where the setting currently sits, rounded to a step the slider can land on.
+
+One sentence is read two ways: "change voice to Karen" is also a valid *replace* — swap the word "voice" for the word "Karen". A sentence that names a setting is treated as being about that setting, and that preference applies only against replace; every other command shape is unambiguous. If you genuinely need to edit the word "voice" in the transcript, "replace voice with Karen" still does it.
+
+The rules are generated from the settings panel itself, so the two can't drift apart, and the panel updates under you if it happens to be open. Twenty-five settings are reachable. The wake phrase, the language, the send target and the two model paths are not: they are free text, and a misheard wake phrase would take the voice commands with it. The `?` panel lists the names to say.
+
+The verb and the setting's name have to be adjacent, which is what keeps this out of ordinary speech — "turn off the lights" names no setting and is transcribed as what it is. A settings change is not on the transcript's undo stack; undo it by saying the opposite.
 
 ### It answers out loud
 

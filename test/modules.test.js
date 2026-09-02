@@ -18,7 +18,8 @@ const MODULES = [
   '../src/renderer/vad.js',
   '../src/renderer/band.js',
   '../src/renderer/commands.js',
-  '../src/renderer/wake.js'
+  '../src/renderer/wake.js',
+  '../src/renderer/settings-voice.js'
 ]
 
 describe('modules load', () => {

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   buildCleanupMessage, acceptCleanup, buildCommandMessage, parseCommandReply,
-  buildSpeakMessage, acceptSpoken
+  buildSpeakMessage, acceptSpoken, worthShortening
 } from '../src/shared/assist.js'
 
 describe('buildCleanupMessage', () => {
@@ -173,5 +173,35 @@ describe('acceptSpoken', () => {
     for (const reply of ['', null, undefined, '```x```', 'a'.repeat(200), 'gone']) {
       expect(acceptSpoken(fallback, reply).text).toBeTruthy()
     }
+  })
+})
+
+describe('worthShortening', () => {
+  it('leaves a line that is already spoken-length alone', () => {
+    // These are the ones where a rephrasing can invert the meaning, and the
+    // model has: "not a command" came back as "Confirmed that is it."
+    for (const line of ['not a command', 'copied', 'no change', 'undone', 'kept as dictation']) {
+      expect(worthShortening(line), line).toBe(false)
+    }
+  })
+
+  it('asks about the ones actually worth shortening', () => {
+    expect(worthShortening('deleted the last 3 words')).toBe(true)
+    expect(worthShortening('capitalised the last three words')).toBe(true)
+  })
+})
+
+describe('acceptSpoken — staying on topic', () => {
+  it('refuses a fluent reply about something else entirely', () => {
+    const r = acceptSpoken('not a command was recognised', 'Confirmed that is it.')
+    expect(r.used).toBe(false)
+    expect(r.reason).toBe('off topic')
+    expect(r.text).toBe('not a command was recognised')
+  })
+
+  it('keeps a rephrasing that still names what happened', () => {
+    expect(acceptSpoken('deleted the last 3 words', 'Deleted last three words.').used).toBe(true)
+    // Prefix match, so a plural is still the same word.
+    expect(acceptSpoken('the fade is 10 seconds', 'Fade ten second.').used).toBe(true)
   })
 })

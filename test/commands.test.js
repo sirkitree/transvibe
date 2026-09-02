@@ -5,6 +5,7 @@ import {
   splitSentences,
   splitWords,
   spokenFor,
+  splitChain,
   COMMANDS
 } from '../src/renderer/commands.js'
 
@@ -517,9 +518,9 @@ describe('COMMANDS stays in sync with the parser', () => {
     const actions = COMMANDS.map((c) => c.action)
     expect(new Set(actions).size).toBe(actions.length)
     expect(actions.sort()).toEqual([
-      'capitalize', 'clear', 'copy', 'delete', 'hide', 'lowercase',
-      'newParagraph', 'pause', 'punctuate', 'replace', 'resume', 'send', 'undo',
-      'uppercase'
+      'capitalize', 'clear', 'closePanel', 'copy', 'delete', 'hide',
+      'lowercase', 'newParagraph', 'pause', 'punctuate', 'replace', 'resume',
+      'send', 'settings', 'undo', 'uppercase'
     ].sort())
   })
 
@@ -841,5 +842,75 @@ describe('spokenFor', () => {
   it('never throws on a half-formed result', () => {
     expect(spokenFor({ action: 'delete', target: 'last-word' }, null)).toBe('')
     expect(spokenFor({ action: 'nonsense' }, { changed: false })).toBe('')
+  })
+})
+
+describe('opening the panels by voice', () => {
+  it('takes the phrasings someone would actually use', () => {
+    for (const said of [
+      'open settings', 'show settings', 'settings', 'open the settings',
+      'open preferences', 'settings panel'
+    ]) {
+      expect(actionOf(said), said).toBe('settings')
+    }
+    for (const said of ['close settings', 'close the panel']) {
+      expect(actionOf(said), said).toBe('closePanel')
+    }
+  })
+
+  it('opens onto an empty transcript, like the other app commands', () => {
+    const res = applyCommand(parseCommand('open settings'), '')
+    expect(res.effect).toBe('settings')
+    expect(res.changed).toBe(false)
+  })
+
+  it('leaves the transcript alone', () => {
+    const res = applyCommand(parseCommand('open settings'), 'Some text.')
+    expect(res.text).toBe('Some text.')
+    expect(res.effect).toBe('settings')
+  })
+
+  it('says something short about it', () => {
+    const cmd = parseCommand('open settings')
+    expect(spokenFor(cmd, applyCommand(cmd, ''))).toBe('settings')
+  })
+})
+
+describe('splitChain', () => {
+  it('splits the joiners people actually say', () => {
+    expect(splitChain('open settings and change voice to karen'))
+      .toEqual(['open settings', 'change voice to karen'])
+    expect(splitChain('copy that then clear everything'))
+      .toEqual(['copy that', 'clear everything'])
+    expect(splitChain('delete the last word, then capitalize that'))
+      .toEqual(['delete the last word', 'capitalize that'])
+    expect(splitChain('copy that, clear everything'))
+      .toEqual(['copy that', 'clear everything'])
+  })
+
+  it('leaves a single command whole', () => {
+    expect(splitChain('copy that')).toEqual(['copy that'])
+    expect(splitChain('')).toEqual([])
+  })
+
+  it('refuses a sentence with more joiners than a chain would have', () => {
+    const long = 'a and b and c and d and e'
+    expect(splitChain(long)).toEqual([long])
+  })
+
+  it('splits an "and" that is not a joiner too — the caller catches it', () => {
+    // Nothing here knows which "and" is a joiner. Every part has to parse as
+    // a command before the app runs any of it, and "fifty" does not, so a
+    // sentence like this is rejected as a chain rather than half-executed.
+    const parts = splitChain('set the rate to two hundred and fifty')
+    expect(parts).toEqual(['set the rate to two hundred', 'fifty'])
+    expect(parts.map(parseCommand).every(Boolean)).toBe(false)
+  })
+
+  it('is never reached by a sentence that parses on its own', () => {
+    // The app splits only after the whole sentence has failed to parse, and
+    // this one does not fail: "cat and dog" stays one operand.
+    expect(parseCommand('replace cat and dog with pets'))
+      .toMatchObject({ action: 'replace', args: { from: 'cat and dog', to: 'pets' } })
   })
 })

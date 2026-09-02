@@ -256,6 +256,20 @@ const EXACT = {
   'resume transcription': { action: 'resume' },
   resume: { action: 'resume' },
 
+  settings: { action: 'settings' },
+  'open settings': { action: 'settings' },
+  'show settings': { action: 'settings' },
+  'open the settings': { action: 'settings' },
+  'open settings panel': { action: 'settings' },
+  'settings panel': { action: 'settings' },
+  'open preferences': { action: 'settings' },
+  'show preferences': { action: 'settings' },
+
+  'close settings': { action: 'closePanel' },
+  'close the settings': { action: 'closePanel' },
+  'close the panel': { action: 'closePanel' },
+  'close panel': { action: 'closePanel' },
+
   hide: { action: 'hide' },
   'hide the window': { action: 'hide' },
   'hide window': { action: 'hide' },
@@ -431,6 +445,10 @@ export function applyCommand(cmd, text) {
   if (action === 'pause') return unchanged('paused listening', 'pause')
   if (action === 'resume') return unchanged('resumed listening', 'resume')
   if (action === 'hide') return unchanged('hidden', 'hide')
+  // Panels are the app's own furniture: they open onto an empty transcript
+  // just as happily as a full one, so they sit above the emptiness check.
+  if (action === 'settings') return unchanged('settings', 'settings')
+  if (action === 'closePanel') return unchanged('closed', 'closePanel')
 
   if (empty) return unchanged('nothing to act on')
 
@@ -520,6 +538,37 @@ export function applyCommand(cmd, text) {
 }
 
 /* ------------------------------------------------------------------ *
+ * chains
+ * ------------------------------------------------------------------ */
+
+// "and then" before "then" before "and", so the longest joiner wins and does
+// not leave a stray "then" at the front of the next part.
+const JOINERS = /\s*,\s*(?:and then|then|and)\s+|\s+(?:and then|then|and)\s+|\s*,\s+/i
+
+// More than this in one breath is not a chain, it is a sentence that happens
+// to contain the word "and".
+const MAX_PARTS = 4
+
+/**
+ * One utterance, split into the commands it might be a chain of.
+ *
+ * Deliberately naive: "and" is a word people use inside commands too — "two
+ * hundred and fifty", "replace cat and dog with pets" — so this does not try
+ * to be clever about which "and" is a joiner. It offers the split, and the
+ * caller only acts on it if *every* part turns out to be a real command. A
+ * sentence that parses whole is never offered here at all.
+ *
+ * @param {string} utterance
+ * @returns {string[]} the parts, or a single-element array if there is no split
+ */
+export function splitChain (utterance) {
+  if (typeof utterance !== 'string') return []
+  const parts = utterance.split(JOINERS).map(p => p.trim()).filter(Boolean)
+  if (parts.length < 2 || parts.length > MAX_PARTS) return [utterance.trim()].filter(Boolean)
+  return parts
+}
+
+/* ------------------------------------------------------------------ *
  * saying it out loud
  * ------------------------------------------------------------------ */
 
@@ -574,6 +623,8 @@ export function spokenFor (cmd, result) {
     case 'pause': return 'paused'
     case 'resume': return 'listening'
     case 'hide': return 'hidden'
+    case 'settings': return 'settings'
+    case 'closePanel': return 'closed'
   }
 
   const verb = SPOKEN_VERBS[cmd.action]
@@ -712,6 +763,16 @@ export const COMMANDS = [
     action: 'resume',
     examples: ['start listening', 'resume listening', 'resume'],
     help: 'Start transcribing again.'
+  },
+  {
+    action: 'settings',
+    examples: ['open settings', 'show settings', 'settings', 'open preferences'],
+    help: 'Open the settings panel — every setting is also sayable on its own.'
+  },
+  {
+    action: 'closePanel',
+    examples: ['close settings', 'close the panel'],
+    help: 'Close whichever panel is open, the same as esc.'
   },
   {
     action: 'hide',

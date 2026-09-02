@@ -21,13 +21,17 @@ contextBridge.exposeInMainWorld('transvibe', {
   assistCommand: (text, phrases) => ipcRenderer.invoke('assist:command', text, phrases),
   /* Say a line out loud. Resolves when the speaker is quiet again, which is
      what the renderer needs: it stops listening for exactly that long. */
-  speak: message => ipcRenderer.invoke('speak', message),
+  speak: (message, options) => ipcRenderer.invoke('speak', message, options),
   /** say one fixed line in the voice just chosen, off-switch and all */
   previewVoice: () => ipcRenderer.invoke('speak:preview'),
   /** every macOS voice on this machine, for the voice picker */
   listVoices: () => ipcRenderer.invoke('voices:list'),
   send: text => ipcRenderer.invoke('send', text),
   hide: () => ipcRenderer.send('window:hide'),
+  /* Opening a panel goes out to the main process and comes back as a
+     'command': the strip may be hidden, and a panel opened onto a hidden
+     window is a panel nobody can see. */
+  openPanel: name => ipcRenderer.send('panel:open', name),
   /** the pointer is over something clickable, not over the strip's empty air */
   setOverTarget: value => ipcRenderer.send('overlay:target', value),
   /** keep the strip awake while a panel or field is in use */

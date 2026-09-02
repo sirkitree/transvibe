@@ -1,6 +1,6 @@
 import {
   buildCleanupMessage, acceptCleanup, buildCommandMessage, parseCommandReply,
-  buildSpeakMessage, acceptSpoken
+  buildSpeakMessage, acceptSpoken, worthShortening
 } from '../shared/assist.js'
 
 /**
@@ -132,6 +132,10 @@ export function createAssist ({
       if (!before.trim() || available === false) {
         return { text: before, used: false, reason: 'skipped' }
       }
+      // Four words or fewer is already a spoken reply. Asking anyway costs a
+      // second and risks the model improving "not a command" into a
+      // confirmation of something that did not happen.
+      if (!worthShortening(before)) return { text: before, used: false, reason: 'short enough' }
       try {
         return acceptSpoken(before, await chat(buildSpeakMessage(before), 1200))
       } catch (err) {

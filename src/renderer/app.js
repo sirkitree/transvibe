@@ -1,7 +1,9 @@
 import { startCapture } from './audio.js'
 import { createVisualizer } from './visualizer.js'
-import { parseCommand, applyCommand, spokenFor, COMMANDS } from './commands.js'
+import { parseCommand, applyCommand, spokenFor, splitChain, COMMANDS } from './commands.js'
 import { splitWakeWord } from './wake.js'
+import { parseSettingCommand, applySettingCommand, settingPhrases } from './settings-voice.js'
+import { FIELDS } from './settings-schema.js'
 import {
   addTerms, removeTerm, addCorrection, removeCorrection, sortedEntries, splitWords
 } from './glossary-edit.js'
@@ -130,14 +132,47 @@ function setCommandMode (active) {
   render()
 }
 
-const COMMAND_PHRASES = COMMANDS.flatMap(c => c.examples)
+/* What the assist model is allowed to answer with. The settings half is
+   generated from the schema, so "make it stop talking to me" can land on
+   "turn off spoken replies" without a rule for that phrasing, and a wrong
+   answer still cannot name a setting the app does not have. */
+const COMMAND_PHRASES = [
+  ...COMMANDS.flatMap(c => c.examples),
+  ...settingPhrases(FIELDS)
+]
 
 /* One spoken utterance, interpreted as an editing command rather than as text
    to insert. A parse failure must never silently swallow what was said. */
-async function runCommand (utterance, { retry = true, keep = null } = {}) {
+async function runCommand (utterance, { retry = true, keep = null, collect = null } = {}) {
   const cmd = parseCommand(utterance)
 
+  /* Inside a chain the confirmations are gathered and said once at the end.
+     Saying each one as it happens would not work anyway: a second `say`
+     interrupts the first, so all you would hear is the last command. */
+  const announce = line => { if (collect) collect.push(line); else say(line) }
+
+  /* "change voice to Karen" is a replace as far as the editing rules are
+     concerned — swap the word "voice" for the word "Karen" — and a settings
+     command to everyone else. A sentence that names a setting is about that
+     setting, so the settings reading wins over a replace, and only over a
+     replace: every other command shape is unambiguous. */
+  if (cmd && cmd.action === 'replace') {
+    const named = parseSettingCommand(utterance, FIELDS)
+    if (named && await runSettingCommand(named, { collect })) return
+  }
+
   if (!cmd) {
+    /* The other kind of command: one about the app rather than about the
+       text. Tried after the editing rules, so nothing that already worked
+       changes, and strict about naming a setting out loud — "turn off the
+       lights" finds no setting and carries on down to being dictation. */
+    const setting = parseSettingCommand(utterance, FIELDS)
+    if (setting && await runSettingCommand(setting, { collect })) return
+
+    // Two commands in one breath. Tried before the model is asked, and only
+    // when the sentence made no sense as a single command.
+    if (!collect && await runChain(utterance)) return
+
     console.info('[transvibe] unrecognised command:', JSON.stringify(utterance))
 
     /* The seam the rules leave open. The assist model does not invent a
@@ -150,7 +185,7 @@ async function runCommand (utterance, { retry = true, keep = null } = {}) {
     if (retry && state.settings.commandFallback) {
       hint('working out what you meant…')
       const phrase = await window.transvibe.assistCommand(utterance, COMMAND_PHRASES)
-      if (phrase) return runCommand(phrase, { retry: false, keep })
+      if (phrase) return runCommand(phrase, { retry: false, keep, collect })
     }
 
     /* Armed with a key, a miss is just a miss: you meant a command and it is
@@ -160,13 +195,13 @@ async function runCommand (utterance, { retry = true, keep = null } = {}) {
     if (keep) {
       keep()
       hint(`not a command — kept "${utterance}"`)
-      say('kept as dictation')
+      announce('kept as dictation')
       render()
       return
     }
 
     hint(`not a command: "${utterance}"`)
-    say(spokenFor(null))
+    announce(spokenFor(null))
     return
   }
 
@@ -176,12 +211,12 @@ async function runCommand (utterance, { retry = true, keep = null } = {}) {
   if (result.effect === 'undo') {
     const previous = state.undoStack.pop()
     if (previous === undefined) {
-      say('nothing to undo')
+      announce('nothing to undo')
       return hint('nothing to undo')
     }
     setText(previous)
     hint('undone')
-    say(spokenFor(cmd, result))
+    announce(spokenFor(cmd, result))
     render()
     return
   }
@@ -195,7 +230,7 @@ async function runCommand (utterance, { retry = true, keep = null } = {}) {
   // Said before the effect runs, not after: 'send' hands focus to another app
   // and never comes back here, and 'hide' takes the strip away, so a
   // confirmation queued behind either would be a confirmation of nothing.
-  say(spokenFor(cmd, result))
+  announce(spokenFor(cmd, result))
 
   switch (result.effect) {
     case 'copy': window.transvibe.copy(fullText()); break
@@ -204,10 +239,120 @@ async function runCommand (utterance, { retry = true, keep = null } = {}) {
     case 'pause': setListeningState(false); break
     case 'resume': setListeningState(true); break
     case 'hide': window.transvibe.hide(); break
+    case 'settings': window.transvibe.openPanel('settings'); break
+    case 'closePanel': closeOpenPanel(); break
   }
 
   hint(result.message)
   render()
+}
+
+/**
+ * Two or three commands said in one breath: "open settings and change the
+ * voice to Karen".
+ *
+ * All or nothing. The parts are checked before any of them runs, because "and"
+ * is a word that turns up inside commands as well as between them — "replace
+ * cat and dog with pets" splits into nonsense — and half a chain executed on a
+ * misreading is worse than no chain at all. The whole sentence has already
+ * failed to parse on its own by the time this is reached, so nothing that
+ * worked before can end up here.
+ *
+ * @returns {Promise<boolean>} whether it was a chain and was run
+ */
+async function runChain (utterance) {
+  const parts = splitChain(utterance)
+  if (parts.length < 2) return false
+
+  const parsed = parts.map(part => {
+    const cmd = parseCommand(part)
+    const setting = parseSettingCommand(part, FIELDS)
+    // Same preference as a single command: naming a setting beats a replace.
+    if (setting && (!cmd || cmd.action === 'replace')) return { part, setting }
+    return cmd ? { part, cmd } : null
+  })
+  if (parsed.some(p => p === null)) return false
+
+  const lines = []
+  for (const step of parsed) {
+    if (step.setting) await runSettingCommand(step.setting, { collect: lines })
+    else await runCommand(step.part, { retry: false, collect: lines })
+  }
+
+  const said = lines.filter(Boolean)
+  if (said.length) {
+    hint(said.join(' · '))
+    // Plain, and once: a joined line is not worth handing to the model, and
+    // one `say` per part would cut each other off.
+    say(said.join(', '), { plain: true })
+  }
+  return true
+}
+
+/* Change one setting, or say where it sits.
+ *
+ * Everything the panel does on a click, minus the click: write it, apply it
+ * live, and re-read the panel if it happens to be open, so the slider is never
+ * showing a value the app has already moved past.
+ *
+ * @returns {Promise<boolean>} false if the setting could not be acted on at
+ *   all, which puts the utterance back on the unrecognised path rather than
+ *   swallowing it.
+ */
+async function runSettingCommand (cmd, { collect = null } = {}) {
+  const field = FIELDS.find(f => f.key === cmd.key)
+  if (!field) return false
+  const announce = line => { if (collect) collect.push(line); else say(line, { plain: true }) }
+
+  /* A select's values belong to the machine, not the schema: "make the voice
+     Karen" is only a command if this Mac has a Karen. */
+  if (cmd.resolve === 'voices') {
+    const name = await resolveVoiceName(cmd.value)
+    if (!name) {
+      hint(`no voice called "${cmd.value}"`)
+      announce(`no voice called ${cmd.value}`)
+      return true
+    }
+    cmd = { ...cmd, value: name }
+  }
+
+  const current = field.external
+    ? await window.transvibe.getLaunchAtLogin()
+    : state.settings[field.key]
+  const result = applySettingCommand(cmd, field, current)
+
+  if (result.changed) {
+    if (field.external) await window.transvibe.setLaunchAtLogin(result.value)
+    else state.settings = await window.transvibe.setSettings({ [field.key]: result.value })
+    // The spoken confirmation is itself the preview when it is a voice or a
+    // rate that just changed — it comes out in the new one — so the panel's
+    // sample line would be the same sentence twice.
+    const heard = state.settings.speakReplies &&
+      (field.key === 'speakVoice' || field.key === 'speakRate')
+    applyLiveSetting(field.key, { preview: !heard })
+    if (openPanel() === 'settings') state.settingsPanel.render()
+  }
+
+  hint(result.message)
+  // Said as written: a settings line carries a value, and the assist model
+  // rephrasing it is how "the speaking rate is the voice's own" becomes
+  // "voice is speaking".
+  announce(result.message)
+  return true
+}
+
+/* Voices are named, and names are misheard. An exact match first, then the
+   first voice whose name starts with what was heard, so "Karen" finds Karen
+   and "sam" finds Samantha rather than nothing. */
+async function resolveVoiceName (heard) {
+  const wanted = String(heard || '').trim().toLowerCase()
+  if (!wanted) return null
+  const voices = (await window.transvibe.listVoices())
+    .filter(v => SPOKEN_LOCALE.test(v.locale))
+  const exact = voices.find(v => v.name.toLowerCase() === wanted)
+  if (exact) return exact.name
+  const starts = voices.find(v => v.name.toLowerCase().startsWith(wanted))
+  return starts ? starts.name : null
 }
 
 let setListeningState = () => {}
@@ -257,9 +402,9 @@ const SPEECH_TAIL_MS = 250
  * cancellation is on and still not enough — the speakers are a foot from the
  * mic — and an app that transcribes its own confirmations, then hears the wake
  * phrase in one of them, is an app that talks to itself. */
-async function voice (line) {
+async function voice (line, options) {
   if (!line || !state.settings.speakReplies) return
-  await whileDeaf(() => window.transvibe.speak(line))
+  await whileDeaf(() => window.transvibe.speak(line, options))
 }
 
 /* Everything that makes noise goes through here, so there is one place that
@@ -280,8 +425,8 @@ async function whileDeaf (speaking) {
 }
 
 /** Fire-and-forget: nothing waits on the app finishing its sentence. */
-function say (line) {
-  voice(line).catch(err => console.warn('[transvibe] speech failed:', err.message))
+function say (line, options) {
+  voice(line, options).catch(err => console.warn('[transvibe] speech failed:', err.message))
 }
 
 /* A voice is chosen by ear. Changing it — or the rate — says one line back in
@@ -389,6 +534,7 @@ function buildHelp () {
     ['⌃⌥C', 'Same, without holding a key'],
     ['say the wake phrase', 'Same again, no key at all — “hey Claude, delete that” until you change it'],
     ['it answers back', 'Spoken aloud after each command; the mic is deaf while it talks. Settings › Spoken replies'],
+    ['chain them', 'and / then / a comma: “open settings and change the voice to Karen”'],
     ['⌃⌥↩', 'Send the transcript to the app in front'],
     ['⌃⌥Space', 'Show or hide the strip'],
     ['⌘,', 'Settings, from the menu bar icon']
@@ -421,6 +567,27 @@ function buildHelp () {
     dl.append(dt, el('dd', null, cmd.help))
   }
   body.append(dl)
+
+  /* Generated from the same schema the panel is built from, so it cannot
+     describe a setting that is not reachable — or miss one that is. */
+  body.append(el('h3', null, 'Settings, by voice'))
+  const grammar = el('dl')
+  for (const [form, help] of [
+    ['turn off spoken replies', 'Any on/off setting: turn on, turn off, enable, disable'],
+    ['set the fade to ten seconds', 'Any slider. Seconds, milliseconds or a bare number'],
+    ['raise the threshold', 'A nudge either way: raise, lower, speed up, slow down'],
+    ['make the voice Karen', 'Any English voice installed on this Mac'],
+    ["what's the threshold", 'Ask instead of change; it says where the setting sits']
+  ]) {
+    grammar.append(el('dt', null, form), el('dd', null, help))
+  }
+  body.append(grammar)
+
+  const names = FIELDS.filter(f => f.spoken).map(f => f.spoken[0])
+  body.append(el('p', 'note',
+    `Settings you can name out loud: ${names.join(', ')}. The wake phrase, ` +
+    'the language, the send target and the model paths are panel-only — a ' +
+    'misheard wake phrase would take the voice commands with it.'))
 
   body.append(el('p', 'note',
     'The strip has no window: it hangs off the top of the screen and every ' +
@@ -666,6 +833,12 @@ function openPanel () {
   return Object.keys(PANELS).find(name => !$(name).hidden) || null
 }
 
+/** Whatever is open, closed — what esc does, for hands that are elsewhere. */
+function closeOpenPanel () {
+  const name = openPanel()
+  if (name) togglePanel(name, false)
+}
+
 /* The model list is the machine's, not the app's: transvibe downloads one
    only when it cannot find any, so on a Mac that already runs another local
    whisper app every entry here belongs to that app. Sizes are shown because
@@ -747,7 +920,7 @@ async function speechModelOptions () {
    The two voice settings are here for a different reason: nothing needs
    applying — the main process reads them on every reply — but they are worth
    hearing the moment they change. */
-function applyLiveSetting (key) {
+function applyLiveSetting (key, { preview = true } = {}) {
   const value = state.settings[key]
   const capture = state.capture
 
@@ -756,7 +929,7 @@ function applyLiveSetting (key) {
   if (key === 'interimMs' && capture) capture.setInterimMs(value)
   if (key === 'idleFadeMs' && state.presence) state.presence.setIdleFadeMs(value)
   if (key === 'idleClearMs' && state.presence) state.presence.setIdleClearMs(value)
-  if (key === 'speakVoice' || key === 'speakRate') previewVoice()
+  if (preview && (key === 'speakVoice' || key === 'speakRate')) previewVoice()
   if (key.startsWith('viz')) rebuildVisualizer()
 }
 

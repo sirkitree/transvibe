@@ -152,6 +152,44 @@ export function buildSpeakMessage (message) {
     doing it. Any of them means the reply is commentary, not a confirmation. */
 const SPEAK_PREAMBLE = /^(here('s| is)|sure|okay|of course|the (spoken|shortened)|i (can|cannot|can't|would))\b/i
 
+/** Not worth asking about: already as short as speech gets, and these are the
+    ones where a rephrasing can invert the meaning. "not a command" came back
+    as "Confirmed that is it" — a success, said about a failure. */
+const SHORT_ENOUGH = 4
+
+const STOPWORDS = new Set([
+  'the', 'a', 'an', 'is', 'are', 'was', 'to', 'of', 'that', 'this', 'it',
+  'and', 'or', 'in', 'on', 'at', 'as', 'not', 'no'
+])
+
+/** The words that carry the meaning: long enough to be a word about the thing
+    that happened, rather than grammar. */
+function contentWords (text) {
+  return squash(text).toLowerCase().split(/[^a-z0-9]+/)
+    .filter(w => w.length >= 4 && !STOPWORDS.has(w))
+}
+
+/**
+ * Is this rephrasing still about the same thing?
+ *
+ * The guard that matters is not length, it is drift: a model handed "not a
+ * command" is perfectly capable of returning a fluent confirmation of
+ * something that never happened. Sharing a content word with the line it was
+ * given is a cheap, blunt proof that it rephrased rather than invented — and
+ * a prefix match, so "seconds" still recognises "second".
+ */
+function staysOnTopic (before, after) {
+  const wanted = contentWords(before)
+  if (!wanted.length) return true
+  const got = contentWords(after)
+  return wanted.some(w => got.some(g => g.startsWith(w) || w.startsWith(g)))
+}
+
+/** Would asking the model about this line be worth the risk? */
+export function worthShortening (message) {
+  return WORDS(message) > SHORT_ENOUGH
+}
+
 /**
  * Decide whether a spoken rephrasing is safe to say.
  *
@@ -177,6 +215,7 @@ export function acceptSpoken (fallback, reply) {
   // trusted with the next four words either.
   if (WORDS(after) > 6) return keep('too long')
   if (after.length > 48) return keep('too long')
+  if (!staysOnTopic(before, after)) return keep('off topic')
 
   return { text: after, used: true }
 }
