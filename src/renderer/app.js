@@ -1,6 +1,7 @@
 import { startCapture } from './audio.js'
 import { createVisualizer } from './visualizer.js'
 import { parseCommand, applyCommand, COMMANDS } from './commands.js'
+import { splitWakeWord } from './wake.js'
 import {
   addTerms, removeTerm, addCorrection, removeCorrection, sortedEntries, splitWords
 } from './glossary-edit.js'
@@ -32,7 +33,11 @@ const state = {
   fixRemember: true,
   fixListen: true,
   awake: false,
-  presence: null
+  presence: null,
+  // The open utterance starts with the wake phrase: the strip goes amber
+  // while you are still speaking, so you can see it landed before you commit
+  // to the rest of the sentence.
+  liveWake: false
 }
 
 let hintTimer = null
@@ -101,6 +106,7 @@ function render () {
   // The scrim behind the text only exists while there is text, so the strip is
   // genuinely empty — not a faint rectangle — when nothing has been said.
   document.body.classList.toggle('has-text', transcriptEl.childElementCount > 0)
+  document.body.classList.toggle('command-mode', state.commandMode || state.liveWake)
   syncHeight()
   // The newest line is the one worth seeing; the older ones scroll off the top.
   transcriptEl.scrollTop = transcriptEl.scrollHeight
@@ -116,7 +122,6 @@ function setText (text) {
 
 function setCommandMode (active) {
   state.commandMode = active
-  document.body.classList.toggle('command-mode', active)
   if (!active) state.live = ''
   render()
 }
@@ -125,7 +130,7 @@ const COMMAND_PHRASES = COMMANDS.flatMap(c => c.examples)
 
 /* One spoken utterance, interpreted as an editing command rather than as text
    to insert. A parse failure must never silently swallow what was said. */
-async function runCommand (utterance, { retry = true } = {}) {
+async function runCommand (utterance, { retry = true, keep = null } = {}) {
   const cmd = parseCommand(utterance)
 
   if (!cmd) {
@@ -134,14 +139,25 @@ async function runCommand (utterance, { retry = true } = {}) {
     /* The seam the rules leave open. The assist model does not invent a
        command — it picks one of the phrases the parser already understands,
        and that phrase goes back through the same parser, so a wrong answer
-       can only ever produce a command the app implements. It is safe to ask
-       here precisely because command mode was armed deliberately: the user
-       has already said this was a command, so there is no dictation to
-       mistake for one. */
+       can only ever produce a command the app implements. The key path is
+       safe to ask from because command mode was armed deliberately; the wake
+       phrase is a weaker signal, which is why that caller hands over a `keep`
+       to put the words back if nothing lands. */
     if (retry && state.settings.commandFallback) {
       hint('working out what you meant…')
       const phrase = await window.transvibe.assistCommand(utterance, COMMAND_PHRASES)
-      if (phrase) return runCommand(phrase, { retry: false })
+      if (phrase) return runCommand(phrase, { retry: false, keep })
+    }
+
+    /* Armed with a key, a miss is just a miss: you meant a command and it is
+       better to be told than to have a stray sentence appear. Triggered by a
+       wake phrase, the app is the one that decided this was a command, so it
+       owes you the words back rather than eating them. */
+    if (keep) {
+      keep()
+      hint(`not a command — kept "${utterance}"`)
+      render()
+      return
     }
 
     hint(`not a command: "${utterance}"`)
@@ -180,6 +196,15 @@ async function runCommand (utterance, { retry = true } = {}) {
 }
 
 let setListeningState = () => {}
+
+/* One settled utterance, appended as text. Text that has already faded is
+   history: the strip shows what you would send, so a new utterance starts a
+   new transcript rather than silently appending to something invisible. */
+function dictate (text, wasStale) {
+  if (wasStale) state.finals = []
+  state.finals.push(text)
+  tidy(text, state.finals.length - 1)
+}
 
 /* Something happened worth reading. Restarts the idle countdown and brings the
    transcript back if it had already faded out. */
@@ -296,6 +321,7 @@ function buildHelp () {
   section('Keys', [
     ['hold right ⌥', 'Speak one command instead of dictating'],
     ['⌃⌥C', 'Same, without holding a key'],
+    ['say the wake phrase', 'Same again, no key at all — “hey Claude, delete that” until you change it'],
     ['⌃⌥↩', 'Send the transcript to the app in front'],
     ['⌃⌥Space', 'Show or hide the strip'],
     ['⌘,', 'Settings, from the menu bar icon']
@@ -765,16 +791,28 @@ async function main () {
         // consumed, and the assist fallback may still be thinking.
         else if (asCommand) runCommand(res.text).catch(err => hint(err.message))
         else {
-          // Text that has already faded is history: the strip shows what you
-          // would send, so a new utterance starts a new transcript rather than
-          // silently appending to something invisible.
-          if (wasStale) state.finals = []
-          state.finals.push(res.text)
-          tidy(res.text, state.finals.length - 1)
+          /* Nobody armed anything: the words themselves decide. An utterance
+             that opens with the wake phrase is a command, and — unlike
+             dictation — a faded transcript is left alone, because editing
+             what is already on the strip is the whole point of saying it. */
+          const wake = splitWakeWord(res.text, {
+            phrase: state.settings.wakeWord,
+            fuzzy: state.settings.wakeWordFuzzy
+          })
+          if (wake.matched && wake.rest) {
+            runCommand(wake.rest, { keep: () => dictate(res.text, wasStale) })
+              .catch(err => hint(err.message))
+          } else if (wake.matched) {
+            // The phrase on its own: you are about to say the command.
+            window.transvibe.setCommandMode(true)
+            setCommandMode(true)
+            hint('listening for a command…')
+          } else dictate(res.text, wasStale)
         }
       } finally {
         state.pending--
         state.live = ''
+        state.liveWake = false
         if (asCommand) {
           window.transvibe.setCommandMode(false)
           setCommandMode(false)
@@ -793,7 +831,16 @@ async function main () {
       try {
         const res = await window.transvibe.transcribe(samples, true)
         if (seq === state.liveSeq && res.text) {
-          state.live = res.text
+          const wake = state.commandMode
+            ? { matched: false, rest: res.text }
+            : splitWakeWord(res.text, {
+              phrase: state.settings.wakeWord,
+              fuzzy: state.settings.wakeWordFuzzy
+            })
+          state.liveWake = wake.matched
+          // Showing the command without its keyword: what is on the strip is
+          // what the parser is going to be handed.
+          state.live = wake.matched ? (wake.rest || res.text) : res.text
           noteActivity()
           render()
         }

@@ -57,6 +57,22 @@ Releasing the key does not end command mode on its own: the utterance is usually
 
 Anything the rules cannot place is shown as `not a command: "…"` rather than guessed at, so nothing you said is silently swallowed. With [`commandFallback`](assist.md) on, that miss goes to the local assist model first, which makes phrasings like "nope, take that back" or "stick that on the clipboard for me" work without adding a rule for each one.
 
+### The wake phrase
+
+There is a third way in, with no key at all: **open the sentence with "hey Claude"** and the rest of it is the command.
+
+    "hey Claude, delete the last three words"
+    "hey Claude, replace whisper with Whisper"
+    "hey Claude could you uppercase that"
+
+This is the one that works while a transcript is already sitting on the strip, and while your hands are somewhere else. The strip swings amber as soon as the phrase is recognised in the open utterance — before you have finished the sentence — and shows the command without its keyword, which is exactly what the parser is about to be handed.
+
+Said on its own, "hey Claude" just arms command mode for the next thing you say, the same as ⌃⌥C.
+
+The phrase has to come first. A keyword recognised anywhere would turn "I told him hey Claude was down" into a command; recognised only at the front, after fillers like "um" and "so", it stays out of ordinary speech. Near misses are forgiven, because a small model hears an unusual name loosely — "hey cloud" and "hey claud" both count. Change the phrase, or turn either behaviour off, under Settings › Command mode.
+
+Because the app decided this was a command rather than you, an utterance that reaches the parser and means nothing to it is **put back into the transcript** rather than dropped: `not a command — kept "…"`. The key path does not do that — there you meant a command, so being told is better than a stray sentence appearing.
+
 The **?** button opens an in-app help panel with the full list (`esc` or `?` toggles it too). It is generated from the parser, so it cannot describe a command the parser does not have.
 
 ![The help panel: sections for the strip, the keys, the transcript and the buttons, then the full command list](images/help.png)

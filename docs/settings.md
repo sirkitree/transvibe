@@ -18,6 +18,8 @@ Behind it is `~/Library/Application Support/transvibe/settings.json`, written on
 | `hangoverMs` | `550` | silence before an utterance is considered finished |
 | `interimMs` | `500` | how often the open utterance is re-transcribed |
 | `commandTimeoutMs` | `6000` | command mode disarms itself after this |
+| `wakeWord` | `'hey claude'` | open a sentence with this and the rest of it is a command; empty turns it off |
+| `wakeWordFuzzy` | `true` | forgive near-misses in the wake phrase ("hey cloud") |
 | `sendTarget` | `null` | app to focus before pasting; null = whatever is in front |
 | `sendPressesEnter` | `false` | also hit Return after pasting |
 | `clearAfterSend` | `true` | empty the transcript once delivered |

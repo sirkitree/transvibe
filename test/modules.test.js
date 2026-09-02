@@ -16,7 +16,8 @@ const MODULES = [
   '../src/renderer/presence.js',
   '../src/renderer/vad.js',
   '../src/renderer/band.js',
-  '../src/renderer/commands.js'
+  '../src/renderer/commands.js',
+  '../src/renderer/wake.js'
 ]
 
 describe('modules load', () => {

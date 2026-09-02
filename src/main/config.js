@@ -10,6 +10,15 @@ export const DEFAULTS = {
   hangoverMs: 550,
   interimMs: 500,      // how often the open utterance is re-transcribed
   commandTimeoutMs: 6000,   // command mode disarms itself if you say nothing
+
+  /* The spoken way into command mode. An utterance that opens with this
+     phrase is a command and the rest of the sentence is the command itself,
+     so editing what is already on the strip needs no key at all. Empty turns
+     it off. `wakeWordFuzzy` forgives the near-misses a small model makes on
+     an unusual name ("hey cloud", "hey claud"). */
+  wakeWord: 'hey claude',
+  wakeWordFuzzy: true,
+
   sendTarget: null,         // app name to focus before pasting; null = frontmost
   sendPressesEnter: false,  // also hit Return after pasting
   clearAfterSend: true,

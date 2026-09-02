@@ -5,7 +5,7 @@ Local voice-to-text for macOS. A click-through strip across the top of the scree
 - **No window.** Clicks land in whatever is behind it until you park the pointer on it
 - Text appears **while you are still talking**, not after you stop
 - The transcript fades a few seconds after you stop, and is forgotten entirely twenty seconds later; esc clears it now
-- Hold right ⌥ to speak an editing command instead of dictating
+- Hold right ⌥ — or just say "hey Claude" — to speak an editing command instead of dictating
 - ⌃⌥↩ pastes the transcript straight into whatever app is in front
 - Optionally, a second local model tidies the fillers out and makes command mode understand phrasings the rules never learned
 - Every setting is a panel on the strip, applied as you change it
@@ -77,7 +77,7 @@ Click a word it got wrong and say what it should have been. Ticking *remember th
 
 ![The word fixer open under a mis-heard word, with the heard word on the left, an empty field for the right one, and two checkboxes: remember the fix, listen for it too](docs/images/fixer.png)
 
-Hold right ⌥ and the palette goes amber — the next thing you say is a command, not dictation:
+Hold right ⌥ and the palette goes amber — the next thing you say is a command, not dictation. Saying "hey Claude, delete that" does the same thing with no key at all, and the strip goes amber while you are still speaking:
 
 ![The strip in command mode: an amber COMMAND badge, and the spoken command highlighted in amber rather than blue](docs/images/command-mode.png)
 
@@ -93,14 +93,14 @@ Settings are a panel on the strip, tabbed down the left, saved and applied as yo
 | [The assist model](docs/assist.md) | Optional local LLM: filler-word cleanup, smarter command mode |
 | [Settings](docs/settings.md) | The settings panel, and every key behind it |
 | [Architecture](docs/architecture.md) | The pipeline, interim results, the overlay, project layout |
-| [Testing](docs/testing.md) | What the 382 tests cover, and the manual checklist |
+| [Testing](docs/testing.md) | What the 417 tests cover, and the manual checklist |
 | [Performance](docs/performance.md) | Where the visualizer's cost went |
 | [Demo video](docs/demo.md) | The script for the video at the top of this page |
 
 ## Develop
 
 ```sh
-npm test                      # 382
+npm test                      # 417
 npm run test:unit             # pure modules only, no whisper binary needed
 npm run dev                   # CDP on 9333
 ./script/install-launcher.sh  # -> ~/Applications/Transvibe.app, running this tree

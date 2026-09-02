@@ -18,7 +18,8 @@ main      wav.js (16-bit mono WAV) → whisper.js FIFO queue → whisper-server
                                → append to the transcript             │
                                → assist.cleanup (optional) ──┐        │
                                    swaps the tidied text in ─┘        │
-                             command mode (right ⌥ held) ─────────────┘
+                             command mode (right ⌥ held, ⌃⌥C, ────────┘
+                              or wake.js hears the wake phrase)
                                → commands.js → edit the transcript
                                → on a miss: assist.command (optional)
                                    → picks a known phrase → commands.js
@@ -108,6 +109,7 @@ src/renderer/   app.js        transcript UI, command dispatch, help panel
                 vad.js        voice-activity state machine (pure)
                 presence.js   when the transcript fades and expires (pure)
                 commands.js   voice-command parser + applier (pure)
+                wake.js       does an utterance open with the wake phrase (pure)
                 glossary-edit.js  glossary panel edit rules (pure)
                 band.js       visualizer math (pure)
                 visualizer.js canvas rendering

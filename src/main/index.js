@@ -451,8 +451,12 @@ ipcMain.handle('send', async (_e, text) => {
   return result
 })
 
+/* The renderer arms this too, when it hears the wake phrase on its own. It
+   goes back through here rather than running a second timer over there, so
+   there is one deadline and one place that owns it. */
 ipcMain.on('command-mode', (_e, active) => {
-  if (!active) disarmCommandMode()
+  if (active) armCommandMode()
+  else disarmCommandMode()
 })
 
 ipcMain.handle('transcribe', async (_e, buffer, interim = false) => {

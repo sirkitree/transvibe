@@ -1,13 +1,14 @@
 # Tests
 
 ```sh
-npm test          # 382
+npm test          # 417
 npm run test:unit # pure modules only, no whisper binary needed
 ```
 
 | file | | covers |
 |---|---:|---|
 | `commands.test.js` | 167 | command parsing, false positives, transcript edits |
+| `wake.test.js` | 26 | the wake phrase: what starts a command, and what is just speech |
 | `wav.test.js` | 26 | header byte-exactness, clamping, overflow guards |
 | `glossary-edit.test.js` | 23 | glossary panel edits, word splitting |
 | `whisper-parse.test.js` | 21 | output parsing, artifact filter, FIFO queue |
@@ -17,7 +18,7 @@ npm run test:unit # pure modules only, no whisper binary needed
 | `vad.test.js` | 16 | segment boundaries, hangover, force-flush, bad options |
 | `band.test.js` | 15 | visualizer math stays finite and in-bounds |
 | `settings-schema.test.js` | 13 | the panel's schema against `config.js`, both directions |
-| `modules.test.js` | 13 | every module imports, and exports what it claims |
+| `modules.test.js` | 14 | every module imports, and exports what it claims |
 | `presence.test.js` | 19 | when the transcript fades, when it is forgotten, and what un-fades it |
 | `models.test.js` | 11 | model discovery against a real directory tree |
 | `assist-models.test.js` | 6 | listing what Ollama has, and what an absent Ollama reads as |
@@ -50,6 +51,12 @@ Things the automated tests cannot cover:
 - [ ] ⌃⌥C turns the strip amber and shows the Command banner
 - [ ] A spoken command edits the transcript and returns to transcribe mode
 - [ ] Command mode disarms itself after 6s of silence
+- [ ] "hey Claude, delete that" edits the transcript with no key touched
+- [ ] The strip turns amber part-way through saying it, and hides the keyword
+- [ ] "hey Claude" alone arms command mode for the next thing you say
+- [ ] "I told him hey Claude was down" is transcribed, not obeyed
+- [ ] "hey Claude, blah blah" puts the words in the transcript rather than dropping them
+- [ ] Clearing the wake phrase in Settings turns the whole thing off
 - [ ] With `commandFallback` on, "nope, take that back" undoes
 - [ ] With it off, the same phrase is reported as not a command
 - [ ] With `cleanup` on, "um so I was thinking, no wait" tidies itself a moment later

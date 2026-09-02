@@ -100,12 +100,24 @@ export const SECTIONS = [
   },
   {
     title: 'Command mode',
-    note: 'Hold right ⌥ or press ⌃⌥C and the next thing you say is a command rather than dictation. Holding the key has no deadline — the hold is the deadline; this is for the other way in.',
+    note: 'Hold right ⌥ or press ⌃⌥C and the next thing you say is a command rather than dictation. Or open the sentence with the wake phrase and skip the keyboard entirely.',
     fields: [
+      {
+        key: 'wakeWord',
+        label: 'Wake phrase',
+        help: 'Say this at the start of a sentence and the rest of it is a command. Empty turns it off.',
+        type: 'text', placeholder: 'hey claude', nullable: true
+      },
+      {
+        key: 'wakeWordFuzzy',
+        label: 'Forgive near-misses in the wake phrase',
+        help: 'A small model hears an unusual name loosely — "hey cloud" still counts.',
+        type: 'toggle'
+      },
       {
         key: 'commandTimeoutMs',
         label: 'Disarms after',
-        help: 'If you say nothing at all.',
+        help: 'After ⌃⌥C, or after the wake phrase said on its own.',
         type: 'range', min: 1000, max: 20000, step: 500, unit: 'ms'
       }
     ]
