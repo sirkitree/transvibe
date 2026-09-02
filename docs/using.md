@@ -104,6 +104,8 @@ The verb and the setting's name have to be adjacent, which is what keeps this ou
 
 A command you gave with your voice gets an answer in the same key: **"deleted the last three words"**, "copied", "not found". The point is the same one the wake phrase is making — while you are dictating you are looking at the app the words are going into, and a confirmation you have to look up at the strip to read is one you will not read.
 
+A small amber ribbon appears in the middle of the strip while it talks — the same visualizer as the one along the top, in miniature and turned around. That one is the room, measured through the microphone; this one is the app, and it cannot be measured at all: `say` plays to the speakers and the microphone is deaf for exactly that window, so the ribbon is drawn from a synthesised spectrum instead. It is honest about the one thing it claims, which is *when*.
+
 The microphone stops listening for exactly as long as the reply takes, plus a fraction for the room's echo, so the app never transcribes itself. (Echo cancellation is on and is not enough on its own — the speakers are a foot from the mic, and an app that hears the wake phrase in its own confirmation is an app that talks to itself.) Nothing is lost while it is deaf: what you say next opens a fresh utterance.
 
 The wording is the assist model's when [it is running](assist.md) — it shortens the strip's own line into something worth hearing — and the strip's line as written when it is not. Either way it is describing what already happened; the model is handed the outcome, so it cannot announce one that did not occur.

@@ -18,7 +18,16 @@ export function createVisualizer (canvas, {
   points = 220,
   fps = 30,
   quietFps = 8,
-  centerRatio = 0.58
+  centerRatio = 0.58,
+  /* Tuned for the full-width ribbon, which is a hundred pixels tall. A small
+     one needs both of these scaled down or every line clips against the top
+     and bottom of its box and the whole thing fills in solid. */
+  gain = 96,
+  idleAmp = 1.4,
+  /* How far the three hue families sit from the base. Wide enough on the big
+     ribbon to travel green → cyan → blue; a small one wants them close
+     together so it reads as one colour rather than as a tiny rainbow. */
+  hueSpread = [0, 0.09, 0.2]
 } = {}) {
   const ctx = canvas.getContext('2d', { alpha: true })
   const model = createBandModel({
@@ -26,9 +35,9 @@ export function createVisualizer (canvas, {
     linesPerFamily,
     points,
     // biased green -> cyan -> blue rather than the full spectrum
-    hueOffsets: [hueBase, hueBase + 0.09, hueBase + 0.2],
-    gain: 96,
-    idleAmp: 1.4,
+    hueOffsets: hueSpread.map(d => hueBase + d),
+    gain,
+    idleAmp,
     levelGain: 4.5,      // the raw FFT mean is far too small to travel
     bandFraction: 0.28,  // speech energy lives in the low bins
     minFreq: 0.7,        // longer, calmer waves than the radial original
@@ -133,7 +142,8 @@ export function createVisualizer (canvas, {
     }
 
     // hot core
-    const core = computeBandPoints({ ...model, idleAmp: 0.7, gain: 42 }, 0, fft, box)
+    const core = computeBandPoints(
+      { ...model, idleAmp: idleAmp * 0.5, gain: gain * 0.44 }, 0, fft, box)
     stroke(core, 'hsl(160 60% 96%)', 1.3, 0.75 + model.level * 0.25)
 
     octx.globalAlpha = 1

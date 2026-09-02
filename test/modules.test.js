@@ -19,7 +19,8 @@ const MODULES = [
   '../src/renderer/band.js',
   '../src/renderer/commands.js',
   '../src/renderer/wake.js',
-  '../src/renderer/settings-voice.js'
+  '../src/renderer/settings-voice.js',
+  '../src/renderer/saying.js'
 ]
 
 describe('modules load', () => {

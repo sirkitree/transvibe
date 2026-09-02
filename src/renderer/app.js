@@ -1,5 +1,6 @@
 import { startCapture } from './audio.js'
 import { createVisualizer } from './visualizer.js'
+import { createSayingViz } from './saying-viz.js'
 import { parseCommand, applyCommand, spokenFor, splitChain, COMMANDS } from './commands.js'
 import { splitWakeWord } from './wake.js'
 import { parseSettingCommand, applySettingCommand, settingPhrases } from './settings-voice.js'
@@ -30,6 +31,7 @@ const state = {
   settings: null,
   capture: null,
   viz: null,
+  sayingViz: null,   // the app's own voice, drawn while it is talking
   // The word fixer's checkboxes, remembered across opens: whoever turns
   // 'remember' off is usually making a run of one-off fixes, not one.
   fixRemember: true,
@@ -413,10 +415,15 @@ async function voice (line, options) {
 async function whileDeaf (speaking) {
   state.deaf++
   if (state.capture) state.capture.setDeaf(true)
+  // Both halves of the same moment: the microphone goes off and the app's own
+  // ribbon comes on, for exactly as long as the speakers are busy.
+  if (state.sayingViz) state.sayingViz.start()
   try {
     await speaking()
+    if (state.sayingViz) state.sayingViz.stop()
     await new Promise(resolve => setTimeout(resolve, SPEECH_TAIL_MS))
   } finally {
+    if (state.sayingViz) state.sayingViz.stop()
     state.deaf = Math.max(0, state.deaf - 1)
     // Whatever went wrong, the microphone comes back on: deaf is a state no
     // failure is allowed to leave the app stuck in.
@@ -1127,14 +1134,19 @@ async function main () {
   if (!capture) return
   state.capture = capture
   // handy from the devtools console: `state` for VAD tuning, `render` to redraw
-  // after poking at it
-  window.__transvibe = { state, render }
+  // after poking at it, `runCommand` to fire one without saying it out loud
+  window.__transvibe = { state, render, runCommand, say }
 
   // The ribbon rides high in its canvas so it reads as hanging off the top
   // edge of the screen, with the glow spreading down over the text. Built
   // through the same path a visualizer setting change takes, so there is one
   // description of it rather than two that can drift.
   rebuildVisualizer()
+
+  /* The other visualizer, and the only one that is not fed by a microphone:
+     it draws while the app is talking, which is the one thing the mic is
+     guaranteed not to be hearing. */
+  state.sayingViz = createSayingViz($('say-viz'))
 
   $('copy').onclick = async () => {
     const text = fullText()

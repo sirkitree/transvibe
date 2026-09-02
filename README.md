@@ -9,6 +9,7 @@ Local voice-to-text for macOS. A click-through strip across the top of the scree
 - Ignores music and background noise rather than transcribing it, while the visualizer still reacts to it
 - Commands chain: "open settings and change the voice to Karen"
 - Settings change by voice too — "turn off spoken replies", "set the fade to ten seconds", "what's the threshold"
+- A second, smaller ribbon appears in the middle while it is talking back — the same visualizer, turned around
 - It **says what it did** after a command — you are looking at the app you are dictating into, not at the strip
 - ⌃⌥↩ pastes the transcript straight into whatever app is in front
 - Optionally, a second local model tidies the fillers out and makes command mode understand phrasings the rules never learned

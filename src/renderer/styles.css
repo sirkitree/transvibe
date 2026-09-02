@@ -57,6 +57,35 @@ html, body {
    listening, faint enough to ignore. */
 body.quiet #viz { opacity: 0.24; }
 
+/* --------------------------------------------------------------- speaking
+   The app talking back. Centred, small, and only there while it has something
+   to say — the ribbon above is the microphone, this is the other direction. */
+#say-viz {
+  position: absolute;
+  /* In the clear band between the ribbon's hot core and the top of the
+     transcript scrim, so it never sits on top of either. */
+  top: 52px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 170px;
+  height: 30px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 160ms ease;
+}
+
+#say-viz.on { opacity: 1; }
+
+/* The big ribbon runs off both edges of the screen, so its ends are never
+   seen. This one has ends, and cut square they read as a clipped rectangle —
+   faded, they read as a ribbon. */
+#say-viz {
+  -webkit-mask-image: linear-gradient(90deg,
+    transparent, #000 16%, #000 84%, transparent);
+  mask-image: linear-gradient(90deg,
+    transparent, #000 16%, #000 84%, transparent);
+}
+
 /* ------------------------------------------------------------------ transcript
    Centred under the ribbon. The scrim is only as wide as the words and only
    there while there are words — the rest of the strip stays clear. */

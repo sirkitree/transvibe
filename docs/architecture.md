@@ -115,6 +115,8 @@ src/renderer/   app.js        transcript UI, command dispatch, help panel
                 glossary-edit.js  glossary panel edit rules (pure)
                 band.js       visualizer math (pure)
                 visualizer.js canvas rendering
+                saying.js     a synthetic spectrum for the app's own voice (pure)
+                saying-viz.js the same ribbon, small, warm, drawn while it talks
                 pcm-worklet.js
 src/native/     rightopt.swift   right-⌥ hold detection via CGEventTap
                 sendkeys.swift   posts ⌘V to the frontmost app
@@ -122,4 +124,4 @@ script/         install-launcher.sh  build ~/Applications/Transvibe.app
                 make-icon.py         draw build/icon.icns
 ```
 
-The pure modules — `vad`, `commands`, `band`, `wav`, `overlay`, `presence`, `glossary`, `glossary-edit`, `assist`, `whisper-parse`, `settings-schema`, `settings-voice` — take no DOM, Electron, filesystem or network dependency, which is what makes the awkward parts (segment boundaries, command false positives, model replies) testable under plain Node rather than only discoverable by hand.
+The pure modules — `vad`, `commands`, `band`, `wav`, `overlay`, `presence`, `glossary`, `glossary-edit`, `assist`, `whisper-parse`, `settings-schema`, `settings-voice`, `saying` — take no DOM, Electron, filesystem or network dependency, which is what makes the awkward parts (segment boundaries, command false positives, model replies) testable under plain Node rather than only discoverable by hand.

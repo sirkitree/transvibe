@@ -14,6 +14,11 @@
   <div class="strip">
     <canvas id="viz"></canvas>
 
+    <!-- The app's own voice: a small row of bars in the middle of the strip,
+         alive only while it is speaking. Nothing to do with the ribbon above,
+         which is the room. -->
+    <canvas id="say-viz"></canvas>
+
     <div class="stage">
       <div class="mode"><span class="dot"></span><span>Command</span></div>
       <div class="transcript" id="transcript"></div>
