@@ -16,7 +16,7 @@ import { SECTIONS, coerce, formatValue } from './settings-schema.js'
  */
 export function createSettingsPanel ({
   body, note, getSettings, save, applyLive, open, getExternal, setExternal,
-  getOptions, panes: extraPanes = []
+  getOptions, panes: extraPanes = new Map()
 }) {
   const el = (tag, cls, text) => {
     const n = document.createElement(tag)
@@ -190,55 +190,48 @@ export function createSettingsPanel ({
     const content = el('div', 'set-sections')
     const panes = []
 
-    /* Panes the panel does not build itself. Agents is one — a list of records
-       rather than a set of fields — and it belongs in here as a tab beside the
-       rest, next to the section someone would already be reading when they
-       went looking for it. */
-    const custom = (title, render) => {
-      const pane = el('section', 'set-pane')
-      content.append(pane)
-      panes.push([title, pane])
-      // Rendered on open rather than now: it asks the machine what voices and
-      // models it has, and neither answer keeps.
-      customPanes.set(title, { pane, render })
-    }
-
     for (const section of SECTIONS) {
       // No heading inside the pane: the tab beside it, lit, at the same height,
       // is already the title. Two of them was just the word twice.
       const pane = el('section', 'set-pane')
       if (section.note) pane.append(el('p', 'note lead', section.note))
-      for (const field of section.fields) pane.append(row(field))
+
+      /* A block the panel cannot build from fields — the agent roster is a
+         list of records, not a set of rows — rendered on open rather than now,
+         because it asks the machine what voices and models it has and neither
+         answer keeps. It goes above the fields: it is what the tab is about,
+         and the fields underneath are how it behaves. */
+      if (section.custom && extraPanes.has(section.custom)) {
+        const host = el('div', 'set-custom')
+        pane.append(host)
+        customPanes.set(section.custom, { pane: host, render: extraPanes.get(section.custom) })
+      }
+
+      /* Sub-headings inside a long pane. Six settings read as a list; ten read
+         as a wall, and the two at the bottom never get found. */
+      let group = null
+      for (const field of section.fields) {
+        if (field.group && field.group !== group) pane.append(el('h4', 'set-group', field.group))
+        group = field.group || group
+        pane.append(row(field))
+      }
+
+      /* The lists with an editor of their own, beside the settings they belong
+         with rather than in a tab of leftovers at the end. */
+      if (section.links) {
+        const links = el('div', 'set-links')
+        for (const [label, panel] of section.links) {
+          const button = el('button', null, label)
+          button.type = 'button'
+          button.onclick = () => open(panel)
+          links.append(button)
+        }
+        pane.append(links)
+      }
+
       content.append(pane)
       panes.push([section.title, pane])
-
-      for (const [title, render, after] of extraPanes) {
-        if (after === section.title) custom(title, render)
-      }
     }
-
-    for (const [title, render, after] of extraPanes) {
-      if (!customPanes.has(title)) custom(title, render)
-    }
-
-    // The lists with an editor of their own, and the reference for the rest of
-    // the app: reachable from here rather than only from the strip.
-    const elsewhere = el('section', 'set-pane')
-    elsewhere.append(el('p', 'note lead',
-      'The words to listen for, and the fixes for the ones it mishears, are a ' +
-      'list of their own — better edited in a panel built for them.'))
-    const links = el('div', 'set-links')
-    for (const [label, panel] of [
-      ['Glossary', 'glossary'], ['Keys & commands', 'help']
-    ]) {
-      const button = el('button', null, label)
-      button.type = 'button'
-      button.onclick = () => open(panel)
-      links.append(button)
-    }
-    elsewhere.append(links)
-    content.append(elsewhere)
-    panes.push(['Elsewhere', elsewhere])
 
     tabs = buildTabs(panes)
     body.append(tabs.nav, content)

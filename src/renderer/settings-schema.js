@@ -44,7 +44,7 @@ export const PANEL_KEYS = ['agents']
 export const SECTIONS = [
   {
     title: 'Listening',
-    note: 'What counts as speech, and when an utterance is over. These three decide whether a pause for breath is the end of a sentence.',
+    note: 'What counts as speech, when an utterance is over, and what is thrown away rather than written down. These are the settings you tune by talking and watching.',
     fields: [
       {
         key: 'threshold',
@@ -63,17 +63,83 @@ export const SECTIONS = [
         type: 'range', min: 150, max: 2000, step: 50, unit: 'ms'
       },
       {
-        key: 'interimMs',
-        label: 'Interim update every',
-        help: 'How often the open utterance is re-transcribed so text appears while you talk. Shorter costs more CPU.',
-        spoken: ['the interim', 'the interim update'],
-        type: 'range', min: 200, max: 2000, step: 100, unit: 'ms'
-      }
+        key: 'confidenceFloor',
+        label: 'Ignore anything less certain than',
+        help: 'Whisper says how sure it was. Real speech scores about -0.05; music, a fan or a passing car score about -0.7, which is how music playing in the room turns into words. Lower is more permissive; all the way right turns the check off.',
+        spoken: ['the confidence floor', 'the confidence', 'how certain it has to be'],
+        type: 'range', min: -1, max: 0, step: 0.05, decimals: 2, zero: 'off'
+      },
+      {
+        key: 'dropGlossaryEcho',
+        label: 'Drop utterances that are only glossary words',
+        spoken: ['the glossary echo', 'glossary echo'],
+        help: 'Glossary terms are fed to the recogniser as it listens, and over noise it sometimes hands them straight back. Turn this off if you need to dictate a single glossary term on its own.',
+        type: 'toggle'
+      },
     ]
   },
   {
-    title: 'Transcription',
-    note: 'What turns the audio into words. All of it runs on this Mac.',
+    title: 'Agents',
+    custom: 'agents',
+    note: 'Who you can talk to. Say a name at the start of a sentence and the rest of it is addressed to that one, in its own voice and its own colour — or hold right ⌥ / press ⌃⌥C, which addresses whoever runs commands.',
+    links: [['Keys & commands', 'help']],
+    fields: [
+      {
+        group: 'Hearing a name',
+        key: 'wakeWordFuzzy',
+        label: 'Forgive near-misses in a name',
+        help: 'A small model hears an unusual name loosely — "hey cloud" still counts as "hey claude". A name heard exactly always wins over one heard nearly, and two names equally close match nothing at all.',
+        spoken: ['fuzzy matching', 'near misses', 'forgiving the wake phrase'],
+        type: 'toggle'
+      },
+      {
+        group: 'Hearing a name',
+        key: 'commandTimeoutMs',
+        label: 'Command mode disarms after',
+        help: 'After ⌃⌥C, or after the name of an agent that runs commands said on its own.',
+        spoken: ['the command timeout', 'the timeout'],
+        type: 'range', min: 1000, max: 20000, step: 500, unit: 'ms'
+      },
+      {
+        group: 'Hearing a name',
+        key: 'conversationMs',
+        label: 'A conversation stays open for',
+        help: 'After an agent that talks back has answered, the next thing you say is a follow-up and needs no name. All the way left means every turn is addressed by name.',
+        spoken: ['the conversation window', 'the conversation timeout'],
+        type: 'range', min: 0, max: 120000, step: 5000, unit: 'ms', zero: 'off'
+      },
+      {
+        group: 'How they answer',
+        key: 'speakReplies',
+        label: 'Say what it just did',
+        spoken: ['spoken replies', 'replies', 'talking back', 'speaking'],
+        type: 'toggle'
+      },
+      {
+        group: 'How they answer',
+        key: 'speakVoice',
+        label: 'Default voice',
+        spoken: ['the voice', 'the default voice', 'your voice'],
+        help: 'Only for agents that have not been given a voice of their own — each one is set in the Agents tab, and saying “change your voice to Karen” changes whoever you are addressing rather than this. The English voices installed on this Mac — the replies are written in English, so the rest are not offered. More can be added in System Settings › Accessibility › Spoken Content, and they show up here without a restart.',
+        type: 'select', options: 'voices', nullable: true, missingSuffix: '— not installed'
+      },
+      {
+        group: 'How they answer',
+        key: 'speakRate',
+        label: 'Default speaking rate',
+        help: 'Words per minute, for agents that have not been given a pace of their own. All the way left leaves the voice at its own.',
+        spoken: ['the speaking rate', 'the rate', 'how fast you talk'],
+        // `base` is where "speak faster" starts from when the rate is still
+        // the voice's own: roughly what macOS speaks at, so the first nudge
+        // is a nudge rather than a lurch down to 40 words a minute.
+        type: 'range', min: 0, max: 400, step: 10, unit: ' wpm', zero: 'the voice’s own', base: 180
+      },
+    ]
+  },
+  {
+    title: 'Words',
+    note: 'What turns the sound into text. All of it runs on this Mac, and the glossary is where you teach it the words it has never seen.',
+    links: [['Glossary', 'glossary']],
     fields: [
       {
         key: 'modelPath',
@@ -88,19 +154,12 @@ export const SECTIONS = [
         type: 'text', placeholder: 'en', restart: true
       },
       {
-        key: 'confidenceFloor',
-        label: 'Ignore anything less certain than',
-        help: 'Whisper says how sure it was. Real speech scores about -0.05; music, a fan or a passing car score about -0.7, which is how music playing in the room turns into words. Lower is more permissive; all the way right turns the check off.',
-        spoken: ['the confidence floor', 'the confidence', 'how certain it has to be'],
-        type: 'range', min: -1, max: 0, step: 0.05, decimals: 2, zero: 'off'
+        key: 'interimMs',
+        label: 'Interim update every',
+        help: 'How often the open utterance is re-transcribed so text appears while you talk. Shorter costs more CPU.',
+        spoken: ['the interim', 'the interim update'],
+        type: 'range', min: 200, max: 2000, step: 100, unit: 'ms'
       },
-      {
-        key: 'dropGlossaryEcho',
-        label: 'Drop utterances that are only glossary words',
-        spoken: ['the glossary echo', 'glossary echo'],
-        help: 'Glossary terms are fed to the recogniser as it listens, and over noise it sometimes hands them straight back. Turn this off if you need to dictate a single glossary term on its own.',
-        type: 'toggle'
-      }
     ]
   },
   {
@@ -131,69 +190,19 @@ export const SECTIONS = [
         help: 'Without sending anything. Settled text only, never an interim pass.',
         spoken: ['auto copy', 'automatic copying', 'copying everything'],
         type: 'toggle'
-      }
+      },
     ]
   },
   {
-    title: 'Command mode',
-    note: 'Hold right ⌥ or press ⌃⌥C and the next thing you say is a command rather than dictation. Or open the sentence with an agent’s name and skip the keyboard entirely — the names themselves live in the agents panel.',
+    title: 'Visuals',
+    note: 'The strip has no window: it hangs off the top of the screen and every click lands in whatever is behind it, until the pointer rests on it.',
     fields: [
       {
-        key: 'wakeWordFuzzy',
-        label: 'Forgive near-misses in the wake phrase',
-        help: 'A small model hears an unusual name loosely — "hey cloud" still counts.',
-        spoken: ['fuzzy matching', 'near misses', 'forgiving the wake phrase'],
+        key: 'alwaysOnTop',
+        label: 'Float above full-screen apps',
+        spoken: ['always on top', 'floating on top'],
         type: 'toggle'
       },
-      {
-        key: 'conversationMs',
-        label: 'A conversation stays open for',
-        help: 'After an agent that talks back has answered, the next thing you say is a follow-up and needs no name. All the way left means every turn is addressed by name.',
-        spoken: ['the conversation window', 'the conversation timeout'],
-        type: 'range', min: 0, max: 120000, step: 5000, unit: 'ms', zero: 'off'
-      },
-      {
-        key: 'commandTimeoutMs',
-        label: 'Disarms after',
-        help: 'After ⌃⌥C, or after the wake phrase said on its own.',
-        spoken: ['the command timeout', 'the timeout'],
-        type: 'range', min: 1000, max: 20000, step: 500, unit: 'ms'
-      }
-    ]
-  },
-  {
-    title: 'Spoken replies',
-    note: 'After a command runs, the app says what it did, in the voice of whoever you asked. You are looking at the app you are dictating into, not at the strip, which is the whole reason the wake phrase exists — so the answer comes back the same way you asked. The microphone stops listening for as long as the reply takes, so it never transcribes itself.',
-    fields: [
-      {
-        key: 'speakReplies',
-        label: 'Say what it just did',
-        spoken: ['spoken replies', 'replies', 'talking back', 'speaking'],
-        type: 'toggle'
-      },
-      {
-        key: 'speakVoice',
-        label: 'Default voice',
-        spoken: ['the voice', 'the default voice', 'your voice'],
-        help: 'Only for agents that have not been given a voice of their own — each one is set in the Agents tab, and saying “change your voice to Karen” changes whoever you are addressing rather than this. The English voices installed on this Mac — the replies are written in English, so the rest are not offered. More can be added in System Settings › Accessibility › Spoken Content, and they show up here without a restart.',
-        type: 'select', options: 'voices', nullable: true, missingSuffix: '— not installed'
-      },
-      {
-        key: 'speakRate',
-        label: 'Default speaking rate',
-        help: 'Words per minute, for agents that have not been given a pace of their own. All the way left leaves the voice at its own.',
-        spoken: ['the speaking rate', 'the rate', 'how fast you talk'],
-        // `base` is where "speak faster" starts from when the rate is still
-        // the voice's own: roughly what macOS speaks at, so the first nudge
-        // is a nudge rather than a lurch down to 40 words a minute.
-        type: 'range', min: 0, max: 400, step: 10, unit: ' wpm', zero: 'the voice’s own', base: 180
-      }
-    ]
-  },
-  {
-    title: 'The strip',
-    note: 'The strip has no window. It hangs off the top of the screen and every click lands in whatever is behind it, until the pointer rests on it.',
-    fields: [
       {
         key: 'wakeDelayMs',
         label: 'Pointer must rest for',
@@ -216,12 +225,7 @@ export const SECTIONS = [
         type: 'range', min: 0, max: 300000, step: 5000, unit: 'ms', zero: 'never'
       },
       {
-        key: 'alwaysOnTop',
-        label: 'Float above full-screen apps',
-        spoken: ['always on top', 'floating on top'],
-        type: 'toggle'
-      },
-      {
+        group: 'Size',
         key: 'stripHeight',
         label: 'Minimum strip height',
         help: 'The strip measures its own contents and grows past this to fit them.',
@@ -229,24 +233,21 @@ export const SECTIONS = [
         type: 'range', min: 90, max: 400, step: 10, unit: 'px'
       },
       {
+        group: 'Size',
         key: 'panelHeight',
         label: 'Height with a panel open',
         spoken: ['the panel height'],
         type: 'range', min: 320, max: 900, step: 20, unit: 'px'
-      }
-    ]
-  },
-  {
-    title: 'Visualizer',
-    note: 'The ribbon costs more in compositing than in strokes, so the frame rate is the dial that matters.',
-    fields: [
+      },
       {
+        group: 'The ribbon',
         key: 'vizFps',
         label: 'Frames per second',
         spoken: ['the frame rate', 'frames per second'],
         type: 'range', min: 10, max: 60, step: 5
       },
       {
+        group: 'The ribbon',
         key: 'vizQuietFps',
         label: 'Frames per second when quiet',
         help: 'A silent room does not need a smooth animation.',
@@ -254,22 +255,24 @@ export const SECTIONS = [
         type: 'range', min: 1, max: 30, step: 1
       },
       {
+        group: 'The ribbon',
         key: 'vizLinesPerFamily',
         label: 'Lines per hue family',
         spoken: ['the line count', 'lines per family'],
         type: 'range', min: 4, max: 40, step: 2
       },
       {
+        group: 'The ribbon',
         key: 'vizPoints',
         label: 'Points per line',
         spoken: ['the point count', 'points per line'],
         type: 'range', min: 60, max: 400, step: 20
-      }
+      },
     ]
   },
   {
-    title: 'Assist model',
-    note: 'Optional, and still on this machine — an Ollama model asked to tidy text or to guess at a command it did not recognise. Each adds a few hundred milliseconds after an utterance settles. Both are off until you turn them on.',
+    title: 'Advanced',
+    note: 'The plumbing. Sensible left alone, and worth a look when something is not behaving.',
     fields: [
       {
         key: 'cleanup',
@@ -289,19 +292,14 @@ export const SECTIONS = [
         help: 'What Ollama has pulled on this machine. Nothing to do with the speech model above — this one only ever sees text.',
         type: 'select', options: 'ollama', missingSuffix: '— not pulled'
       },
-      { key: 'assistUrl', label: 'Ollama at', type: 'text', placeholder: 'http://127.0.0.1:11434' }
-    ]
-  },
-  {
-    title: 'System',
-    fields: [
+      { key: 'assistUrl', label: 'Ollama at', type: 'text', placeholder: 'http://127.0.0.1:11434' },
       {
         key: 'launchAtLogin',
         label: 'Launch transvibe at login',
         help: 'Kept by macOS in Login Items, not in settings.json.',
         spoken: ['launch at login', 'launching at login', 'starting at login'],
         type: 'toggle', external: true
-      }
+      },
     ]
   }
 ]
@@ -320,6 +318,12 @@ export function formatValue (field, value) {
   const n = Number(value)
   if (!Number.isFinite(n)) return '—'
   if (n === 0 && field.zero) return field.zero
+  /* A minute in milliseconds is 60000, and reading that as a duration means
+     counting zeroes. Past a second it is written as seconds, which is how the
+     value was thought of before it was typed. */
+  if (field.unit === 'ms' && n >= 1000) {
+    return `${Number((n / 1000).toFixed(1))}s`
+  }
   const text = field.decimals != null ? n.toFixed(field.decimals) : String(n)
   return field.unit ? `${text}${field.unit}` : text
 }

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { DEFAULTS } from '../src/main/config.js'
 import {
-  SECTIONS, FIELDS, GLOSSARY_KEYS, PANEL_KEYS, EXTERNAL_KEYS, coerce
+  SECTIONS, FIELDS, GLOSSARY_KEYS, PANEL_KEYS, EXTERNAL_KEYS, coerce, formatValue
 } from '../src/renderer/settings-schema.js'
 
 const fileKeys = FIELDS.filter(f => !f.external).map(f => f.key)
@@ -92,5 +92,28 @@ describe('coerce', () => {
   it('reads a toggle as a boolean either way', () => {
     expect(coerce({ type: 'toggle' }, true)).toBe(true)
     expect(coerce({ type: 'toggle' }, false)).toBe(false)
+  })
+})
+
+describe('formatValue', () => {
+  const fade = FIELDS.find(f => f.key === 'idleFadeMs')
+  const hangover = FIELDS.find(f => f.key === 'hangoverMs')
+  const forget = FIELDS.find(f => f.key === 'idleClearMs')
+
+  it('writes a long duration as seconds rather than as five zeroes', () => {
+    expect(formatValue(fade, 10000)).toBe('10s')
+    expect(formatValue(fade, 1500)).toBe('1.5s')
+  })
+
+  it('leaves a short one in milliseconds, which is how it is thought of', () => {
+    expect(formatValue(hangover, 550)).toBe('550ms')
+  })
+
+  it('says what a zero means rather than saying zero', () => {
+    expect(formatValue(forget, 0)).toBe('never')
+  })
+
+  it('says a toggle as on or off', () => {
+    expect(formatValue({ type: 'toggle' }, true)).toBe('on')
   })
 })

@@ -751,7 +751,7 @@ function buildHelp () {
     ['hold right ⌥', 'Speak one command instead of dictating'],
     ['⌃⌥C', 'Same, without holding a key'],
     ['say a name', 'Same again, no key at all — “hey Claude, delete that”. The names are yours to set'],
-    ['it answers back', 'Spoken aloud after each command; the mic is deaf while it talks. Settings › Spoken replies'],
+    ['it answers back', 'Spoken aloud after each command, in that agent’s voice; the mic is deaf while it talks'],
     ['chain them', 'and / then / a comma: “open settings and change the voice to Karen”'],
     ['talk to one', 'An agent set to “talks back” answers questions out loud; the thread stays open'],
     ['stop talking', 'Cuts off a spoken reply, whoever you were addressing'],
@@ -772,7 +772,7 @@ function buildHelp () {
     ['copy', 'Copy the whole transcript'],
     ['trash', 'Clear the transcript'],
     ['book', 'Glossary — words to recognise, and fixes for the ones it misses'],
-    ['gear', 'Settings — everything else, applied as you change it. Agents live behind it'],
+    ['gear', 'Settings — six tabs, applied as you change them. Agents is one of them'],
     ['?', 'This panel'],
     ['mic', 'Pause and resume listening']
   ])
@@ -857,10 +857,14 @@ async function renderAgents (into = null) {
   body.dataset.agents = 'yes'
   body.replaceChildren()
 
-  body.append(el('p', 'note lead',
-    'Say a name at the start of a sentence and the rest of it is addressed ' +
-    'to that one. Each answers in its own voice, so you can hear which of ' +
-    'them replied without being told.'))
+  // The settings tab has already said this in its own note; the panel on the
+  // strip has not, and opening it cold with a bare list explains nothing.
+  if (!into) {
+    body.append(el('p', 'note lead',
+      'Say a name at the start of a sentence and the rest of it is addressed ' +
+      'to that one. Each answers in its own voice, so you can hear which of ' +
+      'them replied without being told.'))
+  }
 
   const voices = await voiceOptions()
 
@@ -1343,7 +1347,7 @@ async function main () {
   state.settingsPanel = createSettingsPanel({
     // Who you can talk to is a setting, whatever shape it is stored in, so it
     // is a tab in the settings panel rather than only a panel of its own.
-    panes: [['Agents', pane => { renderAgents(pane) }, 'Command mode']],
+    panes: new Map([['agents', pane => { renderAgents(pane) }]]),
     body: $('settings-body'),
     note: text => { $('settings-note').textContent = text },
     getSettings: () => state.settings,
