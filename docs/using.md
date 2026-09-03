@@ -132,6 +132,12 @@ Each agent has a voice of its own, picked in **Settings › Agents**; changing i
 
 The list is the English voices this Mac has — the replies are written in English, so the other 140 are not offered. More install under System Settings › Accessibility › Spoken Content and show up without a restart; a non-English one can still be named by hand in `settings.json`.
 
+### Moving a panel
+
+Any panel — settings, agents, the glossary, this help — is **dragged by its title bar**, and stays where you put it. Double-click the title bar to send it back to the middle.
+
+It is worth knowing why the strip grows when you drag one down: the window is what catches the pointer, and anything drawn past its bottom edge is not merely clipped but unclickable. So the window follows the panel down, and shrinks back to a ribbon when it closes. A position that no longer lands on this screen — put down on a second display, reopened on the laptop alone — comes back to the middle rather than opening somewhere you cannot reach.
+
 The **?** button opens an in-app help panel with the full list (`esc` or `?` toggles it too). It is generated from the parser, so it cannot describe a command the parser does not have.
 
 ![The help panel: sections for the strip, the keys, the transcript and the buttons, then the full command list](images/help.png)

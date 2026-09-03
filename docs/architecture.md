@@ -112,6 +112,7 @@ src/renderer/   app.js        transcript UI, command dispatch, help panel
                 audio.js      mic graph, ring buffer, segment slicing
                 vad.js        voice-activity state machine (pure)
                 presence.js   when the transcript fades and expires (pure)
+                placement.js  where a dragged panel may land (pure)
                 commands.js   voice-command parser + applier (pure)
                 wake.js       is an utterance addressed to one of them (pure)
                 glossary-edit.js  glossary panel edit rules (pure)
@@ -126,4 +127,4 @@ script/         install-launcher.sh  build ~/Applications/Transvibe.app
                 make-icon.py         draw build/icon.icns
 ```
 
-The pure modules — `vad`, `commands`, `band`, `wav`, `overlay`, `presence`, `glossary`, `glossary-edit`, `assist`, `agents`, `conversation`, `whisper-parse`, `settings-schema`, `settings-voice`, `saying` — take no DOM, Electron, filesystem or network dependency, which is what makes the awkward parts (segment boundaries, command false positives, model replies) testable under plain Node rather than only discoverable by hand.
+The pure modules — `vad`, `commands`, `band`, `wav`, `overlay`, `presence`, `glossary`, `glossary-edit`, `assist`, `agents`, `conversation`, `placement`, `whisper-parse`, `settings-schema`, `settings-voice`, `saying` — take no DOM, Electron, filesystem or network dependency, which is what makes the awkward parts (segment boundaries, command false positives, model replies) testable under plain Node rather than only discoverable by hand.

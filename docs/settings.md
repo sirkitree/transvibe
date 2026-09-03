@@ -31,6 +31,7 @@ Behind it is `~/Library/Application Support/transvibe/settings.json`, written on
 | `sendTarget` | `null` | app to focus before pasting; null = whatever is in front |
 | `sendPressesEnter` | `false` | also hit Return after pasting |
 | `clearAfterSend` | `true` | empty the transcript once delivered |
+| `panelPosition` | `null` | where a panel was last dragged to; `null` is centred. Set by moving one, not by typing |
 | `stripHeight` | `180` | minimum height of the strip; it grows to fit |
 | `panelHeight` | `560` | height while the help or glossary panel is open |
 | `wakeDelayMs` | `320` | pointer dwell before the strip stops being click-through |

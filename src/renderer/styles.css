@@ -444,6 +444,15 @@ body.awake .bar {
    back. Only one is ever open at a time. */
 .panel[hidden] { display: none; }
 
+/* Moved by hand. The title bar is the handle, so it says so, and the position
+   is absolute rather than centred once it has been put somewhere. */
+.panel-head { cursor: grab; user-select: none; }
+.panel.dragging .panel-head { cursor: grabbing; }
+.panel.placed { transform: none; }
+/* No transition while it is being dragged: the panel should be under the
+   pointer, not catching up with it. */
+.panel.dragging { transition: none; }
+
 .panel {
   position: absolute;
   top: 142px;

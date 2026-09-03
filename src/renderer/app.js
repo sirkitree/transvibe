@@ -16,6 +16,7 @@ import {
 } from './glossary-edit.js'
 import { applyCorrections } from '../shared/glossary.js'
 import { createPresence } from './presence.js'
+import { clampPlacement, heightFor, isReachable, MARGIN } from './placement.js'
 import { createSettingsPanel } from './settings-panel.js'
 
 const $ = id => document.getElementById(id)
@@ -52,6 +53,7 @@ const state = {
      A thread you have to re-address every turn is a query box, not a talk. */
   listeningUntil: 0,
   asking: false,
+  pendingPlacement: null,   // where a panel is being dragged to, until released
   // The word fixer's checkboxes, remembered across opens: whoever turns
   // 'remember' off is usually making a run of one-off fixes, not one.
   fixRemember: true,
@@ -679,9 +681,16 @@ function syncHeight () {
     // to: measuring the stage alone left its last two checkboxes outside the
     // window, where they were not merely hidden but unclickable.
     const fixer = $('fixer')
+    /* A panel that has been dragged is measured too, and only then. Left where
+       it starts it is sized as a share of the window, and measuring that would
+       feed its own height back in — but once moved its height is frozen in
+       pixels, and if it is not measured the next redraw shrinks the window out
+       from under it and cuts off everything below the fold. */
+    const placed = document.querySelector('.panel.placed:not([hidden])')
     const bottom = Math.max(
       document.querySelector('.stage').getBoundingClientRect().bottom,
-      fixer.hidden ? 0 : fixer.getBoundingClientRect().bottom
+      fixer.hidden ? 0 : fixer.getBoundingClientRect().bottom,
+      placed ? placed.getBoundingClientRect().bottom + MARGIN - BOTTOM_MARGIN : 0
     )
     window.transvibe.setHeight(Math.ceil(bottom + BOTTOM_MARGIN))
   })
@@ -747,7 +756,8 @@ function buildHelp () {
   section('The strip', [
     ['clicks pass through', 'Until you rest the pointer on the strip; then it wakes'],
     ['text fades', 'A few seconds after you stop talking — ⌃⌥↩ still sends it'],
-    ['esc', 'Closes this, then the fixer, then clears the transcript']
+    ['esc', 'Closes this, then the fixer, then clears the transcript'],
+    ['drag a panel', 'By its title bar; it stays put. Double-click the bar to centre it again']
   ])
 
   section('Keys', [
@@ -1213,6 +1223,7 @@ function togglePanel (name, show) {
   if (next) {
     for (const other of Object.keys(PANELS)) if (other !== name) togglePanel(other, false)
     PANELS[name].open()
+    placePanel(panel)
   }
   panel.hidden = !next
   // Not every panel has a button on the strip: agents is reached from the
@@ -1338,6 +1349,104 @@ function rebuildVisualizer () {
     quietFps: state.settings.vizQuietFps
   })
   state.viz.start()
+}
+
+/* --------------------------------------------------------------- dragging
+   A panel is a window without a window: nothing about it can be moved by the
+   system, because as far as macOS is concerned the whole strip is one
+   click-through sheet. So it moves itself — grab the title bar, same as
+   anything else — and the strip grows downward to keep hold of it, since the
+   window is what catches the pointer and a panel drawn past its bottom edge is
+   not merely clipped but unclickable. */
+
+/** Put the panel where it was left, or back in the middle. */
+function placePanel (panel) {
+  const at = state.settings.panelPosition
+  const view = { width: window.innerWidth, height: window.innerHeight }
+  if (!isReachable(at, view)) {
+    // Screens change. A position that no longer lands on one goes back to the
+    // middle rather than opening somewhere you cannot reach.
+    panel.classList.remove('placed')
+    panel.style.left = panel.style.top = panel.style.maxHeight = ''
+    return
+  }
+  panel.classList.add('placed')
+  freezeHeight(panel)
+  panel.style.left = `${at.x}px`
+  panel.style.top = `${at.y}px`
+  askForRoom(panel, at)
+}
+
+/* The panel's height is frozen in pixels once it has been moved. It is
+   otherwise a percentage of the window, and a window that grows to fit the
+   panel would make the panel taller, which would grow the window — a loop with
+   only the screen edge to stop it. */
+function freezeHeight (panel) {
+  if (!panel.style.maxHeight) {
+    panel.style.maxHeight = `${Math.ceil(panel.getBoundingClientRect().height)}px`
+  }
+}
+
+function askForRoom (panel, at) {
+  const box = panel.getBoundingClientRect()
+  const limit = window.screen ? window.screen.availHeight : 0
+  window.transvibe.setHeight(heightFor(at, { height: box.height }, limit))
+}
+
+function startPanelDrag (event, panel) {
+  // Left button only, and never from a control that lives in the title bar.
+  if (event.button !== 0 || event.target.closest('button')) return
+  event.preventDefault()
+
+  freezeHeight(panel)
+  const box = panel.getBoundingClientRect()
+  const grabX = event.clientX - box.left
+  const grabY = event.clientY - box.top
+  panel.classList.add('placed', 'dragging')
+
+  const move = e => {
+    const at = clampPlacement(
+      { x: e.clientX - grabX, y: e.clientY - grabY },
+      { width: box.width, height: box.height },
+      { width: window.innerWidth, height: window.innerHeight }
+    )
+    panel.style.left = `${at.x}px`
+    panel.style.top = `${at.y}px`
+    askForRoom(panel, at)
+    state.pendingPlacement = at
+  }
+
+  const done = async () => {
+    window.removeEventListener('pointermove', move)
+    window.removeEventListener('pointerup', done)
+    panel.classList.remove('dragging')
+    if (!state.pendingPlacement) return
+    // Saved on release rather than on every pixel: a drag is one decision.
+    state.settings = await window.transvibe.setSettings({
+      panelPosition: state.pendingPlacement
+    })
+    state.pendingPlacement = null
+  }
+
+  window.addEventListener('pointermove', move)
+  window.addEventListener('pointerup', done)
+}
+
+/** Back to the middle, for when it has been dragged somewhere regrettable. */
+async function resetPanelPlacement (panel) {
+  panel.classList.remove('placed')
+  panel.style.left = panel.style.top = panel.style.maxHeight = ''
+  state.settings = await window.transvibe.setSettings({ panelPosition: null })
+  syncHeight()
+}
+
+function wirePanelDragging () {
+  for (const head of document.querySelectorAll('.panel .panel-head')) {
+    const panel = head.closest('.panel')
+    head.title = 'Drag to move — double-click to put it back'
+    head.addEventListener('pointerdown', e => startPanelDrag(e, panel))
+    head.addEventListener('dblclick', () => resetPanelPlacement(panel))
+  }
 }
 
 /* One place decides whether the strip is mid-interaction: any panel, or the
@@ -1605,6 +1714,7 @@ async function main () {
   wireGlossary()
   wireFixer()
   wireButtonHints()
+  wirePanelDragging()
 
   // Anywhere outside the popover dismisses it; the transcript's own handler
   // runs first and reopens it when the click landed on another word.

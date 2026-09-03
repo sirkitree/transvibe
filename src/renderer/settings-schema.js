@@ -41,6 +41,11 @@ export const GLOSSARY_KEYS = ['vocabulary', 'corrections']
     a settings panel can express that. The agents panel edits it instead. */
 export const PANEL_KEYS = ['agents']
 
+/** Keys nobody sets, only ends up with. A panel's position is remembered from
+    having been dragged there; a row offering to type it in would be a worse
+    way to do the same thing. */
+export const REMEMBERED_KEYS = ['panelPosition']
+
 export const SECTIONS = [
   {
     title: 'Listening',

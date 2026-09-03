@@ -17,6 +17,7 @@ const MODULES = [
   '../src/shared/conversation.js',
   '../src/renderer/glossary-edit.js',
   '../src/renderer/presence.js',
+  '../src/renderer/placement.js',
   '../src/renderer/vad.js',
   '../src/renderer/band.js',
   '../src/renderer/commands.js',

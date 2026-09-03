@@ -55,6 +55,12 @@ export const DEFAULTS = {
      to is thrown away rather than kept, because the mic hears music and
      passers-by too and none of that should still be sitting there waiting for
      ⌃⌥↩. `0` keeps it until something else clears it. */
+  /* Where a panel was last dragged to, in window pixels. Remembered rather
+     than chosen — there is no row for it in the settings panel, because the
+     way you set it is by moving the thing. `null` is centred, which is where
+     it starts. */
+  panelPosition: null,
+
   stripHeight: 180,
   panelHeight: 560,
   wakeDelayMs: 320,
