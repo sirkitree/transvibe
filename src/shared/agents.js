@@ -70,9 +70,12 @@ export function normalizeAgent (raw, index = 0) {
     // finite zero — which would read as a rate the agent had chosen.
     rate: source.rate == null || source.rate === '' ? null : finite(Number(source.rate), null),
     hue: hue(Number(source.hue), index),
-    // Only a chat agent has a model; carrying one on the others would imply
-    // the parser could be pointed somewhere, which it cannot.
-    model: kind === 'chat' ? (text(source.model) || null) : null,
+    /* The local model this one uses. A chat agent answers with it; an agent
+       that runs commands hands it the misses — working out what an unrecognised
+       command meant, and shortening a confirmation into something worth
+       hearing. Both are that agent's thinking, so both are its model to
+       choose. Null means the default in Advanced. */
+    model: text(source.model) || null,
     run: kind === 'external' ? (text(source.run) || null) : null
   }
 }

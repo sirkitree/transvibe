@@ -137,7 +137,7 @@ export const SECTIONS = [
     ]
   },
   {
-    title: 'Words',
+    title: 'Transcription',
     note: 'What turns the sound into text. All of it runs on this Mac, and the glossary is where you teach it the words it has never seen.',
     links: [['Glossary', 'glossary']],
     fields: [
@@ -288,8 +288,8 @@ export const SECTIONS = [
       },
       {
         key: 'assistModel',
-        label: 'Assist model',
-        help: 'What Ollama has pulled on this machine. Nothing to do with the speech model above — this one only ever sees text.',
+        label: 'Default local model',
+        help: 'Used to tidy dictation, which is addressed to nobody, and by any agent that has not named its own in the Agents tab. What Ollama has pulled on this machine; nothing to do with the speech model, and it only ever sees text.',
         type: 'select', options: 'ollama', missingSuffix: '— not pulled'
       },
       { key: 'assistUrl', label: 'Ollama at', type: 'text', placeholder: 'http://127.0.0.1:11434' },

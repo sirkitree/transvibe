@@ -4,7 +4,9 @@ The gear on the strip, or **Settings…** in the menu bar (⌘,). Tabs down the 
 
 Two exceptions say so on the row: the speech model and the language are baked into a running whisper server and take effect on restart.
 
-Three settings are not in the settings panel. `agents` has one of its own — a name, a kind and a voice per row is a list of records, not a field. `vocabulary` and `corrections` have the glossary panel, which is a better editor for them than a text field; the panel links there. One setting in the panel is not in the file: **Launch at login** is macOS's, kept in its Login Items list.
+Six tabs, grouped by what you are trying to change rather than by which part of the app does it: **Listening** (what it hears and what it throws away), **Agents** (who you talk to and how they answer), **Transcription** (what turns sound into text), **Sending**, **Visuals** (the strip and the ribbon), and **Advanced** (the plumbing). A long tab carries sub-headings rather than becoming a wall of sliders.
+
+`vocabulary` and `corrections` are not in it: they have the glossary panel, which is a better editor for them than a text field, and the Transcription tab links there. `agents` is edited in the Agents tab, but as a list of records — a name, a kind, a voice and a model per row — rather than as fields. One setting in the panel is not in the file: **Launch at login** is macOS's, kept in its Login Items list.
 
 ![The settings panel, Listening tab: the tab list down the left, sliders on the right, each with its value and a line saying what it does](images/settings.png)
 
@@ -44,7 +46,7 @@ Behind it is `~/Library/Application Support/transvibe/settings.json`, written on
 | `dropGlossaryEcho` | `true` | discard an utterance that is only glossary words |
 | `cleanup` | `false` | tidy fillers out of settled text with the assist model |
 | `commandFallback` | `false` | ask the assist model about unrecognised commands |
-| `assistModel` | `'gemma4:e2b'` | Ollama model for both of the above |
+| `assistModel` | `'gemma4:e2b'` | default Ollama model: used to tidy dictation, and by any agent that has not named its own |
 | `assistUrl` | `'http://127.0.0.1:11434'` | where Ollama is listening |
 | `vizLinesPerFamily` | `18` | polylines per hue family (×3) |
 | `vizPoints` | `220` | samples per polyline |

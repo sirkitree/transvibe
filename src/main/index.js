@@ -527,9 +527,13 @@ ipcMain.handle('assist:ask', async (_e, question, history, options) => {
 /** Cut off a spoken reply mid-sentence. */
 ipcMain.on('speak:stop', () => stopSpeaking())
 
-ipcMain.handle('assist:command', async (_e, text, phrases) => {
+/* The agent's own model, if it named one. Guessing at a misheard command is
+   that agent's thinking, and a small fast model is exactly what you want
+   deciding whether you said "delete that" — while a chat agent's answers are
+   worth something bigger. One roster, one choice per name. */
+ipcMain.handle('assist:command', async (_e, text, phrases, options) => {
   if (!assist || !settings.commandFallback) return null
-  return assist.command(text, phrases)
+  return assist.command(text, phrases, options || {})
 })
 
 /* Say what just happened.
@@ -542,7 +546,7 @@ ipcMain.handle('assist:command', async (_e, text, phrases) => {
  * The model shortens the line when it is running; when it is not, the strip's
  * own wording is spoken as-is. Either way the outcome being announced is the
  * one that already happened — nothing here can invent a result. */
-ipcMain.handle('speak', async (_e, message, { plain = false, voice, rate } = {}) => {
+ipcMain.handle('speak', async (_e, message, { plain = false, voice, rate, model } = {}) => {
   if (!settings.speakReplies) return { spoken: false, reason: 'off' }
   const line = String(message == null ? '' : message).trim()
   if (!line) return { spoken: false, reason: 'nothing to say' }
@@ -551,7 +555,9 @@ ipcMain.handle('speak', async (_e, message, { plain = false, voice, rate } = {})
      Shortening those gains nothing and can lose the value in them: asked to
      tighten "the speaking rate is the voice's own", the model offered "voice
      is speaking". A confirmation may be rephrased; an answer may not. */
-  const phrased = assist && !plain ? await assist.speak(line) : { text: line, used: false }
+  const phrased = assist && !plain
+    ? await assist.speak(line, { model })
+    : { text: line, used: false }
   /* The caller names the voice, because the caller knows who was asked. The
      app's own settings are the fallback for the paths with no agent behind
      them — a command armed with the key rather than with a name. */

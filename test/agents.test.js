@@ -26,11 +26,15 @@ describe('normalizeAgent', () => {
     }
   })
 
-  it('keeps a model only where a model means something', () => {
+  it('lets any agent name its own local model', () => {
+    /* A chat agent answers with it; one that runs commands hands it the
+       guesswork — what an unrecognised command meant, and how to shorten a
+       confirmation. Both are that agent's thinking. */
     expect(normalizeAgent({ name: 'x', kind: 'chat', model: 'llama3' }).model).toBe('llama3')
-    // A commands agent with a model would imply the parser could be pointed
-    // somewhere, which it cannot.
-    expect(normalizeAgent({ name: 'x', kind: 'commands', model: 'llama3' }).model).toBe(null)
+    expect(normalizeAgent({ name: 'x', kind: 'commands', model: 'gemma4:e2b' }).model)
+      .toBe('gemma4:e2b')
+    // Null is not "no model", it is "the default in Advanced".
+    expect(normalizeAgent({ name: 'x' }).model).toBe(null)
   })
 
   it('reads a missing rate as "inherit", not as zero', () => {

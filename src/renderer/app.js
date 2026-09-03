@@ -314,7 +314,8 @@ async function runCommand (utterance, { retry = true, keep = null, collect = nul
        to put the words back if nothing lands. */
     if (retry && state.settings.commandFallback) {
       hint('working out what you meant…')
-      const phrase = await window.transvibe.assistCommand(utterance, COMMAND_PHRASES)
+      const phrase = await window.transvibe.assistCommand(utterance, COMMAND_PHRASES,
+        { model: state.agent && state.agent.model })
       if (phrase) return runCommand(phrase, { retry: false, keep, collect })
     }
 
@@ -607,7 +608,8 @@ async function voice (line, options) {
   // Whoever was addressed answers in their own voice, so you can hear which
   // one of them it was without being told.
   const sound = speechFor(state.agent, state.settings)
-  await whileDeaf(() => window.transvibe.speak(line, { ...sound, ...options }))
+  const model = state.agent && state.agent.model
+  await whileDeaf(() => window.transvibe.speak(line, { ...sound, model, ...options }))
 }
 
 /* Everything that makes noise goes through here, so there is one place that
@@ -927,13 +929,15 @@ async function renderAgents (into = null) {
     drop.onclick = () => saveAgents(removeAgent(roster, agent.name))
     row.append(drop)
 
-    /* Only the ones that talk back have a model, and it is worth giving them
-       their own rather than sharing the cleanup model: asked what a VAD is,
-       the small one offers "video-assisted delivery" and a bigger one gets it
-       right. */
-    if (agent.kind === 'chat') {
+    /* Every agent gets its own local model. A chat agent answers with it; one
+       that runs commands uses it for the guesswork — what an unrecognised
+       command meant, and how to shorten a confirmation. Worth separating:
+       asked what a VAD is, the small fast one offers "video-assisted delivery"
+       while a bigger one gets it right, and the small fast one is exactly what
+       you want deciding whether you said "delete that". */
+    if (agent.kind !== 'external') {
       const sub = el('div', 'agent-sub')
-      sub.append(el('span', 'note', 'answers with'))
+      sub.append(el('span', 'note', agent.kind === 'chat' ? 'answers with' : 'thinks with'))
       const model = el('select')
       const { options, note } = await assistModelOptions()
       const fallback = el('option', null,

@@ -18,7 +18,8 @@ contextBridge.exposeInMainWorld('transvibe', {
   /** tidy one settled utterance with the local assist model */
   cleanup: text => ipcRenderer.invoke('assist:cleanup', text),
   /** ask the assist model which known command phrase an utterance meant */
-  assistCommand: (text, phrases) => ipcRenderer.invoke('assist:command', text, phrases),
+  assistCommand: (text, phrases, options) =>
+    ipcRenderer.invoke('assist:command', text, phrases, options),
   /* Say a line out loud. Resolves when the speaker is quiet again, which is
      what the renderer needs: it stops listening for exactly that long. */
   speak: (message, options) => ipcRenderer.invoke('speak', message, options),

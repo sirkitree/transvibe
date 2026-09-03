@@ -134,7 +134,7 @@ export function createAssist ({
      * @returns {Promise<{text: string, used: boolean, reason?: string}>}
      *   `text` is always sayable — the model's line, or the one passed in.
      */
-    async speak (message) {
+    async speak (message, { model: at = null } = {}) {
       const before = String(message == null ? '' : message)
       if (!before.trim() || available === false) {
         return { text: before, used: false, reason: 'skipped' }
@@ -144,7 +144,7 @@ export function createAssist ({
       // confirmation of something that did not happen.
       if (!worthShortening(before)) return { text: before, used: false, reason: 'short enough' }
       try {
-        return acceptSpoken(before, await chat(buildSpeakMessage(before), 1200))
+        return acceptSpoken(before, await chat(buildSpeakMessage(before), 1200, at || model))
       } catch (err) {
         return { text: before, used: false, reason: err.name === 'AbortError' ? 'timed out' : err.message }
       }
@@ -189,10 +189,11 @@ export function createAssist ({
      * @param {string[]} phrases the example phrases the rule parser understands
      * @returns {Promise<string|null>} one of those phrases, or null
      */
-    async command (text, phrases) {
+    async command (text, phrases, { model: at = null } = {}) {
       if (!String(text || '').trim() || available === false) return null
       try {
-        return parseCommandReply(await chat(buildCommandMessage(text, phrases)), phrases)
+        return parseCommandReply(
+          await chat(buildCommandMessage(text, phrases), timeoutMs, at || model), phrases)
       } catch {
         return null
       }
