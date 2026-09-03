@@ -1371,25 +1371,33 @@ function placePanel (panel) {
     return
   }
   panel.classList.add('placed')
-  freezeHeight(panel)
   panel.style.left = `${at.x}px`
   panel.style.top = `${at.y}px`
-  askForRoom(panel, at)
+  capHeight(panel, at.y)
+  // Measured after the layout it just asked for, not before it: the panel is
+  // only as tall as its content once that content is in it.
+  requestAnimationFrame(() => askForRoom(panel, at))
 }
 
-/* The panel's height is frozen in pixels once it has been moved. It is
-   otherwise a percentage of the window, and a window that grows to fit the
-   panel would make the panel taller, which would grow the window — a loop with
-   only the screen edge to stop it. */
-function freezeHeight (panel) {
-  if (!panel.style.maxHeight) {
-    panel.style.maxHeight = `${Math.ceil(panel.getBoundingClientRect().height)}px`
-  }
+/* A moved panel is capped against the *screen* rather than against the window.
+   Its usual limit is a share of the window, which cannot be used here: the
+   window grows to fit the panel, so a panel sized from the window would grow
+   with it, which would grow the window again. The screen does not move when
+   the window does, so measuring against it settles immediately.
+
+   The first attempt froze the panel at whatever height it happened to be when
+   it was first moved, which is how it ended up opening as a sliver: measured
+   on a short tab, or a tick before its content had filled in, and then pinned
+   there for good. */
+function capHeight (panel, top) {
+  const screenHeight = (window.screen && window.screen.availHeight) || 900
+  const room = screenHeight - top - MARGIN * 2
+  panel.style.maxHeight = `${Math.max(240, Math.round(room))}px`
 }
 
 function askForRoom (panel, at) {
   const box = panel.getBoundingClientRect()
-  const limit = window.screen ? window.screen.availHeight : 0
+  const limit = (window.screen && window.screen.availHeight) || 0
   window.transvibe.setHeight(heightFor(at, { height: box.height }, limit))
 }
 
@@ -1398,7 +1406,6 @@ function startPanelDrag (event, panel) {
   if (event.button !== 0 || event.target.closest('button')) return
   event.preventDefault()
 
-  freezeHeight(panel)
   const box = panel.getBoundingClientRect()
   const grabX = event.clientX - box.left
   const grabY = event.clientY - box.top
@@ -1412,6 +1419,7 @@ function startPanelDrag (event, panel) {
     )
     panel.style.left = `${at.x}px`
     panel.style.top = `${at.y}px`
+    capHeight(panel, at.y)
     askForRoom(panel, at)
     state.pendingPlacement = at
   }
@@ -1441,11 +1449,20 @@ async function resetPanelPlacement (panel) {
 }
 
 function wirePanelDragging () {
+  /* A moved panel changes height without anything asking it to — a taller tab,
+     an agent row appearing — and the window has to follow, or the bottom of it
+     is drawn outside the window and cannot be clicked. Watching the box is the
+     only way to catch every cause of that. */
+  const watch = new ResizeObserver(() => {
+    if (document.querySelector('.panel.placed:not([hidden])')) syncHeight()
+  })
+
   for (const head of document.querySelectorAll('.panel .panel-head')) {
     const panel = head.closest('.panel')
     head.title = 'Drag to move — double-click to put it back'
     head.addEventListener('pointerdown', e => startPanelDrag(e, panel))
     head.addEventListener('dblclick', () => resetPanelPlacement(panel))
+    watch.observe(panel)
   }
 }
 
