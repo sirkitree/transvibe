@@ -20,7 +20,9 @@ Still no cloud: Ollama serves on `127.0.0.1`, and the audio never reaches it at 
 
 **Spoken replies** use it too, if it happens to be running, and are the one job that does not need it: after a command runs, the model shortens the confirmation into something worth hearing ("deleted the last 3 words" → "three words gone"). It is given the outcome, not the utterance, so it cannot announce something that did not happen, and it is on a 1.2-second leash — the microphone is deaf while the app talks, so a slow answer costs you the start of your next sentence. Past that, the app says its own wording instead. Turning spoken replies on does not go looking for Ollama, and never warns that it is missing.
 
-Measured on an M-series Mac, warm: cleanup 170–350ms, command fallback 180–510ms, both after the fact.
+**Conversation** is the fourth job and the only one that is the point rather than a tidy-up: an agent set to *talks back* hands its sentence here as a question, and the answer is said out loud. It carries the last few turns, so "how far is that from London" follows "what's the capital of France", and it is asked for one or two plain sentences — nobody can hear a bulleted list, and the microphone is deaf for as long as the answer takes. A long one is cut to its first sentences rather than thrown away. Each agent can name its own model, which is worth doing: asked what a VAD is, `gemma4:e2b` offered "video-assisted delivery" while `llama3` got it right.
+
+Measured on an M-series Mac, warm: cleanup 170–350ms, command fallback 180–510ms, both after the fact. A conversational answer runs 300ms–1s depending on the model.
 
 Cleanup can make a subtle word change that the guards below do not catch, so read the result before sending it somewhere that matters.
 

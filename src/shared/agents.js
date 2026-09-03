@@ -24,9 +24,17 @@
 export const KINDS = ['commands', 'chat', 'external']
 
 /* Hues around the wheel, far enough apart to be told apart at a glance, and
-   assigned in order to agents that have not been given one. The first is the
-   green the strip's own ribbon already wears. */
-const HUES = [0.38, 0.03, 0.72, 0.55, 0.14, 0.86]
+   assigned in order to agents that have not been given one. Warm first, and
+   the strip's own green last: an agent's colour is what the speaking ribbon
+   wears, and the first thing it must not look like is the listening ribbon
+   above it. */
+export const HUES = [0.03, 0.55, 0.72, 0.14, 0.86, 0.38]
+
+/** The next colour along, for cycling through them by hand. */
+export function nextHue (current) {
+  const at = HUES.findIndex(h => Math.abs(h - current) < 0.001)
+  return HUES[(at + 1) % HUES.length]
+}
 
 const text = v => (typeof v === 'string' ? v.trim() : '')
 

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   normalizeAgent, normalizeRoster, migrateRoster, speechFor, commandAgent,
-  addAgent, updateAgent, removeAgent, KINDS
+  addAgent, updateAgent, removeAgent, nextHue, HUES, KINDS
 } from '../src/shared/agents.js'
 import { DEFAULTS } from '../src/main/config.js'
 
@@ -156,5 +156,23 @@ describe('editing the roster', () => {
       expect(typeof r.error).toBe('string')
       expect(Array.isArray(r.agents)).toBe(true)
     }
+  })
+})
+
+describe('colours', () => {
+  it('walks along the palette and back to the start', () => {
+    expect(nextHue(HUES[0])).toBe(HUES[1])
+    expect(nextHue(HUES.at(-1))).toBe(HUES[0])
+  })
+
+  it('lands somewhere from a colour that is not on it', () => {
+    expect(HUES).toContain(nextHue(0.512))
+  })
+
+  it('starts warm, so the first agent does not wear the ribbon’s own green', () => {
+    // An agent's colour is what the speaking ribbon wears; looking like the
+    // listening ribbon above it is the one thing it must not do.
+    expect(normalizeAgent({ name: 'first' }, 0).hue).toBe(HUES[0])
+    expect(HUES[0]).not.toBe(0.38)
   })
 })

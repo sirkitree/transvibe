@@ -76,7 +76,7 @@ This is the one that works while a transcript is already sitting on the strip, a
 
 Said on its own, a name just arms command mode for the next thing you say, the same as ⌃⌥C.
 
-The names are yours, and there can be more than one. **Settings › Elsewhere › Agents** (or say "open agents") is the list: what each one is called, what saying it does, and the voice it answers in. One that *runs commands* is everything above; the rest are for later. Each gets a colour of its own, which is what the speaking ribbon wears while that one is talking, so you can see and hear which of them replied.
+The names are yours, and there can be more than one. **Settings › Elsewhere › Agents** (or say "open agents") is the list: what each one is called, what saying it does, and the voice it answers in. One that *runs commands* is everything above; one that *talks back* is a conversation, below. Each gets a colour of its own, which is what the speaking ribbon wears while that one is talking, so you can see and hear which of them replied.
 
 The name has to come first. A name recognised anywhere would turn "I told him hey Claude was down" into a command; recognised only at the front, after fillers like "um" and "so", it stays out of ordinary speech. Near misses are forgiven, because a small model hears an unusual name loosely — "hey cloud" and "hey claud" both count — with two rules that only matter once there is more than one name: a name heard exactly always beats one heard nearly, and two names equally close to what was heard match **nothing**. Guessing is how you address the wrong one, so the strip says `heard a name, but not which one` and the words go down as dictation. Turn the forgiveness off under Settings › Command mode.
 
@@ -101,6 +101,22 @@ One sentence is read two ways: "change voice to Karen" is also a valid *replace*
 The rules are generated from the settings panel itself, so the two can't drift apart, and the panel updates under you if it happens to be open. Twenty-five settings are reachable. The wake phrase, the language, the send target and the two model paths are not: they are free text, and a misheard wake phrase would take the voice commands with it. The `?` panel lists the names to say.
 
 The verb and the setting's name have to be adjacent, which is what keeps this out of ordinary speech — "turn off the lights" names no setting and is transcribed as what it is. A settings change is not on the transcript's undo stack; undo it by saying the opposite.
+
+### Talking to one of them
+
+An agent set to **talks back** is the other thing a name can mean. Nothing it hears is parsed: address it and the sentence is a question, answered out loud in that agent's voice.
+
+    "hey Ada, what's the capital of France"
+    "how far is that from London"          ← no name needed, it is still listening
+    "stop talking"                          ← whoever you are addressing
+
+The answer is shown under the transcript in the agent's own colour and said out loud — and it is **never part of the transcript**. ⌃⌥↩ sends what you dictated, not what it answered; a model's words landing in your document because you asked it something out loud would be a genuinely bad surprise.
+
+The thread stays open for **Settings › Command mode › A conversation stays open for** (25 s by default) after each answer, so a follow-up needs no name. Saying nothing lets it lapse, and "stop talking" ends it as well as cutting off the reply. All the way left on that slider means every turn is addressed by name.
+
+A handful of commands work whoever you are addressing — *stop talking*, *pause*, *resume*, *hide*, *close the panel*, *open settings*, *open agents* — because you must be able to interrupt it and should not have to switch names to close a window. Everything else said to a chat agent is a question, including sentences that look like commands: "delete that" asked of Ada is a question about deleting things.
+
+It runs on [Ollama](assist.md), on this machine, like the rest of the model work here. Give the agent its own model in the panel — the small model doing the cleanup is fast but will invent things (asked what a VAD is, it offered "video-assisted delivery"; llama3 gets it right). The prompt asks for one or two sentences and for uncertainty rather than a guess, and a long answer is cut to its first sentences: the microphone is deaf for as long as the speakers are busy, so a paragraph is not a verbose answer, it is half a minute of not being able to say anything.
 
 ### It answers out loud
 

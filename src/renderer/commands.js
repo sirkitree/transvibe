@@ -246,6 +246,12 @@ const EXACT = {
   clear: { action: 'clear', target: 'all' },
   'start over': { action: 'clear', target: 'all' },
 
+  'stop talking': { action: 'stopTalking' },
+  'be quiet': { action: 'stopTalking' },
+  'quiet': { action: 'stopTalking' },
+  'shush': { action: 'stopTalking' },
+  'stop speaking': { action: 'stopTalking' },
+
   'stop listening': { action: 'pause' },
   'pause listening': { action: 'pause' },
   'pause transcription': { action: 'pause' },
@@ -455,6 +461,7 @@ export function applyCommand(cmd, text) {
   // just as happily as a full one, so they sit above the emptiness check.
   if (action === 'settings') return unchanged('settings', 'settings')
   if (action === 'agents') return unchanged('agents', 'agents')
+  if (action === 'stopTalking') return unchanged('hushed', 'stopTalking')
   if (action === 'closePanel') return unchanged('closed', 'closePanel')
 
   if (empty) return unchanged('nothing to act on')
@@ -544,6 +551,18 @@ export function applyCommand(cmd, text) {
   }
 }
 
+/**
+ * Commands that work whoever you are addressing.
+ *
+ * A chat agent is for talking to, not for driving the app — but you have to be
+ * able to interrupt it, and you should not have to switch names to close a
+ * panel or stop the microphone. Everything else said to a chat agent is a
+ * question, including sentences that happen to look like commands.
+ */
+export const UNIVERSAL = new Set([
+  'stopTalking', 'pause', 'resume', 'hide', 'closePanel', 'settings', 'agents'
+])
+
 /* ------------------------------------------------------------------ *
  * chains
  * ------------------------------------------------------------------ */
@@ -632,6 +651,8 @@ export function spokenFor (cmd, result) {
     case 'hide': return 'hidden'
     case 'settings': return 'settings'
     case 'agents': return 'agents'
+    // Saying "hushed" out loud would be the joke that never stops being made.
+    case 'stopTalking': return ''
     case 'closePanel': return 'closed'
   }
 
@@ -761,6 +782,11 @@ export const COMMANDS = [
     action: 'clear',
     examples: ['clear all', 'clear everything', 'clear the transcript', 'start over'],
     help: 'Empty the transcript and start again.'
+  },
+  {
+    action: 'stopTalking',
+    examples: ['stop talking', 'be quiet', 'shush'],
+    help: 'Cut off a spoken reply. Works whoever you are addressing.'
   },
   {
     action: 'pause',

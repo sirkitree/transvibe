@@ -14,6 +14,7 @@ const MODULES = [
   '../src/shared/glossary.js',
   '../src/shared/assist.js',
   '../src/shared/agents.js',
+  '../src/shared/conversation.js',
   '../src/renderer/glossary-edit.js',
   '../src/renderer/presence.js',
   '../src/renderer/vad.js',

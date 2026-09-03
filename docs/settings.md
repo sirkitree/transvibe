@@ -20,6 +20,7 @@ Behind it is `~/Library/Application Support/transvibe/settings.json`, written on
 | `hangoverMs` | `550` | silence before an utterance is considered finished |
 | `interimMs` | `500` | how often the open utterance is re-transcribed |
 | `commandTimeoutMs` | `6000` | command mode disarms itself after this |
+| `conversationMs` | `25000` | how long an agent that talks back keeps listening without its name; `0` off |
 | `agents` | one commands agent | who you can talk to: a name, what it does, and how it sounds. Edited in the agents panel |
 | `wakeWordFuzzy` | `true` | forgive near-misses in the wake phrase ("hey cloud") |
 | `speakReplies` | `true` | say what a command just did, out loud |

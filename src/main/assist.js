@@ -2,6 +2,7 @@ import {
   buildCleanupMessage, acceptCleanup, buildCommandMessage, parseCommandReply,
   buildSpeakMessage, acceptSpoken, worthShortening
 } from '../shared/assist.js'
+import { buildAskMessages, acceptAnswer } from '../shared/conversation.js'
 
 /**
  * The local assist model, served by Ollama.
@@ -52,7 +53,11 @@ export function createAssist ({
 } = {}) {
   let available = null      // null = not yet checked
 
-  async function chat (message, ms = timeoutMs) {
+  /* One exchange. `message` is either a string — the three prompt-shaped jobs,
+     which have no history — or a messages array for a conversation, which
+     does. `at` names the model, because a chat agent may be pointed at a
+     better one than the small model doing the cleanup. */
+  async function chat (message, ms = timeoutMs, at = model) {
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), ms)
     try {
@@ -60,8 +65,10 @@ export function createAssist ({
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
-          model,
-          messages: [{ role: 'user', content: message }],
+          model: at,
+          messages: Array.isArray(message)
+            ? message
+            : [{ role: 'user', content: message }],
           temperature: 0,
           stream: false,
           // Thinking is on by default and costs ~1s of latency for a task that
@@ -140,6 +147,38 @@ export function createAssist ({
         return acceptSpoken(before, await chat(buildSpeakMessage(before), 1200))
       } catch (err) {
         return { text: before, used: false, reason: err.name === 'AbortError' ? 'timed out' : err.message }
+      }
+    },
+
+    /**
+     * Answer a question, out loud.
+     *
+     * Nothing is parsed on this path: a chat agent was addressed, so the
+     * sentence is a question and the answer is whatever comes back — checked
+     * for shape, never for truth. A longer leash than the other calls, because
+     * this one is the whole point of the wait rather than a tidy-up nobody
+     * asked for; still bounded, because the strip cannot show "thinking"
+     * forever.
+     *
+     * @param {string} question
+     * @param {Array<{role: string, content: string}>} history earlier turns
+     * @param {{model?: string}} options the agent's own model, if it has one
+     * @returns {Promise<{text: string, ok: boolean, reason?: string}>}
+     */
+    async ask (question, history = [], { model: at = null } = {}) {
+      if (!String(question || '').trim()) return { text: '', ok: false, reason: 'nothing asked' }
+      if (available === false && !at) {
+        return { text: '', ok: false, reason: 'the local model is not running' }
+      }
+      try {
+        const reply = await chat(buildAskMessages(question, history), 20000, at || model)
+        return acceptAnswer(reply)
+      } catch (err) {
+        return {
+          text: '',
+          ok: false,
+          reason: err.name === 'AbortError' ? 'took too long' : err.message
+        }
       }
     },
 

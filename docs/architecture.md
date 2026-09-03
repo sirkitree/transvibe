@@ -102,6 +102,7 @@ src/main/       index.js      window, tray, shortcuts, IPC, send
                 assist.js     optional local LLM pass (Ollama)
                 speech.js     saying a confirmation out loud via `say`
 src/shared/     agents.js     who you can talk to, and what a name means (pure)
+                conversation.js  prompts and guards for talking to one (pure)
                 glossary.js   vocabulary prompt + corrections (pure)
                 assist.js     assist prompts + reply guards (pure)
 src/renderer/   app.js        transcript UI, command dispatch, help panel
@@ -125,4 +126,4 @@ script/         install-launcher.sh  build ~/Applications/Transvibe.app
                 make-icon.py         draw build/icon.icns
 ```
 
-The pure modules — `vad`, `commands`, `band`, `wav`, `overlay`, `presence`, `glossary`, `glossary-edit`, `assist`, `agents`, `whisper-parse`, `settings-schema`, `settings-voice`, `saying` — take no DOM, Electron, filesystem or network dependency, which is what makes the awkward parts (segment boundaries, command false positives, model replies) testable under plain Node rather than only discoverable by hand.
+The pure modules — `vad`, `commands`, `band`, `wav`, `overlay`, `presence`, `glossary`, `glossary-edit`, `assist`, `agents`, `conversation`, `whisper-parse`, `settings-schema`, `settings-voice`, `saying` — take no DOM, Electron, filesystem or network dependency, which is what makes the awkward parts (segment boundaries, command false positives, model replies) testable under plain Node rather than only discoverable by hand.

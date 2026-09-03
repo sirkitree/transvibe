@@ -26,6 +26,10 @@ contextBridge.exposeInMainWorld('transvibe', {
   previewVoice: options => ipcRenderer.invoke('speak:preview', options),
   /** every macOS voice on this machine, for the voice picker */
   listVoices: () => ipcRenderer.invoke('voices:list'),
+  /** ask a chat agent a question */
+  ask: (question, history, options) => ipcRenderer.invoke('assist:ask', question, history, options),
+  /** cut off whatever is being said */
+  hush: () => ipcRenderer.send('speak:stop'),
   send: text => ipcRenderer.invoke('send', text),
   hide: () => ipcRenderer.send('window:hide'),
   /* Opening a panel goes out to the main process and comes back as a

@@ -1,12 +1,14 @@
 import { startCapture } from './audio.js'
 import { createVisualizer } from './visualizer.js'
 import { createSayingViz } from './saying-viz.js'
-import { parseCommand, applyCommand, spokenFor, splitChain, COMMANDS } from './commands.js'
+import {
+  parseCommand, applyCommand, spokenFor, splitChain, UNIVERSAL, COMMANDS
+} from './commands.js'
 import { matchAgent } from './wake.js'
 import { parseSettingCommand, applySettingCommand, settingPhrases } from './settings-voice.js'
 import { FIELDS } from './settings-schema.js'
 import {
-  speechFor, commandAgent, addAgent, updateAgent, removeAgent, KINDS
+  speechFor, commandAgent, addAgent, updateAgent, removeAgent, nextHue, KINDS
 } from '../shared/agents.js'
 import {
   addTerms, removeTerm, addCorrection, removeCorrection, sortedEntries, splitWords
@@ -40,6 +42,15 @@ const state = {
      which voice says it, what colour the ribbon is — belongs to whoever was
      asked, not to the app in general. */
   agent: null,
+  /* What a chat agent said, and what was said to it. Kept apart from `finals`
+     on purpose: the transcript is yours, and ⌃⌥↩ sends it — an answer landing
+     in it would paste the model's words into your document. */
+  reply: '',
+  history: [],
+  /* Until when the next sentence continues the conversation without the name.
+     A thread you have to re-address every turn is a query box, not a talk. */
+  listeningUntil: 0,
+  asking: false,
   // The word fixer's checkboxes, remembered across opens: whoever turns
   // 'remember' off is usually making a run of one-off fixes, not one.
   fixRemember: true,
@@ -113,6 +124,13 @@ function finalNode (text) {
 
 function render () {
   transcriptEl.replaceChildren(...state.finals.map(finalNode))
+  if (state.reply || state.asking) {
+    const said = document.createElement('span')
+    said.className = 'reply'
+    said.textContent = state.reply || '…'
+    if (state.agent) said.style.color = `hsl(${Math.round(state.agent.hue * 360)} 80% 76%)`
+    transcriptEl.append(said)
+  }
   if (state.live || state.pending > 0) {
     const live = document.createElement('span')
     live.className = 'live'
@@ -134,6 +152,14 @@ function fullText () {
 
 function setText (text) {
   state.finals = text ? [text] : []
+}
+
+/* An answer is not transcript. It is shown, it is spoken, and it goes away
+   with everything else — but `fullText()` never sees it, so what you send is
+   only ever what you said. */
+function clearReply () {
+  state.reply = ''
+  state.asking = false
 }
 
 function setCommandMode (active) {
@@ -166,6 +192,16 @@ const COMMAND_PHRASES = [
 async function addressAgent (agent, utterance, { keep = null } = {}) {
   if (!agent || agent.kind === 'commands') return runCommand(utterance, { keep })
 
+  if (agent.kind === 'chat') {
+    /* A handful of commands work whoever you are addressing — you have to be
+       able to interrupt it, and switching names to close a panel would be
+       absurd. Everything else said to a chat agent is a question, including
+       the sentences that happen to look like commands. */
+    const cmd = parseCommand(utterance)
+    if (cmd && UNIVERSAL.has(cmd.action)) return runCommand(utterance)
+    return converse(agent, utterance)
+  }
+
   /* Reserved, and refused rather than quietly ignored: a name that is set up
      to hand the sentence somewhere else should say so until it can. */
   if (agent.kind === 'external') {
@@ -177,6 +213,62 @@ async function addressAgent (agent, utterance, { keep = null } = {}) {
   }
 
   return runCommand(utterance, { keep })
+}
+
+/**
+ * Ask a chat agent something, and say the answer.
+ *
+ * The answer is shown and spoken and then forgotten with everything else. It
+ * never joins the transcript: what ⌃⌥↩ pastes is what you said, and a model's
+ * words landing in your document because you asked it a question out loud
+ * would be a genuinely bad surprise.
+ *
+ * Nothing here judges whether the answer is true — nothing here could. The
+ * prompt asks for uncertainty rather than invention, and the agent can be
+ * pointed at a better model than the one doing the cleanup.
+ */
+async function converse (agent, question) {
+  state.asking = true
+  state.reply = ''
+  hint(`${agent.name} is thinking…`)
+  noteActivity()
+  render()
+
+  try {
+    const answer = await window.transvibe.ask(question, state.history, { model: agent.model })
+    if (!answer.ok) {
+      state.asking = false
+      hint(answer.reason || 'no answer')
+      say(answer.reason || 'no answer', { plain: true })
+      render()
+      return
+    }
+
+    state.reply = answer.text
+    state.asking = false
+    state.history = [
+      ...state.history,
+      { role: 'user', content: question },
+      { role: 'assistant', content: answer.text }
+    ]
+    /* The thread stays open for a while, so the next sentence can be "and how
+       far is that from London" rather than the whole name again. */
+    state.listeningUntil = Date.now() + (state.settings.conversationMs || 0)
+    hint(answer.text)
+    noteActivity()
+    render()
+    say(answer.text, { plain: true })
+  } catch (err) {
+    state.asking = false
+    hint(err.message)
+    render()
+  }
+}
+
+/** Is the last chat agent still owed a follow-up, said without its name? */
+function inConversation () {
+  return state.agent && state.agent.kind === 'chat' &&
+    state.listeningUntil > Date.now()
 }
 
 /* One spoken utterance, interpreted as an editing command rather than as text
@@ -279,6 +371,12 @@ async function runCommand (utterance, { retry = true, keep = null, collect = nul
     case 'hide': window.transvibe.hide(); break
     case 'settings': window.transvibe.openPanel('settings'); break
     case 'agents': window.transvibe.openPanel('agents'); break
+    case 'stopTalking':
+      window.transvibe.hush()
+      // Interrupting is also how you end a conversation: the next thing said
+      // after cutting one off is not a follow-up.
+      state.listeningUntil = 0
+      break
     case 'closePanel': closeOpenPanel(); break
   }
 
@@ -529,11 +627,16 @@ function syncHeight () {
    pasted somewhere by mistake. The undo stack goes with it: "forgotten" that
    ⌘Z brings back is not forgotten. */
 function forgetTranscript () {
-  if (!state.finals.length && !state.live) return
+  if (!state.finals.length && !state.live && !state.reply) return
   state.finals = []
   state.live = ''
   state.liveSeq++
   state.undoStack = []
+  // The thread goes with it. Picking a conversation back up half an hour
+  // later, out of a strip that has been cleared, is not continuing it.
+  clearReply()
+  state.history = []
+  state.listeningUntil = 0
   render()
 }
 
@@ -544,6 +647,7 @@ function dismiss () {
   state.live = ''
   state.liveSeq++
   state.undoStack = []
+  clearReply()
   render()
   closeFixer()
 }
@@ -586,6 +690,8 @@ function buildHelp () {
     ['say a name', 'Same again, no key at all — “hey Claude, delete that”. The names are yours to set'],
     ['it answers back', 'Spoken aloud after each command; the mic is deaf while it talks. Settings › Spoken replies'],
     ['chain them', 'and / then / a comma: “open settings and change the voice to Karen”'],
+    ['talk to one', 'An agent set to “talks back” answers questions out loud; the thread stays open'],
+    ['stop talking', 'Cuts off a spoken reply, whoever you were addressing'],
     ['⌃⌥↩', 'Send the transcript to the app in front'],
     ['⌃⌥Space', 'Show or hide the strip'],
     ['⌘,', 'Settings, from the menu bar icon']
@@ -692,8 +798,16 @@ async function renderAgents () {
   for (const agent of roster) {
     const row = el('div', 'agent-row')
 
-    const dot = el('span', 'agent-dot')
+    /* The dot is the agent's colour, which is what the speaking ribbon wears
+       while it is talking — and clicking it walks along the palette, because a
+       colour you cannot change is a colour you have to live with. */
+    const dot = el('button', 'agent-dot')
+    dot.type = 'button'
     dot.style.color = `hsl(${Math.round(agent.hue * 360)} 85% 62%)`
+    dot.title = 'Its colour on the strip — click for the next one'
+    dot.onclick = () => saveAgents(updateAgent(roster, agent.name, {
+      hue: nextHue(agent.hue)
+    }))
     row.append(dot)
 
     const name = el('input')
@@ -739,6 +853,33 @@ async function renderAgents () {
     drop.title = `Remove ${agent.name}`
     drop.onclick = () => saveAgents(removeAgent(roster, agent.name))
     row.append(drop)
+
+    /* Only the ones that talk back have a model, and it is worth giving them
+       their own rather than sharing the cleanup model: asked what a VAD is,
+       the small one offers "video-assisted delivery" and a bigger one gets it
+       right. */
+    if (agent.kind === 'chat') {
+      const sub = el('div', 'agent-sub')
+      sub.append(el('span', 'note', 'answers with'))
+      const model = el('select')
+      const { options, note } = await assistModelOptions()
+      const fallback = el('option', null,
+        `Default — ${state.settings.assistModel}`)
+      fallback.value = ''
+      model.append(fallback)
+      for (const option of options) {
+        const node = el('option', null, option.label)
+        node.value = option.value
+        model.append(node)
+      }
+      model.value = agent.model || ''
+      model.onchange = () => saveAgents(updateAgent(roster, agent.name, {
+        model: model.value || null
+      }))
+      sub.append(model)
+      sub.append(el('span', 'note', note || ''))
+      row.append(sub)
+    }
 
     body.append(row)
   }
@@ -1246,6 +1387,11 @@ async function main () {
             state.agent = wake.agent
             addressAgent(wake.agent, wake.rest, { keep: () => dictate(res.text, wasStale) })
               .catch(err => hint(err.message))
+          } else if (!wake.matched && !wake.ambiguous && inConversation()) {
+            /* Still talking to whoever answered a moment ago. The name opens a
+               thread rather than addressing one sentence, so "and how far is
+               that from London" is a follow-up and not dictation. */
+            addressAgent(state.agent, res.text).catch(err => hint(err.message))
           } else if (wake.matched) {
             // The name on its own: you are about to say the rest.
             state.agent = wake.agent
@@ -1311,7 +1457,7 @@ async function main () {
   state.capture = capture
   // handy from the devtools console: `state` for VAD tuning, `render` to redraw
   // after poking at it, `runCommand` to fire one without saying it out loud
-  window.__transvibe = { state, render, runCommand, say }
+  window.__transvibe = { state, render, runCommand, addressAgent, say }
 
   // The ribbon rides high in its canvas so it reads as hanging off the top
   // edge of the screen, with the glow spreading down over the text. Built
@@ -1337,6 +1483,7 @@ async function main () {
     state.finals = []
     state.live = ''
     state.liveSeq++
+    clearReply()
     render()
   }
 

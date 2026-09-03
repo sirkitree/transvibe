@@ -6,6 +6,7 @@ import {
   splitWords,
   spokenFor,
   splitChain,
+  UNIVERSAL,
   COMMANDS
 } from '../src/renderer/commands.js'
 
@@ -520,7 +521,7 @@ describe('COMMANDS stays in sync with the parser', () => {
     expect(actions.sort()).toEqual([
       'agents', 'capitalize', 'clear', 'closePanel', 'copy', 'delete', 'hide',
       'lowercase', 'newParagraph', 'pause', 'punctuate', 'replace', 'resume',
-      'send', 'settings', 'undo', 'uppercase'
+      'send', 'settings', 'stopTalking', 'undo', 'uppercase'
     ].sort())
   })
 
@@ -912,5 +913,28 @@ describe('splitChain', () => {
     // this one does not fail: "cat and dog" stays one operand.
     expect(parseCommand('replace cat and dog with pets'))
       .toMatchObject({ action: 'replace', args: { from: 'cat and dog', to: 'pets' } })
+  })
+})
+
+describe('commands that work whoever you are addressing', () => {
+  it('covers interrupting, listening and the panels', () => {
+    expect(actionOf('stop talking')).toBe('stopTalking')
+    expect(actionOf('be quiet')).toBe('stopTalking')
+    for (const action of UNIVERSAL) {
+      expect(COMMANDS.some(c => c.action === action), action).toBe(true)
+    }
+  })
+
+  it('leaves the editing commands out of it', () => {
+    /* Said to an agent that talks back, "delete that" is a question about
+       deleting things, not an instruction to delete anything. */
+    for (const action of ['delete', 'replace', 'clear', 'send', 'copy', 'undo']) {
+      expect(UNIVERSAL.has(action), action).toBe(false)
+    }
+  })
+
+  it('says nothing out loud about being told to be quiet', () => {
+    const cmd = parseCommand('stop talking')
+    expect(spokenFor(cmd, applyCommand(cmd, 'some text'))).toBe('')
   })
 })

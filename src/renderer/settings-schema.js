@@ -146,6 +146,13 @@ export const SECTIONS = [
         type: 'toggle'
       },
       {
+        key: 'conversationMs',
+        label: 'A conversation stays open for',
+        help: 'After an agent that talks back has answered, the next thing you say is a follow-up and needs no name. All the way left means every turn is addressed by name.',
+        spoken: ['the conversation window', 'the conversation timeout'],
+        type: 'range', min: 0, max: 120000, step: 5000, unit: 'ms', zero: 'off'
+      },
+      {
         key: 'commandTimeoutMs',
         label: 'Disarms after',
         help: 'After ⌃⌥C, or after the wake phrase said on its own.',

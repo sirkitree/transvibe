@@ -286,12 +286,15 @@ async function initEngine () {
    running or the model was never pulled, `check()` comes back false and every
    later call short-circuits, leaving the app exactly as it was. */
 async function initAssist () {
-  const asked = settings.cleanup || settings.commandFallback
+  const talks = (settings.agents || []).some(a => a.kind === 'chat')
+  const asked = settings.cleanup || settings.commandFallback || talks
   // Spoken replies will use the model to shorten a line if it happens to be
   // there, but they work without it, so wanting them is not a reason to go
   // looking for Ollama on someone who never asked for it — only a reason to
   // keep the handle if one of the other two already did.
   if (!asked && !settings.speakReplies) { assist = null; return }
+  // A chat agent that cannot reach Ollama is worth saying out loud: unlike the
+  // other two, it is the whole of what that name does.
   assist = createAssist({ url: settings.assistUrl, model: settings.assistModel })
   const ok = await assist.check()
   // Only the features that cannot work without it are worth an error.
@@ -494,7 +497,7 @@ ipcMain.handle('settings:set', (_e, patch) => {
       confidenceFloor: settings.confidenceFloor
     })
   }
-  if ('cleanup' in patch || 'commandFallback' in patch ||
+  if ('cleanup' in patch || 'commandFallback' in patch || 'agents' in patch ||
       'assistModel' in patch || 'assistUrl' in patch || 'speakReplies' in patch) {
     initAssist()
   }
@@ -511,6 +514,18 @@ ipcMain.handle('assist:cleanup', async (_e, text) => {
   if (!assist || !settings.cleanup) return { text, used: false, reason: 'off' }
   return assist.cleanup(text)
 })
+
+/* A question asked of a chat agent. The agent names its own model, so one
+   name can be answered by something better than the small model doing the
+   cleanup — measured on this machine, gemma4:e2b calls a VAD "video-assisted
+   delivery" and llama3 gets it right. */
+ipcMain.handle('assist:ask', async (_e, question, history, options) => {
+  if (!assist) return { text: '', ok: false, reason: 'the local model is not running' }
+  return assist.ask(question, history, options || {})
+})
+
+/** Cut off a spoken reply mid-sentence. */
+ipcMain.on('speak:stop', () => stopSpeaking())
 
 ipcMain.handle('assist:command', async (_e, text, phrases) => {
   if (!assist || !settings.commandFallback) return null

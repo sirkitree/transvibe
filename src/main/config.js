@@ -37,6 +37,11 @@ export const DEFAULTS = {
   speakVoice: null,
   speakRate: 0,             // words per minute; 0 = the voice's own pace
 
+  /* How long a chat agent stays in the conversation after answering. Inside
+     this window the next thing you say is a follow-up and needs no name, which
+     is the difference between a conversation and a query box. */
+  conversationMs: 25000,
+
   sendTarget: null,         // app name to focus before pasting; null = frontmost
   sendPressesEnter: false,  // also hit Return after pasting
   clearAfterSend: true,

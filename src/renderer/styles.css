@@ -716,6 +716,19 @@ body.awake .bar {
 /* Listening for a word only makes sense if the fix is being kept at all. */
 .fixer-opt.off { opacity: 0.35; cursor: default; }
 
+/* An answer from an agent that talks back. Tinted with that agent's own hue
+   and set apart from the words above it, because it is not transcript: it is
+   shown, it is said, and ⌃⌥↩ never sends it. */
+.reply {
+  display: block;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 15px;
+  font-style: italic;
+  opacity: 0.95;
+}
+
 /* ------------------------------------------------------------------ agents
    One row per name: what it is called, what it does, and how it sounds. The
    dot carries the agent's own hue, which is the same colour the speaking
@@ -730,6 +743,9 @@ body.awake .bar {
 }
 
 .agent-dot {
+  border: 0;
+  padding: 0;
+  cursor: pointer;
   width: 10px;
   height: 10px;
   border-radius: 50%;
@@ -771,3 +787,4 @@ body.awake .bar {
 }
 
 .agent-sub select { flex: 1; }
+.agent-sub .note { font-size: 11px; white-space: nowrap; }
