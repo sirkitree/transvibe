@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import {
   normalizeAgent, normalizeRoster, migrateRoster, speechFor, commandAgent,
-  addAgent, updateAgent, removeAgent, nextHue, HUES, KINDS
+  addAgent, updateAgent, removeAgent, nextHue, defaultModel, migrateModels,
+  DEFAULT_MODEL, HUES, KINDS
 } from '../src/shared/agents.js'
 import { DEFAULTS } from '../src/main/config.js'
 
@@ -178,5 +179,34 @@ describe('colours', () => {
     // listening ribbon above it is the one thing it must not do.
     expect(normalizeAgent({ name: 'first' }, 0).hue).toBe(HUES[0])
     expect(HUES[0]).not.toBe(0.38)
+  })
+})
+
+describe('a model each', () => {
+  const roster = normalizeRoster([
+    { name: 'mira', kind: 'commands', model: 'gemma4:e2b' },
+    { name: 'ada', kind: 'chat', model: 'llama3' }
+  ])
+
+  it('thinks with the commands agent’s model when nobody was addressed', () => {
+    // Tidying dictation is not a reply to anyone; the agent that runs commands
+    // is the app as far as anyone is concerned.
+    expect(defaultModel(roster)).toBe('gemma4:e2b')
+  })
+
+  it('falls back to something rather than to nothing', () => {
+    expect(defaultModel([])).toBe(DEFAULT_MODEL)
+    expect(defaultModel(normalizeRoster([{ name: 'ada', kind: 'chat' }]))).toBe(DEFAULT_MODEL)
+  })
+
+  it('carries the old single setting onto every agent that had none', () => {
+    const before = normalizeRoster([{ name: 'mira' }, { name: 'ada', kind: 'chat', model: 'llama3' }])
+    const after = migrateModels(before, 'gemma4:e2b')
+    expect(after.map(a => a.model)).toEqual(['gemma4:e2b', 'llama3'])
+  })
+
+  it('gives a new agent the same model the rest are using', () => {
+    // Rather than nothing, and a dropdown you have to notice.
+    expect(addAgent(roster, { name: 'bob' }).agents.at(-1).model).toBe('gemma4:e2b')
   })
 })

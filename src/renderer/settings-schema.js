@@ -272,7 +272,7 @@ export const SECTIONS = [
   },
   {
     title: 'Advanced',
-    note: 'The plumbing. Sensible left alone, and worth a look when something is not behaving.',
+    note: 'The plumbing. Sensible left alone, and worth a look when something is not behaving. Which local model does the thinking is each agent’s own, in the Agents tab — dictation, which is addressed to nobody, uses the one belonging to whoever runs commands.',
     fields: [
       {
         key: 'cleanup',
@@ -285,12 +285,6 @@ export const SECTIONS = [
         label: 'Guess what an unrecognised command meant',
         spoken: ['the command fallback', 'guessing at commands'],
         type: 'toggle'
-      },
-      {
-        key: 'assistModel',
-        label: 'Default local model',
-        help: 'Used to tidy dictation, which is addressed to nobody, and by any agent that has not named its own in the Agents tab. What Ollama has pulled on this machine; nothing to do with the speech model, and it only ever sees text.',
-        type: 'select', options: 'ollama', missingSuffix: '— not pulled'
       },
       { key: 'assistUrl', label: 'Ollama at', type: 'text', placeholder: 'http://127.0.0.1:11434' },
       {

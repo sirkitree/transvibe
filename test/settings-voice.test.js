@@ -233,7 +233,7 @@ describe('the aliases themselves', () => {
     expect(reachable).toHaveLength(27)
     // Free text and paths, and nothing else.
     expect(panelOnly.sort()).toEqual(
-      ['assistModel', 'assistUrl', 'language', 'modelPath', 'sendTarget'])
+      ['assistUrl', 'language', 'modelPath', 'sendTarget'])
   })
 })
 

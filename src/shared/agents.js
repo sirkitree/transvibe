@@ -23,6 +23,11 @@
 
 export const KINDS = ['commands', 'chat', 'external']
 
+/* The model an agent gets when nothing else says otherwise: small, fast, and
+   the one the app used to hold as a single global setting. There is no global
+   any more — a model belongs to whoever is thinking with it. */
+export const DEFAULT_MODEL = 'gemma4:e2b'
+
 /* Hues around the wheel, far enough apart to be told apart at a glance, and
    assigned in order to agents that have not been given one. Warm first, and
    the strip's own green last: an agent's colour is what the speaking ribbon
@@ -121,6 +126,20 @@ export function migrateRoster (settings) {
 }
 
 /**
+ * The model each agent thinks with, filled in from the setting that used to
+ * hold one for all of them.
+ *
+ * Same shape of migration as the wake phrase: what someone had configured has
+ * to survive becoming a per-agent choice, and then the old key goes, so there
+ * is one place that answers "which model" rather than two that can disagree.
+ */
+export function migrateModels (roster, legacyModel) {
+  const fallback = text(legacyModel) || DEFAULT_MODEL
+  return normalizeRoster(roster).map((agent, i) =>
+    normalizeAgent({ ...agent, model: agent.model || fallback }, i))
+}
+
+/**
  * How this agent should sound, falling back to the app's own voice.
  *
  * The fallback is not a formality: a command armed with the key rather than
@@ -139,6 +158,19 @@ export function speechFor (agent, settings = {}) {
 export function commandAgent (roster) {
   const list = Array.isArray(roster) ? roster : []
   return list.find(a => a.kind === 'commands') || null
+}
+
+/**
+ * The model to think with when nobody was addressed.
+ *
+ * Tidying dictation is the case: it is not a reply to anyone, it happens to
+ * text you were dictating rather than saying to a name. The agent that runs
+ * commands is the app as far as anyone is concerned, so its model is the one
+ * the app uses when it is being nobody in particular.
+ */
+export function defaultModel (roster) {
+  const first = commandAgent(roster) || (Array.isArray(roster) ? roster[0] : null)
+  return (first && first.model) || DEFAULT_MODEL
 }
 
 /* ------------------------------------------------------------------ *
@@ -162,7 +194,10 @@ export function addAgent (roster, raw) {
   if (agents.some(a => same(a.name, name))) {
     return { ok: false, agents, error: `${name} is already on the list` }
   }
-  const agent = normalizeAgent({ ...raw, name }, agents.length)
+  // A new name starts out thinking with whatever the rest of them think with,
+  // rather than with nothing and a dropdown you have to notice.
+  const agent = normalizeAgent(
+    { model: defaultModel(agents), ...raw, name }, agents.length)
   return { ok: true, agents: [...agents, agent] }
 }
 

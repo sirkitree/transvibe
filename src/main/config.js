@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
-import { migrateRoster } from '../shared/agents.js'
+import { migrateRoster, migrateModels } from '../shared/agents.js'
 
 const DIR = path.join(os.homedir(), 'Library', 'Application Support', 'transvibe')
 const FILE = path.join(DIR, 'settings.json')
@@ -86,10 +86,13 @@ export const DEFAULTS = {
      default: they are only useful if you have pulled the model, and each adds
      a few hundred ms after an utterance settles.
        cleanup         tidy fillers and false starts out of settled text
-       commandFallback ask it what an unrecognised command meant */
+       commandFallback ask it what an unrecognised command meant
+
+     Which model does the thinking is each agent's own — see `agents` above.
+     Dictation is addressed to nobody, so tidying it uses the model belonging
+     to whoever runs commands. */
   cleanup: false,
   commandFallback: false,
-  assistModel: 'gemma4:e2b',
   assistUrl: 'http://127.0.0.1:11434',
 
   /* How sure the recogniser has to have been that it was hearing speech.
@@ -115,7 +118,11 @@ function migrate (saved) {
   const settings = { ...DEFAULTS, ...saved }
   settings.agents = migrateRoster(saved && Object.keys(saved).length ? saved : DEFAULTS)
   if (!settings.agents.length) settings.agents = migrateRoster(DEFAULTS)
+  // A model belongs to whoever thinks with it. What used to be one setting for
+  // all of them becomes each of theirs, and then stops being a setting.
+  settings.agents = migrateModels(settings.agents, saved && saved.assistModel)
   delete settings.wakeWord
+  delete settings.assistModel
   return settings
 }
 

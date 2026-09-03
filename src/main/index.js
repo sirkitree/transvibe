@@ -8,6 +8,7 @@ import fs, { existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { createEngine } from './whisper.js'
 import { createAssist, listOllamaModels } from './assist.js'
+import { defaultModel } from '../shared/agents.js'
 import { speak, stopSpeaking, listVoices } from './speech.js'
 import { findModel, downloadModel, listModels, humanSize, MODELS_DIR } from './models.js'
 import * as config from './config.js'
@@ -295,11 +296,15 @@ async function initAssist () {
   if (!asked && !settings.speakReplies) { assist = null; return }
   // A chat agent that cannot reach Ollama is worth saying out loud: unlike the
   // other two, it is the whole of what that name does.
-  assist = createAssist({ url: settings.assistUrl, model: settings.assistModel })
+  /* The model the app thinks with when it is being nobody in particular —
+     tidying dictation, which is addressed to no name. Each agent's own model
+     overrides it at the point of use. */
+  const model = defaultModel(settings.agents)
+  assist = createAssist({ url: settings.assistUrl, model })
   const ok = await assist.check()
   // Only the features that cannot work without it are worth an error.
   if (!ok && asked) {
-    send('status', { state: 'error', message: `assist model ${settings.assistModel} not available — is Ollama running?` })
+    send('status', { state: 'error', message: `${model} not available — is Ollama running?` })
   }
 }
 
@@ -498,7 +503,7 @@ ipcMain.handle('settings:set', (_e, patch) => {
     })
   }
   if ('cleanup' in patch || 'commandFallback' in patch || 'agents' in patch ||
-      'assistModel' in patch || 'assistUrl' in patch || 'speakReplies' in patch) {
+      'assistUrl' in patch || 'speakReplies' in patch) {
     initAssist()
   }
   // Turning replies off mid-sentence should stop the sentence.

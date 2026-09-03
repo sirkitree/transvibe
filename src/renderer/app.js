@@ -8,7 +8,8 @@ import { matchAgent } from './wake.js'
 import { parseSettingCommand, applySettingCommand, settingPhrases } from './settings-voice.js'
 import { FIELDS } from './settings-schema.js'
 import {
-  speechFor, commandAgent, addAgent, updateAgent, removeAgent, nextHue, KINDS
+  speechFor, commandAgent, defaultModel, addAgent, updateAgent, removeAgent,
+  nextHue, KINDS
 } from '../shared/agents.js'
 import {
   addTerms, removeTerm, addCorrection, removeCorrection, sortedEntries, splitWords
@@ -940,16 +941,21 @@ async function renderAgents (into = null) {
       sub.append(el('span', 'note', agent.kind === 'chat' ? 'answers with' : 'thinks with'))
       const model = el('select')
       const { options, note } = await assistModelOptions()
-      const fallback = el('option', null,
-        `Default — ${state.settings.assistModel}`)
-      fallback.value = ''
-      model.append(fallback)
       for (const option of options) {
         const node = el('option', null, option.label)
         node.value = option.value
         model.append(node)
       }
-      model.value = agent.model || ''
+      model.value = agent.model || defaultModel(roster)
+      // A model that is no longer pulled must not silently read as another
+      // one: it is still what the file says, and saying so is how you find out
+      // why the answers stopped coming.
+      if (!options.some(o => o.value === model.value)) {
+        const missing = el('option', null, `${model.value} — not pulled`)
+        missing.value = model.value
+        model.append(missing)
+        model.value = model.value
+      }
       model.onchange = () => saveAgents(updateAgent(roster, agent.name, {
         model: model.value || null
       }))

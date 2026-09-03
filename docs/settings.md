@@ -12,7 +12,7 @@ Six tabs, grouped by what you are trying to change rather than by which part of 
 
 ![The Transcription tab: a dropdown of the whisper models found on this machine, the language, and the glossary-echo toggle](images/settings-transcription.png)
 
-Most of it is reachable by voice too — "hey Claude, turn off spoken replies", "set the fade to ten seconds", "what's the threshold". Everything in the table below is, except `agents`, `language`, `sendTarget`, `modelPath`, `assistModel` and `assistUrl`: those are free text or paths, and a misheard wake phrase would take the voice commands with it. [Using transvibe](using.md#settings-by-voice) has the grammar.
+Most of it is reachable by voice too — "hey Claude, turn off spoken replies", "set the fade to ten seconds", "what's the threshold". Everything in the table below is, except `agents`, `language`, `sendTarget`, `modelPath` and `assistUrl`: those are free text or paths, and a misheard wake phrase would take the voice commands with it. [Using transvibe](using.md#settings-by-voice) has the grammar.
 
 Behind it is `~/Library/Application Support/transvibe/settings.json`, written on change and merged over the defaults, so deleting the file resets everything. Editing it by hand still works; the panel reads it fresh each time it opens.
 
@@ -23,7 +23,7 @@ Behind it is `~/Library/Application Support/transvibe/settings.json`, written on
 | `interimMs` | `500` | how often the open utterance is re-transcribed |
 | `commandTimeoutMs` | `6000` | command mode disarms itself after this |
 | `conversationMs` | `25000` | how long an agent that talks back keeps listening without its name; `0` off |
-| `agents` | one commands agent | who you can talk to: a name, what it does, and how it sounds. Edited in the agents panel |
+| `agents` | one commands agent | who you can talk to: a name, what it does, the voice it says it in and the model it thinks with. Edited in the Agents tab |
 | `wakeWordFuzzy` | `true` | forgive near-misses in the wake phrase ("hey cloud") |
 | `speakReplies` | `true` | say what a command just did, out loud |
 | `speakVoice` | `null` | macOS voice name for agents that have none of their own; null = the system voice |
@@ -46,7 +46,6 @@ Behind it is `~/Library/Application Support/transvibe/settings.json`, written on
 | `dropGlossaryEcho` | `true` | discard an utterance that is only glossary words |
 | `cleanup` | `false` | tidy fillers out of settled text with the assist model |
 | `commandFallback` | `false` | ask the assist model about unrecognised commands |
-| `assistModel` | `'gemma4:e2b'` | default Ollama model: used to tidy dictation, and by any agent that has not named its own |
 | `assistUrl` | `'http://127.0.0.1:11434'` | where Ollama is listening |
 | `vizLinesPerFamily` | `18` | polylines per hue family (×3) |
 | `vizPoints` | `220` | samples per polyline |
