@@ -2,9 +2,12 @@ import { startCapture } from './audio.js'
 import { createVisualizer } from './visualizer.js'
 import { createSayingViz } from './saying-viz.js'
 import { parseCommand, applyCommand, spokenFor, splitChain, COMMANDS } from './commands.js'
-import { splitWakeWord } from './wake.js'
+import { matchAgent } from './wake.js'
 import { parseSettingCommand, applySettingCommand, settingPhrases } from './settings-voice.js'
 import { FIELDS } from './settings-schema.js'
+import {
+  speechFor, commandAgent, addAgent, updateAgent, removeAgent, KINDS
+} from '../shared/agents.js'
 import {
   addTerms, removeTerm, addCorrection, removeCorrection, sortedEntries, splitWords
 } from './glossary-edit.js'
@@ -32,6 +35,11 @@ const state = {
   capture: null,
   viz: null,
   sayingViz: null,   // the app's own voice, drawn while it is talking
+  /* Who is being addressed. Set the moment a name is heard and held while the
+     app answers, because everything about the answer — which parser reads it,
+     which voice says it, what colour the ribbon is — belongs to whoever was
+     asked, not to the app in general. */
+  agent: null,
   // The word fixer's checkboxes, remembered across opens: whoever turns
   // 'remember' off is usually making a run of one-off fixes, not one.
   fixRemember: true,
@@ -143,6 +151,34 @@ const COMMAND_PHRASES = [
   ...settingPhrases(FIELDS)
 ]
 
+/**
+ * Hand an utterance to whichever agent was named.
+ *
+ * The name is the routing decision, which is why there is no guessing to do
+ * here: Mira runs commands because Mira is a commands agent, not because the
+ * sentence looked like one. What a name means is a thing you set up once, in
+ * the panel, rather than something the app infers every time you speak.
+ *
+ * @param {object} agent
+ * @param {string} utterance what was said after the name
+ * @param {{keep?: function}} options `keep` puts the words back as dictation
+ */
+async function addressAgent (agent, utterance, { keep = null } = {}) {
+  if (!agent || agent.kind === 'commands') return runCommand(utterance, { keep })
+
+  /* Reserved, and refused rather than quietly ignored: a name that is set up
+     to hand the sentence somewhere else should say so until it can. */
+  if (agent.kind === 'external') {
+    hint(`${agent.name} cannot run anything yet`)
+    say('not wired up yet')
+    if (keep) keep()
+    render()
+    return
+  }
+
+  return runCommand(utterance, { keep })
+}
+
 /* One spoken utterance, interpreted as an editing command rather than as text
    to insert. A parse failure must never silently swallow what was said. */
 async function runCommand (utterance, { retry = true, keep = null, collect = null } = {}) {
@@ -242,6 +278,7 @@ async function runCommand (utterance, { retry = true, keep = null, collect = nul
     case 'resume': setListeningState(true); break
     case 'hide': window.transvibe.hide(); break
     case 'settings': window.transvibe.openPanel('settings'); break
+    case 'agents': window.transvibe.openPanel('agents'); break
     case 'closePanel': closeOpenPanel(); break
   }
 
@@ -406,7 +443,10 @@ const SPEECH_TAIL_MS = 250
  * phrase in one of them, is an app that talks to itself. */
 async function voice (line, options) {
   if (!line || !state.settings.speakReplies) return
-  await whileDeaf(() => window.transvibe.speak(line, options))
+  // Whoever was addressed answers in their own voice, so you can hear which
+  // one of them it was without being told.
+  const sound = speechFor(state.agent, state.settings)
+  await whileDeaf(() => window.transvibe.speak(line, { ...sound, ...options }))
 }
 
 /* Everything that makes noise goes through here, so there is one place that
@@ -416,8 +456,12 @@ async function whileDeaf (speaking) {
   state.deaf++
   if (state.capture) state.capture.setDeaf(true)
   // Both halves of the same moment: the microphone goes off and the app's own
-  // ribbon comes on, for exactly as long as the speakers are busy.
-  if (state.sayingViz) state.sayingViz.start()
+  // ribbon comes on, for exactly as long as the speakers are busy — wearing
+  // the colour of whoever is doing the talking.
+  if (state.sayingViz) {
+    if (state.agent) state.sayingViz.setHue(state.agent.hue)
+    state.sayingViz.start()
+  }
   try {
     await speaking()
     if (state.sayingViz) state.sayingViz.stop()
@@ -440,8 +484,8 @@ function say (line, options) {
    it there and then, rather than making you go and run a command to find out
    what you picked. It plays even with replies switched off: picking a voice is
    a question about the voice, not a change of mind about the feature. */
-function previewVoice () {
-  whileDeaf(() => window.transvibe.previewVoice())
+function previewVoice (options) {
+  whileDeaf(() => window.transvibe.previewVoice(options))
     .catch(err => console.warn('[transvibe] voice preview failed:', err.message))
 }
 
@@ -539,7 +583,7 @@ function buildHelp () {
   section('Keys', [
     ['hold right ⌥', 'Speak one command instead of dictating'],
     ['⌃⌥C', 'Same, without holding a key'],
-    ['say the wake phrase', 'Same again, no key at all — “hey Claude, delete that” until you change it'],
+    ['say a name', 'Same again, no key at all — “hey Claude, delete that”. The names are yours to set'],
     ['it answers back', 'Spoken aloud after each command; the mic is deaf while it talks. Settings › Spoken replies'],
     ['chain them', 'and / then / a comma: “open settings and change the voice to Karen”'],
     ['⌃⌥↩', 'Send the transcript to the app in front'],
@@ -559,7 +603,7 @@ function buildHelp () {
     ['copy', 'Copy the whole transcript'],
     ['trash', 'Clear the transcript'],
     ['book', 'Glossary — words to recognise, and fixes for the ones it misses'],
-    ['gear', 'Settings — everything else, applied as you change it'],
+    ['gear', 'Settings — everything else, applied as you change it. Agents live behind it'],
     ['?', 'This panel'],
     ['mic', 'Pause and resume listening']
   ])
@@ -592,9 +636,9 @@ function buildHelp () {
 
   const names = FIELDS.filter(f => f.spoken).map(f => f.spoken[0])
   body.append(el('p', 'note',
-    `Settings you can name out loud: ${names.join(', ')}. The wake phrase, ` +
-    'the language, the send target and the model paths are panel-only — a ' +
-    'misheard wake phrase would take the voice commands with it.'))
+    `Settings you can name out loud: ${names.join(', ')}. The language, the ` +
+    'send target and the model paths are panel-only — they are free text, ' +
+    'and a misheard path is worse than no path.'))
 
   body.append(el('p', 'note',
     'The strip has no window: it hangs off the top of the screen and every ' +
@@ -605,6 +649,121 @@ function buildHelp () {
     'guessed at, so nothing you said is silently swallowed.'))
   body.append(el('p', 'note',
     'Everything runs on this Mac. Audio never leaves the device.'))
+}
+
+/* --------------------------------------------------------------------- agents
+   A list of records rather than a set of fields, which is why it has a panel
+   of its own instead of a row in settings: a name, what saying it does, and
+   the voice the answer comes back in. Every change round-trips through the
+   main process and the reply is the new settings, so what is on screen is
+   what was saved. */
+
+function agentsNote (text, warn = false) {
+  const note = $('agents-note')
+  note.textContent = text
+  note.classList.toggle('warn', warn)
+}
+
+async function saveAgents (result) {
+  if (!result.ok) return agentsNote(result.error, true)
+  state.settings = await window.transvibe.setSettings({ agents: result.agents })
+  renderAgents()
+  agentsNote('Saved.')
+}
+
+const KIND_LABELS = {
+  commands: 'runs commands',
+  chat: 'talks back',
+  external: 'hands it on (not yet)'
+}
+
+async function renderAgents () {
+  const body = $('agents-body')
+  const roster = state.settings.agents || []
+  body.replaceChildren()
+
+  body.append(el('p', 'note lead',
+    'Say a name at the start of a sentence and the rest of it is addressed ' +
+    'to that one. Each answers in its own voice, so you can hear which of ' +
+    'them replied without being told.'))
+
+  const voices = await voiceOptions()
+
+  for (const agent of roster) {
+    const row = el('div', 'agent-row')
+
+    const dot = el('span', 'agent-dot')
+    dot.style.color = `hsl(${Math.round(agent.hue * 360)} 85% 62%)`
+    row.append(dot)
+
+    const name = el('input')
+    name.type = 'text'
+    name.value = agent.name
+    name.spellcheck = false
+    name.title = 'What you say to address it'
+    name.onchange = () => saveAgents(updateAgent(roster, agent.name, { name: name.value }))
+    row.append(name)
+
+    const kind = el('select')
+    for (const k of KINDS) {
+      const option = el('option', null, KIND_LABELS[k])
+      option.value = k
+      kind.append(option)
+    }
+    kind.value = agent.kind
+    kind.onchange = () => saveAgents(updateAgent(roster, agent.name, { kind: kind.value }))
+    row.append(kind)
+
+    const voice = el('select')
+    for (const option of voices.options) {
+      const node = el('option', null, option.value ? option.label : 'Default voice')
+      node.value = option.value
+      voice.append(node)
+    }
+    voice.value = agent.voice || ''
+    voice.title = 'Empty uses the default voice from settings'
+    voice.onchange = async () => {
+      await saveAgents(updateAgent(roster, agent.name, { voice: voice.value || null }))
+      /* Auditioning the character rather than the voice: it says its own name,
+         which is what you are actually choosing between. */
+      previewVoice({
+        voice: voice.value || undefined,
+        rate: agent.rate ?? undefined,
+        line: `${agent.name} here. This is how a reply sounds.`
+      })
+    }
+    row.append(voice)
+
+    const drop = el('button', 'agent-drop', '×')
+    drop.type = 'button'
+    drop.title = `Remove ${agent.name}`
+    drop.onclick = () => saveAgents(removeAgent(roster, agent.name))
+    row.append(drop)
+
+    body.append(row)
+  }
+
+  const add = el('form', 'gl-add')
+  const input = el('input')
+  input.type = 'text'
+  input.placeholder = 'another name — “ada”'
+  input.spellcheck = false
+  const kind = el('select')
+  for (const k of KINDS) {
+    const option = el('option', null, KIND_LABELS[k])
+    option.value = k
+    kind.append(option)
+  }
+  const submit = el('button', null, 'add')
+  submit.type = 'submit'
+  add.append(input, kind, submit)
+  add.onsubmit = async e => {
+    e.preventDefault()
+    const result = addAgent(roster, { name: input.value, kind: kind.value })
+    if (result.ok) input.value = ''
+    await saveAgents(result)
+  }
+  body.append(add)
 }
 
 /* ------------------------------------------------------------------- glossary
@@ -818,6 +977,7 @@ async function doSend () {
    asks the main process for a taller strip and pins it awake, so it cannot go
    click-through while you are typing into it. */
 const PANELS = {
+  agents: { btn: null, open: renderAgents },
   help: { btn: 'help-btn', open: buildHelp },
   glossary: { btn: 'glossary-btn', open: renderGlossary },
   settings: { btn: 'settings-btn', open: () => state.settingsPanel.render() }
@@ -831,7 +991,9 @@ function togglePanel (name, show) {
     PANELS[name].open()
   }
   panel.hidden = !next
-  $(PANELS[name].btn).classList.toggle('on', next)
+  // Not every panel has a button on the strip: agents is reached from the
+  // settings panel and by voice, because eight buttons is already plenty.
+  if (PANELS[name].btn) $(PANELS[name].btn).classList.toggle('on', next)
   syncHold()
   syncHeight()
 }
@@ -1054,6 +1216,9 @@ async function main () {
       state.liveSeq++
       state.pending++
       const asCommand = state.commandMode
+      // Armed with a key rather than with a name: the reply still has to sound
+      // like something, so it comes from whoever runs commands.
+      if (asCommand && !state.agent) state.agent = commandAgent(state.settings.agents)
       // Read staleness before the new activity clears it: this utterance is
       // what decides whether the faded transcript was the end of a thought.
       const wasStale = state.presence.stale
@@ -1071,21 +1236,28 @@ async function main () {
         else if (asCommand) runCommand(res.text).catch(err => hint(err.message))
         else {
           /* Nobody armed anything: the words themselves decide. An utterance
-             that opens with the wake phrase is a command, and — unlike
+             that opens with an agent's name is addressed to it, and — unlike
              dictation — a faded transcript is left alone, because editing
              what is already on the strip is the whole point of saying it. */
-          const wake = splitWakeWord(res.text, {
-            phrase: state.settings.wakeWord,
+          const wake = matchAgent(res.text, state.settings.agents, {
             fuzzy: state.settings.wakeWordFuzzy
           })
           if (wake.matched && wake.rest) {
-            runCommand(wake.rest, { keep: () => dictate(res.text, wasStale) })
+            state.agent = wake.agent
+            addressAgent(wake.agent, wake.rest, { keep: () => dictate(res.text, wasStale) })
               .catch(err => hint(err.message))
           } else if (wake.matched) {
-            // The phrase on its own: you are about to say the command.
+            // The name on its own: you are about to say the rest.
+            state.agent = wake.agent
             window.transvibe.setCommandMode(true)
             setCommandMode(true)
-            hint('listening for a command…')
+            hint(`${wake.agent.name} is listening…`)
+          } else if (wake.ambiguous) {
+            /* Two names equally close to what was heard. Guessing is how you
+               address the wrong one, so the words go down as dictation and
+               you say it again. */
+            hint('heard a name, but not which one')
+            dictate(res.text, wasStale)
           } else dictate(res.text, wasStale)
         }
       } finally {
@@ -1096,6 +1268,11 @@ async function main () {
           window.transvibe.setCommandMode(false)
           setCommandMode(false)
         }
+        /* `state.agent` is deliberately *not* cleared here. The command it was
+           set for is still running — nothing on this path is awaited — and the
+           reply it will eventually speak has to come out in the right voice.
+           The next name said overwrites it, which is the only moment the
+           addressee genuinely changes. */
         render()
       }
     },
@@ -1112,8 +1289,7 @@ async function main () {
         if (seq === state.liveSeq && res.text) {
           const wake = state.commandMode
             ? { matched: false, rest: res.text }
-            : splitWakeWord(res.text, {
-              phrase: state.settings.wakeWord,
+            : matchAgent(res.text, state.settings.agents, {
               fuzzy: state.settings.wakeWordFuzzy
             })
           state.liveWake = wake.matched
@@ -1172,6 +1348,7 @@ async function main () {
   $('help-close').onclick = () => togglePanel('help', false)
   $('glossary-btn').onclick = () => togglePanel('glossary')
   $('glossary-close').onclick = () => togglePanel('glossary', false)
+  $('agents-close').onclick = () => togglePanel('agents', false)
   $('settings-btn').onclick = () => togglePanel('settings')
   $('settings-close').onclick = () => togglePanel('settings', false)
   wireGlossary()

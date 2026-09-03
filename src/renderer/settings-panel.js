@@ -202,10 +202,12 @@ export function createSettingsPanel ({
     // rest of the app: reachable from here rather than only from the strip.
     const elsewhere = el('section', 'set-pane')
     elsewhere.append(el('p', 'note lead',
-      'Words to listen for and fixes for the ones it mishears live in the ' +
-      'glossary, which is a better editor for them than a text field.'))
+      'Who you can talk to, and the words to listen for, are lists of their ' +
+      'own — better edited in a panel built for them than in a text field.'))
     const links = el('div', 'set-links')
-    for (const [label, panel] of [['Glossary', 'glossary'], ['Keys & commands', 'help']]) {
+    for (const [label, panel] of [
+      ['Agents', 'agents'], ['Glossary', 'glossary'], ['Keys & commands', 'help']
+    ]) {
       const button = el('button', null, label)
       button.type = 'button'
       button.onclick = () => open(panel)

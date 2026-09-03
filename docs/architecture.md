@@ -19,7 +19,7 @@ main      wav.js (16-bit mono WAV) → whisper.js FIFO queue → whisper-server
                                → assist.cleanup (optional) ──┐        │
                                    swaps the tidied text in ─┘        │
                              command mode (right ⌥ held, ⌃⌥C, ────────┘
-                              or wake.js hears the wake phrase)
+                              or wake.js hears an agent's name)
                                → commands.js → edit the transcript
                                → on a miss: assist.command (optional)
                                    → picks a known phrase → commands.js
@@ -101,7 +101,8 @@ src/main/       index.js      window, tray, shortcuts, IPC, send
                 config.js     settings persistence
                 assist.js     optional local LLM pass (Ollama)
                 speech.js     saying a confirmation out loud via `say`
-src/shared/     glossary.js   vocabulary prompt + corrections (pure)
+src/shared/     agents.js     who you can talk to, and what a name means (pure)
+                glossary.js   vocabulary prompt + corrections (pure)
                 assist.js     assist prompts + reply guards (pure)
 src/renderer/   app.js        transcript UI, command dispatch, help panel
                 settings-schema.js  what settings.json holds (pure)
@@ -111,7 +112,7 @@ src/renderer/   app.js        transcript UI, command dispatch, help panel
                 vad.js        voice-activity state machine (pure)
                 presence.js   when the transcript fades and expires (pure)
                 commands.js   voice-command parser + applier (pure)
-                wake.js       does an utterance open with the wake phrase (pure)
+                wake.js       is an utterance addressed to one of them (pure)
                 glossary-edit.js  glossary panel edit rules (pure)
                 band.js       visualizer math (pure)
                 visualizer.js canvas rendering
@@ -124,4 +125,4 @@ script/         install-launcher.sh  build ~/Applications/Transvibe.app
                 make-icon.py         draw build/icon.icns
 ```
 
-The pure modules — `vad`, `commands`, `band`, `wav`, `overlay`, `presence`, `glossary`, `glossary-edit`, `assist`, `whisper-parse`, `settings-schema`, `settings-voice`, `saying` — take no DOM, Electron, filesystem or network dependency, which is what makes the awkward parts (segment boundaries, command false positives, model replies) testable under plain Node rather than only discoverable by hand.
+The pure modules — `vad`, `commands`, `band`, `wav`, `overlay`, `presence`, `glossary`, `glossary-edit`, `assist`, `agents`, `whisper-parse`, `settings-schema`, `settings-voice`, `saying` — take no DOM, Electron, filesystem or network dependency, which is what makes the awkward parts (segment boundaries, command false positives, model replies) testable under plain Node rather than only discoverable by hand.

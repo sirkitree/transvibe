@@ -20,6 +20,8 @@ export function createSayingViz (canvas, { bins = 96, hueBase = 0.02 } = {}) {
   let startedAt = null
   let stoppedAt = null
   let seed = 1
+  let base = hueBase
+  let viz = null
 
   /* Everything `createVisualizer` asks of an AnalyserNode, which is not much:
      how many bins there are, and a fill of the current ones. */
@@ -38,9 +40,9 @@ export function createSayingViz (canvas, { bins = 96, hueBase = 0.02 } = {}) {
     }
   }
 
-  const viz = createVisualizer(canvas, {
+  const build = () => createVisualizer(canvas, {
     analyser,
-    hueBase,
+    hueBase: base,
     // Fewer lines and far less travel than the big ribbon: at full gain in a
     // box this size every line clips against the edges and the strands fill
     // in as one solid block.
@@ -56,6 +58,8 @@ export function createSayingViz (canvas, { bins = 96, hueBase = 0.02 } = {}) {
     centerRatio: 0.5     // centred in its own box, not hanging off an edge
   })
 
+  viz = build()
+
   /* Faded out and finished: stop drawing, and wipe the last frame so nothing
      is left painted under a canvas that is about to be shown again. */
   function settle () {
@@ -69,6 +73,20 @@ export function createSayingViz (canvas, { bins = 96, hueBase = 0.02 } = {}) {
   }
 
   return {
+    /**
+     * Whose voice this is about to be.
+     *
+     * Rebuilt rather than retuned: the hue is baked into every line when the
+     * band model is made, and this happens only when the agent being addressed
+     * changes — a handful of times an hour, on a canvas the size of a word.
+     */
+    setHue (value) {
+      if (!Number.isFinite(value) || value === base) return
+      base = value
+      viz.destroy()
+      viz = build()
+    },
+
     /** The app has started talking. */
     start () {
       // A new sentence re-seeds the phases, so two replies in a row do not

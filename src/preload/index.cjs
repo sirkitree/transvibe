@@ -23,7 +23,7 @@ contextBridge.exposeInMainWorld('transvibe', {
      what the renderer needs: it stops listening for exactly that long. */
   speak: (message, options) => ipcRenderer.invoke('speak', message, options),
   /** say one fixed line in the voice just chosen, off-switch and all */
-  previewVoice: () => ipcRenderer.invoke('speak:preview'),
+  previewVoice: options => ipcRenderer.invoke('speak:preview', options),
   /** every macOS voice on this machine, for the voice picker */
   listVoices: () => ipcRenderer.invoke('voices:list'),
   send: text => ipcRenderer.invoke('send', text),

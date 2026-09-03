@@ -390,7 +390,9 @@ body.awake .bar {
   border-color: hsl(var(--accent) 70% 65% / 0.75);
 }
 
-.set-row select {
+.set-row select,
+.agent-row select,
+.gl-add select {
   width: 100%;
   border: 1px solid hsl(var(--accent) 60% 65% / 0.3);
   border-radius: 7px;
@@ -401,7 +403,9 @@ body.awake .bar {
   padding: 5px 8px;
   cursor: pointer;
 }
-.set-row select:focus {
+.set-row select:focus,
+.agent-row select:focus,
+.gl-add select:focus {
   outline: none;
   border-color: hsl(var(--accent) 70% 65% / 0.75);
 }
@@ -625,6 +629,7 @@ body.awake .bar {
 .gl-add.pair { display: grid; grid-template-columns: 1fr auto 1fr auto; }
 
 .gl-add input,
+.agent-row input[type="text"],
 .fixer input[type="text"] {
   min-width: 0;
   flex: 1;
@@ -638,6 +643,7 @@ body.awake .bar {
   user-select: text;
 }
 .gl-add input:focus,
+.agent-row input[type="text"]:focus,
 .fixer input[type="text"]:focus {
   outline: none;
   border-color: hsl(var(--accent) 65% 70% / 0.6);
@@ -709,3 +715,59 @@ body.awake .bar {
 .fixer-opt + .fixer-opt { margin-top: 4px; padding-left: 15px; }
 /* Listening for a word only makes sense if the fix is being kept at all. */
 .fixer-opt.off { opacity: 0.35; cursor: default; }
+
+/* ------------------------------------------------------------------ agents
+   One row per name: what it is called, what it does, and how it sounds. The
+   dot carries the agent's own hue, which is the same colour the speaking
+   ribbon wears while that one is talking. */
+.agent-row {
+  display: grid;
+  grid-template-columns: 14px 1fr 132px 140px 26px;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.agent-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  box-shadow: 0 0 8px currentColor;
+  background: currentColor;
+}
+
+/* The add row is a text field with a dropdown beside it, not the other way
+   round: a select stretched to fill leaves the name nowhere to be typed. */
+.gl-add select { flex: 0 0 132px; width: auto; }
+
+/* The row's own fields are the panel's fields — same border, same ground, same
+   focus — declared once above and only sized here. */
+.agent-row input[type="text"],
+.agent-row select {
+  min-width: 0;
+  width: 100%;
+  font-size: 12px;
+}
+
+.agent-row .agent-drop {
+  background: none;
+  border: 0;
+  color: rgba(255, 255, 255, 0.45);
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+  padding: 2px 4px;
+}
+
+.agent-row .agent-drop:hover { color: hsl(4 90% 72%); }
+
+.agent-sub {
+  grid-column: 2 / -1;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding-bottom: 4px;
+}
+
+.agent-sub select { flex: 1; }

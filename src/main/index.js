@@ -527,7 +527,7 @@ ipcMain.handle('assist:command', async (_e, text, phrases) => {
  * The model shortens the line when it is running; when it is not, the strip's
  * own wording is spoken as-is. Either way the outcome being announced is the
  * one that already happened — nothing here can invent a result. */
-ipcMain.handle('speak', async (_e, message, { plain = false } = {}) => {
+ipcMain.handle('speak', async (_e, message, { plain = false, voice, rate } = {}) => {
   if (!settings.speakReplies) return { spoken: false, reason: 'off' }
   const line = String(message == null ? '' : message).trim()
   if (!line) return { spoken: false, reason: 'nothing to say' }
@@ -537,9 +537,12 @@ ipcMain.handle('speak', async (_e, message, { plain = false } = {}) => {
      tighten "the speaking rate is the voice's own", the model offered "voice
      is speaking". A confirmation may be rephrased; an answer may not. */
   const phrased = assist && !plain ? await assist.speak(line) : { text: line, used: false }
+  /* The caller names the voice, because the caller knows who was asked. The
+     app's own settings are the fallback for the paths with no agent behind
+     them — a command armed with the key rather than with a name. */
   const result = await speak(phrased.text, {
-    voice: settings.speakVoice,
-    rate: settings.speakRate
+    voice: voice === undefined ? settings.speakVoice : voice,
+    rate: rate === undefined ? settings.speakRate : rate
   })
   return { spoken: result.ok, said: phrased.text, error: result.error }
 })
@@ -554,10 +557,11 @@ ipcMain.handle('speak', async (_e, message, { plain = false } = {}) => {
  * asked either — there is nothing here to shorten. */
 const PREVIEW_LINE = 'This is how a reply sounds.'
 
-ipcMain.handle('speak:preview', () => speak(PREVIEW_LINE, {
-  voice: settings.speakVoice,
-  rate: settings.speakRate
-}))
+ipcMain.handle('speak:preview', (_e, { voice, rate, line } = {}) => speak(
+  String(line || PREVIEW_LINE), {
+    voice: voice === undefined ? settings.speakVoice : voice,
+    rate: rate === undefined ? settings.speakRate : rate
+  }))
 
 /* The voices macOS has, for the settings panel. Read on every open like the
    model lists are: voices are downloadable, and one added in System Settings
@@ -594,7 +598,7 @@ ipcMain.on('window:hide', () => win && win.hide())
 /* Said out loud rather than clicked. Routed through the same function the menu
    bar uses, so the window is shown first — "go away" then "open settings"
    would otherwise open a panel onto a hidden strip. */
-const VOICE_PANELS = new Set(['settings', 'glossary', 'help'])
+const VOICE_PANELS = new Set(['settings', 'glossary', 'help', 'agents'])
 ipcMain.on('panel:open', (_e, name) => {
   if (VOICE_PANELS.has(name)) openPanel(name)
 })

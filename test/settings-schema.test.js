@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { DEFAULTS } from '../src/main/config.js'
 import {
-  SECTIONS, FIELDS, GLOSSARY_KEYS, EXTERNAL_KEYS, coerce
+  SECTIONS, FIELDS, GLOSSARY_KEYS, PANEL_KEYS, EXTERNAL_KEYS, coerce
 } from '../src/renderer/settings-schema.js'
 
 const fileKeys = FIELDS.filter(f => !f.external).map(f => f.key)
@@ -9,7 +9,8 @@ const fileKeys = FIELDS.filter(f => !f.external).map(f => f.key)
 describe('the settings schema against config.js', () => {
   it('has a row for every setting in the file', () => {
     const missing = Object.keys(DEFAULTS)
-      .filter(k => !GLOSSARY_KEYS.includes(k) && !fileKeys.includes(k))
+      .filter(k => !GLOSSARY_KEYS.includes(k) && !PANEL_KEYS.includes(k) &&
+        !fileKeys.includes(k))
     expect(missing).toEqual([])
   })
 

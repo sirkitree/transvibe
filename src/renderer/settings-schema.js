@@ -36,6 +36,11 @@ export const EXTERNAL_KEYS = ['launchAtLogin']
 /** Keys the glossary panel owns; not shown here. */
 export const GLOSSARY_KEYS = ['vocabulary', 'corrections']
 
+/** Keys with an editor of their own, for the same reason: `agents` is a list
+    of records — a name, what it does, the voice it says it in — and no row in
+    a settings panel can express that. The agents panel edits it instead. */
+export const PANEL_KEYS = ['agents']
+
 export const SECTIONS = [
   {
     title: 'Listening',
@@ -131,14 +136,8 @@ export const SECTIONS = [
   },
   {
     title: 'Command mode',
-    note: 'Hold right ⌥ or press ⌃⌥C and the next thing you say is a command rather than dictation. Or open the sentence with the wake phrase and skip the keyboard entirely.',
+    note: 'Hold right ⌥ or press ⌃⌥C and the next thing you say is a command rather than dictation. Or open the sentence with an agent’s name and skip the keyboard entirely — the names themselves live in the agents panel.',
     fields: [
-      {
-        key: 'wakeWord',
-        label: 'Wake phrase',
-        help: 'Say this at the start of a sentence and the rest of it is a command. Empty turns it off.',
-        type: 'text', placeholder: 'hey claude', nullable: true
-      },
       {
         key: 'wakeWordFuzzy',
         label: 'Forgive near-misses in the wake phrase',
@@ -157,7 +156,7 @@ export const SECTIONS = [
   },
   {
     title: 'Spoken replies',
-    note: 'After a command runs, the app says what it did. You are looking at the app you are dictating into, not at the strip, which is the whole reason the wake phrase exists — so the answer comes back the same way you asked. The microphone stops listening for as long as the reply takes, so it never transcribes itself.',
+    note: 'After a command runs, the app says what it did, in the voice of whoever you asked. You are looking at the app you are dictating into, not at the strip, which is the whole reason the wake phrase exists — so the answer comes back the same way you asked. The microphone stops listening for as long as the reply takes, so it never transcribes itself.',
     fields: [
       {
         key: 'speakReplies',
@@ -167,14 +166,14 @@ export const SECTIONS = [
       },
       {
         key: 'speakVoice',
-        label: 'Voice',
-        spoken: ['the voice'],
-        help: 'The English voices installed on this Mac — the replies are written in English, so the rest are not offered. More can be added in System Settings › Accessibility › Spoken Content, and they show up here without a restart.',
+        label: 'Default voice',
+        spoken: ['the voice', 'the default voice'],
+        help: 'Used by any agent that has not been given a voice of its own, and by a command you armed with the key rather than with a name. The English voices installed on this Mac — the replies are written in English, so the rest are not offered. More can be added in System Settings › Accessibility › Spoken Content, and they show up here without a restart.',
         type: 'select', options: 'voices', nullable: true, missingSuffix: '— not installed'
       },
       {
         key: 'speakRate',
-        label: 'Speaking rate',
+        label: 'Default speaking rate',
         help: 'Words per minute. All the way left leaves the voice at its own pace.',
         spoken: ['the speaking rate', 'the rate', 'how fast you talk'],
         // `base` is where "speak faster" starts from when the rate is still

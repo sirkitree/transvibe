@@ -265,6 +265,12 @@ const EXACT = {
   'open preferences': { action: 'settings' },
   'show preferences': { action: 'settings' },
 
+  agents: { action: 'agents' },
+  'open agents': { action: 'agents' },
+  'show agents': { action: 'agents' },
+  'open the agents': { action: 'agents' },
+  'agents panel': { action: 'agents' },
+
   'close settings': { action: 'closePanel' },
   'close the settings': { action: 'closePanel' },
   'close the panel': { action: 'closePanel' },
@@ -448,6 +454,7 @@ export function applyCommand(cmd, text) {
   // Panels are the app's own furniture: they open onto an empty transcript
   // just as happily as a full one, so they sit above the emptiness check.
   if (action === 'settings') return unchanged('settings', 'settings')
+  if (action === 'agents') return unchanged('agents', 'agents')
   if (action === 'closePanel') return unchanged('closed', 'closePanel')
 
   if (empty) return unchanged('nothing to act on')
@@ -624,6 +631,7 @@ export function spokenFor (cmd, result) {
     case 'resume': return 'listening'
     case 'hide': return 'hidden'
     case 'settings': return 'settings'
+    case 'agents': return 'agents'
     case 'closePanel': return 'closed'
   }
 
@@ -768,6 +776,11 @@ export const COMMANDS = [
     action: 'settings',
     examples: ['open settings', 'show settings', 'settings', 'open preferences'],
     help: 'Open the settings panel — every setting is also sayable on its own.'
+  },
+  {
+    action: 'agents',
+    examples: ['open agents', 'show agents', 'agents'],
+    help: 'Open the agents panel — who you can talk to, and how each one sounds.'
   },
   {
     action: 'closePanel',

@@ -518,7 +518,7 @@ describe('COMMANDS stays in sync with the parser', () => {
     const actions = COMMANDS.map((c) => c.action)
     expect(new Set(actions).size).toBe(actions.length)
     expect(actions.sort()).toEqual([
-      'capitalize', 'clear', 'closePanel', 'copy', 'delete', 'hide',
+      'agents', 'capitalize', 'clear', 'closePanel', 'copy', 'delete', 'hide',
       'lowercase', 'newParagraph', 'pause', 'punctuate', 'replace', 'resume',
       'send', 'settings', 'undo', 'uppercase'
     ].sort())

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { splitWakeWord, phraseTokens } from '../src/renderer/wake.js'
+import { splitWakeWord, matchAgent, phraseTokens } from '../src/renderer/wake.js'
+import { normalizeRoster } from '../src/shared/agents.js'
 import { parseCommand } from '../src/renderer/commands.js'
 
 const split = (text, phrase = 'hey claude', fuzzy = true) =>
@@ -7,13 +8,13 @@ const split = (text, phrase = 'hey claude', fuzzy = true) =>
 
 describe('splitWakeWord — hits', () => {
   it('takes the command from after the phrase', () => {
-    expect(split('hey claude uppercase that')).toEqual({
+    expect(split('hey claude uppercase that')).toMatchObject({
       matched: true, rest: 'uppercase that'
     })
   })
 
   it('ignores the punctuation whisper hangs off the phrase', () => {
-    expect(split('Hey, Claude! Delete the last word.')).toEqual({
+    expect(split('Hey, Claude! Delete the last word.')).toMatchObject({
       matched: true, rest: 'Delete the last word.'
     })
   })
@@ -44,8 +45,8 @@ describe('splitWakeWord — hits', () => {
   })
 
   it('reports an empty rest when the phrase was said on its own', () => {
-    expect(split('hey claude')).toEqual({ matched: true, rest: '' })
-    expect(split('Hey Claude?')).toEqual({ matched: true, rest: '' })
+    expect(split('hey claude')).toMatchObject({ matched: true, rest: '' })
+    expect(split('Hey Claude?')).toMatchObject({ matched: true, rest: '' })
   })
 })
 
@@ -84,7 +85,7 @@ describe('splitWakeWord — near misses', () => {
   it('forgives what a small model does to an unusual name', () => {
     for (const heard of ['hey cloud', 'hey claud', 'hey claudee', 'hey clyde']) {
       expect(split(`${heard} delete that`), heard)
-        .toEqual({ matched: true, rest: 'delete that' })
+        .toMatchObject({ matched: true, rest: 'delete that' })
     }
   })
 
@@ -106,7 +107,7 @@ describe('splitWakeWord — near misses', () => {
 
   it('takes any phrase, not just the default', () => {
     expect(splitWakeWord('computer, clear everything', { phrase: 'computer' }))
-      .toEqual({ matched: true, rest: 'clear everything' })
+      .toMatchObject({ matched: true, rest: 'clear everything' })
     expect(splitWakeWord('yo transvibe send it', { phrase: 'yo transvibe' }).rest)
       .toBe('send it')
   })
@@ -136,4 +137,66 @@ describe('what the splitter hands the parser', () => {
       expect(parseCommand(rest)).toMatchObject({ action })
     })
   }
+})
+
+describe('matchAgent — who was addressed', () => {
+  const roster = normalizeRoster([
+    { name: 'hey claude', kind: 'commands' },
+    { name: 'ada', kind: 'chat' }
+  ])
+  const who = (text, list = roster, options) => {
+    const m = matchAgent(text, list, options)
+    return m.ambiguous ? 'ambiguous' : (m.agent ? m.agent.name : null)
+  }
+
+  it('routes to the name that was said', () => {
+    expect(who('hey claude delete that')).toBe('hey claude')
+    expect(who('ada what is a leap year')).toBe('ada')
+    expect(matchAgent('ada what is a leap year', roster).rest).toBe('what is a leap year')
+  })
+
+  it('leaves an unaddressed sentence alone', () => {
+    expect(who('the meeting is at three')).toBe(null)
+    expect(matchAgent('the meeting is at three', roster).rest).toBe('the meeting is at three')
+  })
+
+  it('still forgives what a small model does to a name', () => {
+    expect(who('hey cloud delete that')).toBe('hey claude')
+    expect(who('hey cloud delete that', roster, { fuzzy: false })).toBe(null)
+  })
+
+  it('prefers the name heard exactly over the one heard nearly', () => {
+    /* The point of the whole rule: with one phrase a near miss was a kindness,
+       but on a roster the near miss is somebody else's name. */
+    const pair = normalizeRoster([{ name: 'claude' }, { name: 'clyde' }])
+    expect(who('claude hello', pair)).toBe('claude')
+    expect(who('clyde hello', pair)).toBe('clyde')
+  })
+
+  it('prefers the longer name over the shorter one inside it', () => {
+    const pair = normalizeRoster([{ name: 'mira' }, { name: 'mira jane' }])
+    expect(who('mira jane hello', pair)).toBe('mira jane')
+    expect(who('mira hello', pair)).toBe('mira')
+  })
+
+  it('refuses to guess between two names equally close', () => {
+    // Guessing is how you address the wrong one. Better to hear nothing.
+    const pair = normalizeRoster([{ name: 'claude' }, { name: 'clyde' }])
+    expect(who('clude hello', pair)).toBe('ambiguous')
+    expect(matchAgent('clude hello', pair).rest).toBe('clude hello')
+  })
+
+  it('is off when the roster is empty', () => {
+    expect(who('hey claude delete that', [])).toBe(null)
+    expect(who('hey claude delete that', null)).toBe(null)
+  })
+
+  it('takes a name said on its own', () => {
+    expect(matchAgent('hey claude', roster)).toMatchObject({ matched: true, rest: '' })
+  })
+
+  it('survives junk rather than throwing', () => {
+    expect(matchAgent(null, roster).matched).toBe(false)
+    expect(matchAgent('', roster).matched).toBe(false)
+  })
 })

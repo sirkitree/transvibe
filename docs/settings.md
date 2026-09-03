@@ -4,13 +4,13 @@ The gear on the strip, or **Settings…** in the menu bar (⌘,). Tabs down the 
 
 Two exceptions say so on the row: the speech model and the language are baked into a running whisper server and take effect on restart.
 
-Two settings are not in the panel. `vocabulary` and `corrections` have the glossary panel, which is a better editor for them than a text field; the panel links there. One setting in the panel is not in the file: **Launch at login** is macOS's, kept in its Login Items list.
+Three settings are not in the settings panel. `agents` has one of its own — a name, a kind and a voice per row is a list of records, not a field. `vocabulary` and `corrections` have the glossary panel, which is a better editor for them than a text field; the panel links there. One setting in the panel is not in the file: **Launch at login** is macOS's, kept in its Login Items list.
 
 ![The settings panel, Listening tab: the tab list down the left, sliders on the right, each with its value and a line saying what it does](images/settings.png)
 
 ![The Transcription tab: a dropdown of the whisper models found on this machine, the language, and the glossary-echo toggle](images/settings-transcription.png)
 
-Most of it is reachable by voice too — "hey Claude, turn off spoken replies", "set the fade to ten seconds", "what's the threshold". Everything in the table below is, except `wakeWord`, `language`, `sendTarget`, `modelPath`, `assistModel` and `assistUrl`: those are free text or paths, and a misheard wake phrase would take the voice commands with it. [Using transvibe](using.md#settings-by-voice) has the grammar.
+Most of it is reachable by voice too — "hey Claude, turn off spoken replies", "set the fade to ten seconds", "what's the threshold". Everything in the table below is, except `agents`, `language`, `sendTarget`, `modelPath`, `assistModel` and `assistUrl`: those are free text or paths, and a misheard wake phrase would take the voice commands with it. [Using transvibe](using.md#settings-by-voice) has the grammar.
 
 Behind it is `~/Library/Application Support/transvibe/settings.json`, written on change and merged over the defaults, so deleting the file resets everything. Editing it by hand still works; the panel reads it fresh each time it opens.
 
@@ -20,10 +20,10 @@ Behind it is `~/Library/Application Support/transvibe/settings.json`, written on
 | `hangoverMs` | `550` | silence before an utterance is considered finished |
 | `interimMs` | `500` | how often the open utterance is re-transcribed |
 | `commandTimeoutMs` | `6000` | command mode disarms itself after this |
-| `wakeWord` | `'hey claude'` | open a sentence with this and the rest of it is a command; empty turns it off |
+| `agents` | one commands agent | who you can talk to: a name, what it does, and how it sounds. Edited in the agents panel |
 | `wakeWordFuzzy` | `true` | forgive near-misses in the wake phrase ("hey cloud") |
 | `speakReplies` | `true` | say what a command just did, out loud |
-| `speakVoice` | `null` | macOS voice name; null = the system voice |
+| `speakVoice` | `null` | macOS voice name for agents that have none of their own; null = the system voice |
 | `speakRate` | `0` | words per minute; `0` = the voice's own pace |
 | `sendTarget` | `null` | app to focus before pasting; null = whatever is in front |
 | `sendPressesEnter` | `false` | also hit Return after pasting |

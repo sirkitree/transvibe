@@ -13,6 +13,7 @@ const MODULES = [
   '../src/main/models.js',
   '../src/shared/glossary.js',
   '../src/shared/assist.js',
+  '../src/shared/agents.js',
   '../src/renderer/glossary-edit.js',
   '../src/renderer/presence.js',
   '../src/renderer/vad.js',

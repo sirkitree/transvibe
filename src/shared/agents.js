@@ -1,0 +1,199 @@
+/**
+ * Who you can talk to.
+ *
+ * The app used to have one wake phrase and one behaviour behind it. A name is a
+ * better unit than a phrase: "Mira, delete that" and "Ada, what's a leap year"
+ * are different requests to different things, and saying which one you mean is
+ * something you were already doing anyway. So a wake phrase became a roster,
+ * and each name carries what happens when you use it.
+ *
+ *   commands   the editing and settings parser — everything the app did before
+ *   chat       a local model, answering out loud
+ *   external   reserved: a name that hands the sentence to another program
+ *              entirely. Defined here so the record does not have to change
+ *              shape later; refused at the point of use until it exists.
+ *
+ * Voice, rate and hue live on the agent rather than in one global setting, so
+ * an answer says who it came from three ways: the words, the voice speaking
+ * them, and the colour of the ribbon while they are spoken.
+ *
+ * Pure — no DOM, no Electron, no I/O. Both sides need it: the main process to
+ * migrate the file, the renderer to route an utterance.
+ */
+
+export const KINDS = ['commands', 'chat', 'external']
+
+/* Hues around the wheel, far enough apart to be told apart at a glance, and
+   assigned in order to agents that have not been given one. The first is the
+   green the strip's own ribbon already wears. */
+const HUES = [0.38, 0.03, 0.72, 0.55, 0.14, 0.86]
+
+const text = v => (typeof v === 'string' ? v.trim() : '')
+
+const finite = (v, fallback = null) => (Number.isFinite(v) ? v : fallback)
+
+/** Wrapped into [0, 1) so a hue given in the wrong unit still draws something. */
+function hue (v, index) {
+  if (!Number.isFinite(v)) return HUES[index % HUES.length]
+  const w = v % 1
+  return w < 0 ? w + 1 : w
+}
+
+/**
+ * One agent record, filled in and made safe to use.
+ *
+ * @param {object} raw    whatever was in the file
+ * @param {number} index  its position, which decides its colour if it has none
+ * @returns {object|null} null when there is no name, because a nameless agent
+ *   can never be addressed and would only sit in the panel confusing people
+ */
+export function normalizeAgent (raw, index = 0) {
+  const source = raw && typeof raw === 'object' ? raw : {}
+  const name = text(source.name)
+  if (!name) return null
+
+  const kind = KINDS.includes(source.kind) ? source.kind : 'commands'
+  return {
+    name,
+    kind,
+    // Null means "whatever the app is set to" rather than a value of its own.
+    voice: text(source.voice) || null,
+    // null and '' both mean "inherit", and Number() turns both into a very
+    // finite zero — which would read as a rate the agent had chosen.
+    rate: source.rate == null || source.rate === '' ? null : finite(Number(source.rate), null),
+    hue: hue(Number(source.hue), index),
+    // Only a chat agent has a model; carrying one on the others would imply
+    // the parser could be pointed somewhere, which it cannot.
+    model: kind === 'chat' ? (text(source.model) || null) : null,
+    run: kind === 'external' ? (text(source.run) || null) : null
+  }
+}
+
+/**
+ * The whole roster, in the order it will be matched.
+ *
+ * Duplicates by name are dropped rather than merged: two agents answering to
+ * one name is a question with no right answer, and the first one wins for the
+ * same reason the first one is listed.
+ */
+export function normalizeRoster (list) {
+  const seen = new Set()
+  const out = []
+  for (const raw of Array.isArray(list) ? list : []) {
+    const agent = normalizeAgent(raw, out.length)
+    if (!agent) continue
+    const key = agent.name.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push(agent)
+  }
+  return out
+}
+
+/**
+ * The roster a settings file describes, including one that predates rosters.
+ *
+ * Anyone running this app already has a wake phrase they are used to saying,
+ * and it must keep working across the update without being retyped — so a file
+ * with no `agents` becomes a roster of one, wearing the name it already had.
+ *
+ * @param {object} settings
+ * @returns {object[]}
+ */
+export function migrateRoster (settings) {
+  const source = settings && typeof settings === 'object' ? settings : {}
+  const roster = normalizeRoster(source.agents)
+  if (roster.length) return roster
+
+  const legacy = text(source.wakeWord)
+  return legacy ? normalizeRoster([{ name: legacy, kind: 'commands' }]) : []
+}
+
+/**
+ * How this agent should sound, falling back to the app's own voice.
+ *
+ * The fallback is not a formality: a command armed with the key rather than
+ * with a name has no agent to ask, and it still has to sound like something.
+ */
+export function speechFor (agent, settings = {}) {
+  const from = agent && typeof agent === 'object' ? agent : {}
+  return {
+    voice: from.voice || settings.speakVoice || null,
+    rate: Number.isFinite(from.rate) ? from.rate : (settings.speakRate || 0)
+  }
+}
+
+/** The first agent that runs commands, for the paths that have no name to go
+    on — the hold-a-key route, and anything the menu bar fires. */
+export function commandAgent (roster) {
+  const list = Array.isArray(roster) ? roster : []
+  return list.find(a => a.kind === 'commands') || null
+}
+
+/* ------------------------------------------------------------------ *
+ * editing the roster
+ * ------------------------------------------------------------------ */
+
+/* Same shape as the glossary's edit rules, for the same reason: every failure
+   here is something someone typed and needs to be told about, not an exception
+   to throw. `{ ok, agents, error }` in and out, and the panel shows the error. */
+
+const same = (a, b) => text(a).toLowerCase() === text(b).toLowerCase()
+
+/**
+ * @param {object[]} roster
+ * @param {object} raw the new agent — a name at minimum
+ */
+export function addAgent (roster, raw) {
+  const agents = normalizeRoster(roster)
+  const name = text(raw && raw.name)
+  if (!name) return { ok: false, agents, error: 'a name is the one thing it needs' }
+  if (agents.some(a => same(a.name, name))) {
+    return { ok: false, agents, error: `${name} is already on the list` }
+  }
+  const agent = normalizeAgent({ ...raw, name }, agents.length)
+  return { ok: true, agents: [...agents, agent] }
+}
+
+/**
+ * Change one field, or several, on the agent with this name.
+ *
+ * A rename is a change like any other, except that it can collide — and a
+ * roster with two agents answering to one name is a question with no right
+ * answer, so it is refused rather than resolved.
+ */
+export function updateAgent (roster, name, patch) {
+  const agents = normalizeRoster(roster)
+  const index = agents.findIndex(a => same(a.name, name))
+  if (index < 0) return { ok: false, agents, error: 'no such agent' }
+
+  const next = { ...agents[index], ...(patch && typeof patch === 'object' ? patch : {}) }
+  const renamed = text(next.name)
+  if (!renamed) return { ok: false, agents, error: 'a name is the one thing it needs' }
+  if (agents.some((a, i) => i !== index && same(a.name, renamed))) {
+    return { ok: false, agents, error: `${renamed} is already on the list` }
+  }
+
+  const out = agents.slice()
+  out[index] = normalizeAgent(next, index)
+  return { ok: true, agents: out }
+}
+
+/**
+ * Take one off the list.
+ *
+ * The last agent that runs commands is kept: removing it would leave the
+ * spoken route with nothing to answer to and no way back except the keyboard,
+ * which is not a state anyone means to be in. Rename it instead.
+ */
+export function removeAgent (roster, name) {
+  const agents = normalizeRoster(roster)
+  const victim = agents.find(a => same(a.name, name))
+  if (!victim) return { ok: false, agents, error: 'no such agent' }
+
+  const out = agents.filter(a => a !== victim)
+  if (victim.kind === 'commands' && !out.some(a => a.kind === 'commands')) {
+    return { ok: false, agents, error: 'the last agent that runs commands stays — rename it instead' }
+  }
+  return { ok: true, agents: out }
+}

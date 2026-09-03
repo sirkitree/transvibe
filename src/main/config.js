@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
+import { migrateRoster } from '../shared/agents.js'
 
 const DIR = path.join(os.homedir(), 'Library', 'Application Support', 'transvibe')
 const FILE = path.join(DIR, 'settings.json')
@@ -11,12 +12,20 @@ export const DEFAULTS = {
   interimMs: 500,      // how often the open utterance is re-transcribed
   commandTimeoutMs: 6000,   // command mode disarms itself if you say nothing
 
-  /* The spoken way into command mode. An utterance that opens with this
-     phrase is a command and the rest of the sentence is the command itself,
-     so editing what is already on the strip needs no key at all. Empty turns
-     it off. `wakeWordFuzzy` forgives the near-misses a small model makes on
-     an unusual name ("hey cloud", "hey claud"). */
-  wakeWord: 'hey claude',
+  /* Who you can talk to. An utterance that opens with an agent's name is
+     addressed to it, and the rest of the sentence is what you are asking for.
+     Editing what is on the strip needs no key at all, and a second name can
+     mean something entirely different from the first.
+
+     Edited in its own panel rather than here — see src/shared/agents.js for
+     what a record holds. An empty roster turns the spoken route off and leaves
+     the key path (right ⌥, ⌃⌥C) as the only way into command mode.
+
+     `wakeWordFuzzy` forgives the near-misses a small model makes on an unusual
+     name ("hey cloud", "hey claud"). */
+  agents: [
+    { name: 'hey claude', kind: 'commands', voice: null, rate: null, hue: 0.38 }
+  ],
   wakeWordFuzzy: true,
 
   /* Saying what it just did. A command you gave with your voice deserves an
@@ -92,16 +101,29 @@ export const DEFAULTS = {
   dropGlossaryEcho: true
 }
 
+/* Anyone already running this app has a wake phrase they are used to saying,
+   and it has to survive the update to a roster without being retyped. A file
+   with no `agents` becomes a roster of one wearing the name it already had;
+   `wakeWord` itself is then dropped, so there is one place that answers "what
+   is it called" rather than two that can disagree. */
+function migrate (saved) {
+  const settings = { ...DEFAULTS, ...saved }
+  settings.agents = migrateRoster(saved && Object.keys(saved).length ? saved : DEFAULTS)
+  if (!settings.agents.length) settings.agents = migrateRoster(DEFAULTS)
+  delete settings.wakeWord
+  return settings
+}
+
 export function load () {
   try {
-    return { ...DEFAULTS, ...JSON.parse(fs.readFileSync(FILE, 'utf8')) }
+    return migrate(JSON.parse(fs.readFileSync(FILE, 'utf8')))
   } catch {
-    return { ...DEFAULTS }
+    return migrate(null)
   }
 }
 
 export function save (patch) {
-  const next = { ...load(), ...patch }
+  const next = migrate({ ...load(), ...patch })
   fs.mkdirSync(DIR, { recursive: true })
   fs.writeFileSync(FILE, JSON.stringify(next, null, 2))
   return next

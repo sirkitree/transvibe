@@ -61,10 +61,12 @@ export function phraseTokens (phrase) {
   return phrase.split(/\s+/).map(strip).filter(Boolean)
 }
 
-/** Levenshtein, capped: anything past `max` edits is not interesting here. */
+/** Levenshtein, capped: anything past `max` edits is Infinity, because how
+    far past does not matter — only how close a match was, so that two names
+    can be compared by it. */
 function within (a, b, max) {
-  if (a === b) return true
-  if (Math.abs(a.length - b.length) > max) return false
+  if (a === b) return 0
+  if (Math.abs(a.length - b.length) > max) return Infinity
   let prev = new Array(b.length + 1)
   let cur = new Array(b.length + 1)
   for (let j = 0; j <= b.length; j++) prev[j] = j
@@ -76,10 +78,10 @@ function within (a, b, max) {
       cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + cost)
       if (cur[j] < best) best = cur[j]
     }
-    if (best > max) return false
+    if (best > max) return Infinity
     const swap = prev; prev = cur; cur = swap
   }
-  return prev[b.length] <= max
+  return prev[b.length] <= max ? prev[b.length] : Infinity
 }
 
 /* Two edits on a longer word, because the misses that matter are two edits
@@ -92,19 +94,24 @@ function editBudget (wanted, phraseLength) {
   return wanted.length >= 6 && phraseLength > 1 ? 2 : 1
 }
 
-function tokenMatches (heard, wanted, fuzzy, phraseLength) {
-  if (heard === wanted) return true
-  if (!fuzzy) return false
+/** @returns {number} edits away, or Infinity for "not this word" */
+function tokenCost (heard, wanted, fuzzy, phraseLength) {
+  if (heard === wanted) return 0
+  if (!fuzzy) return Infinity
   const budget = editBudget(wanted, phraseLength)
-  return budget > 0 && within(heard, wanted, budget)
+  return budget > 0 ? within(heard, wanted, budget) : Infinity
 }
 
-function matchesAt (tokens, at, wanted, fuzzy) {
-  if (at + wanted.length > tokens.length) return false
+/** @returns {number} edits across the whole phrase, or Infinity for no match */
+function matchCost (tokens, at, wanted, fuzzy) {
+  if (at + wanted.length > tokens.length) return Infinity
+  let cost = 0
   for (let i = 0; i < wanted.length; i++) {
-    if (!tokenMatches(tokens[at + i].word, wanted[i], fuzzy, wanted.length)) return false
+    const step = tokenCost(tokens[at + i].word, wanted[i], fuzzy, wanted.length)
+    if (step === Infinity) return Infinity
+    cost += step
   }
-  return true
+  return cost
 }
 
 function skipBridge (tokens, at) {
@@ -144,13 +151,71 @@ export function splitWakeWord (text, { phrase = '', fuzzy = true } = {}) {
 
   // Try the start first, then allow up to three fillers in front of it.
   let at = -1
+  let cost = Infinity
   for (let skip = 0; skip <= 3 && skip < tokens.length; skip++) {
-    if (matchesAt(tokens, skip, wanted, fuzzy)) { at = skip; break }
+    const c = matchCost(tokens, skip, wanted, fuzzy)
+    if (c !== Infinity) { at = skip; cost = c; break }
     if (!LEADING_FILLERS.has(tokens[skip].word)) break
   }
   if (at < 0) return miss
 
   const after = skipBridge(tokens, at + wanted.length)
   const rest = after < tokens.length ? source.slice(tokens[after].start).trim() : ''
-  return { matched: true, rest }
+  // `cost` is 0 for an exact hearing and rises with each letter that was
+  // wrong. On a roster it is how one name is preferred over another.
+  return { matched: true, rest, cost, words: wanted.length }
+}
+
+/* ------------------------------------------------------------------ *
+ * a roster of names
+ * ------------------------------------------------------------------ */
+
+/**
+ * Which agent, if any, this utterance is addressed to.
+ *
+ * One phrase was a yes-or-no question; several make it a choice, and a wrong
+ * choice is worse than no choice — it runs the wrong thing, or answers a
+ * question you asked of something else. Three rules keep that from happening:
+ *
+ *   exact wins over near.   Otherwise "hey claude" quietly answers to "hey
+ *                           cloud", and with two names on the roster the near
+ *                           miss is somebody else's name.
+ *   longer wins over short. "hey miranda" is a name, not "hey mira" with a
+ *                           stray word after it.
+ *   a tie wins nothing.     Two names equally close to what was heard means
+ *                           the app does not know who you meant, and guessing
+ *                           is how you address the wrong one. It falls through
+ *                           to dictation, and you say it again.
+ *
+ * @param {string} text a settled utterance
+ * @param {object[]} roster agents, in the order they were listed
+ * @param {{fuzzy?: boolean}} options
+ * @returns {{matched: boolean, agent: object|null, rest: string, ambiguous?: boolean}}
+ */
+export function matchAgent (text, roster, { fuzzy = true } = {}) {
+  const source = typeof text === 'string' ? text : ''
+  const list = Array.isArray(roster) ? roster : []
+  const miss = { matched: false, agent: null, rest: source }
+  if (!list.length || !source.trim()) return miss
+
+  const hits = []
+  for (const agent of list) {
+    const split = splitWakeWord(source, { phrase: agent.name, fuzzy })
+    if (split.matched) hits.push({ agent, ...split })
+  }
+  if (!hits.length) return miss
+
+  /* Closest hearing first, then the longer name. Cost before length is what
+     makes exact beat near: a name heard perfectly is zero edits away and no
+     amount of extra words can outrank it. */
+  hits.sort((a, b) => a.cost - b.cost || b.words - a.words)
+  const best = hits[0]
+
+  // Equally close, and the same number of words: nothing here can tell them
+  // apart, and neither could you from the outside. Better to hear nothing.
+  const tied = hits.some(h =>
+    h.agent !== best.agent && h.cost === best.cost && h.words === best.words)
+  if (tied) return { ...miss, ambiguous: true }
+
+  return { matched: true, agent: best.agent, rest: best.rest }
 }
