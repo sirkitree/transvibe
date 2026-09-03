@@ -174,14 +174,14 @@ export const SECTIONS = [
       {
         key: 'speakVoice',
         label: 'Default voice',
-        spoken: ['the voice', 'the default voice'],
-        help: 'Used by any agent that has not been given a voice of its own, and by a command you armed with the key rather than with a name. The English voices installed on this Mac — the replies are written in English, so the rest are not offered. More can be added in System Settings › Accessibility › Spoken Content, and they show up here without a restart.',
+        spoken: ['the voice', 'the default voice', 'your voice'],
+        help: 'Only for agents that have not been given a voice of their own — each one is set in the Agents tab, and saying “change your voice to Karen” changes whoever you are addressing rather than this. The English voices installed on this Mac — the replies are written in English, so the rest are not offered. More can be added in System Settings › Accessibility › Spoken Content, and they show up here without a restart.',
         type: 'select', options: 'voices', nullable: true, missingSuffix: '— not installed'
       },
       {
         key: 'speakRate',
         label: 'Default speaking rate',
-        help: 'Words per minute. All the way left leaves the voice at its own pace.',
+        help: 'Words per minute, for agents that have not been given a pace of their own. All the way left leaves the voice at its own.',
         spoken: ['the speaking rate', 'the rate', 'how fast you talk'],
         // `base` is where "speak faster" starts from when the rate is still
         // the voice's own: roughly what macOS speaks at, so the first nudge

@@ -128,7 +128,9 @@ The microphone stops listening for exactly as long as the reply takes, plus a fr
 
 The wording is the assist model's when [it is running](assist.md) — it shortens the strip's own line into something worth hearing — and the strip's line as written when it is not. Either way it is describing what already happened; the model is handed the outcome, so it cannot announce one that did not occur.
 
-Turn it off, pick a voice, or set the speed under **Settings › Spoken replies** — changing the voice or the rate says one line back in it straight away, which is the only way to choose a voice. (That preview plays even with replies switched off: picking a voice is a question about the voice.) The list is the English voices this Mac has — the replies are written in English, so the other 140 are not offered. More install under System Settings › Accessibility › Spoken Content and show up without a restart; a non-English one can still be named by hand in `settings.json`.
+Each agent has a voice of its own, picked in **Settings › Agents**; changing it says a line back in that voice straight away, which is the only real way to choose one. The voice under **Settings › Spoken replies** is just the default for agents that have not chosen — and saying "change your voice to Karen" changes whoever you are addressing rather than that default. Turn replies off entirely, or set the default pace, in the same place.
+
+The list is the English voices this Mac has — the replies are written in English, so the other 140 are not offered. More install under System Settings › Accessibility › Spoken Content and show up without a restart; a non-English one can still be named by hand in `settings.json`.
 
 The **?** button opens an in-app help panel with the full list (`esc` or `?` toggles it too). It is generated from the parser, so it cannot describe a command the parser does not have.
 

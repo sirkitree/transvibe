@@ -15,7 +15,8 @@ import { SECTIONS, coerce, formatValue } from './settings-schema.js'
  * not an optimistic guess a failed write would leave standing.
  */
 export function createSettingsPanel ({
-  body, note, getSettings, save, applyLive, open, getExternal, setExternal, getOptions
+  body, note, getSettings, save, applyLive, open, getExternal, setExternal,
+  getOptions, panes: extraPanes = []
 }) {
   const el = (tag, cls, text) => {
     const n = document.createElement(tag)
@@ -25,6 +26,7 @@ export function createSettingsPanel ({
   }
 
   const inputs = new Map()   // key -> the element showing it
+  const customPanes = new Map()
   let built = false
 
   /* Range labels read as what they are — 350ms, 0.020, 24 — not as raw floats.
@@ -188,6 +190,19 @@ export function createSettingsPanel ({
     const content = el('div', 'set-sections')
     const panes = []
 
+    /* Panes the panel does not build itself. Agents is one — a list of records
+       rather than a set of fields — and it belongs in here as a tab beside the
+       rest, next to the section someone would already be reading when they
+       went looking for it. */
+    const custom = (title, render) => {
+      const pane = el('section', 'set-pane')
+      content.append(pane)
+      panes.push([title, pane])
+      // Rendered on open rather than now: it asks the machine what voices and
+      // models it has, and neither answer keeps.
+      customPanes.set(title, { pane, render })
+    }
+
     for (const section of SECTIONS) {
       // No heading inside the pane: the tab beside it, lit, at the same height,
       // is already the title. Two of them was just the word twice.
@@ -196,17 +211,25 @@ export function createSettingsPanel ({
       for (const field of section.fields) pane.append(row(field))
       content.append(pane)
       panes.push([section.title, pane])
+
+      for (const [title, render, after] of extraPanes) {
+        if (after === section.title) custom(title, render)
+      }
     }
 
-    // The two settings with an editor of their own, and the reference for the
-    // rest of the app: reachable from here rather than only from the strip.
+    for (const [title, render, after] of extraPanes) {
+      if (!customPanes.has(title)) custom(title, render)
+    }
+
+    // The lists with an editor of their own, and the reference for the rest of
+    // the app: reachable from here rather than only from the strip.
     const elsewhere = el('section', 'set-pane')
     elsewhere.append(el('p', 'note lead',
-      'Who you can talk to, and the words to listen for, are lists of their ' +
-      'own — better edited in a panel built for them than in a text field.'))
+      'The words to listen for, and the fixes for the ones it mishears, are a ' +
+      'list of their own — better edited in a panel built for them.'))
     const links = el('div', 'set-links')
     for (const [label, panel] of [
-      ['Agents', 'agents'], ['Glossary', 'glossary'], ['Keys & commands', 'help']
+      ['Glossary', 'glossary'], ['Keys & commands', 'help']
     ]) {
       const button = el('button', null, label)
       button.type = 'button'
@@ -231,6 +254,7 @@ export function createSettingsPanel ({
       // Not awaited: the panel is already on screen, and the one external
       // field filling in a tick later is better than the whole panel waiting.
       for (const { field } of inputs.values()) show(field)
+      for (const { pane, render } of customPanes.values()) render(pane)
     }
   }
 }

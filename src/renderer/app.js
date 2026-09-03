@@ -441,6 +441,13 @@ async function runSettingCommand (cmd, { collect = null } = {}) {
   if (!field) return false
   const announce = line => { if (collect) collect.push(line); else say(line, { plain: true }) }
 
+  /* "change your voice to Karen" said to Mira is about Mira, not about the
+     app's default. The two settings that agents can override are answered by
+     whoever is being addressed; everything else is the app's. */
+  if (state.agent && (field.key === 'speakVoice' || field.key === 'speakRate')) {
+    return runAgentVoiceCommand(cmd, field, announce)
+  }
+
   /* A select's values belong to the machine, not the schema: "make the voice
      Karen" is only a command if this Mac has a Karen. */
   if (cmd.resolve === 'voices') {
@@ -475,6 +482,62 @@ async function runSettingCommand (cmd, { collect = null } = {}) {
   // rephrasing it is how "the speaking rate is the voice's own" becomes
   // "voice is speaking".
   announce(result.message)
+  return true
+}
+
+/**
+ * The voice or rate of whoever you are talking to.
+ *
+ * Same command, different target: the parser produced "set the voice to Karen"
+ * from a sentence addressed to an agent, so the agent is what it means. Asking
+ * about it answers for the agent too, falling back to the app's default when
+ * that one has not chosen — because that is what you would actually hear.
+ */
+async function runAgentVoiceCommand (cmd, field, announce) {
+  const agent = state.agent
+  const sound = speechFor(agent, state.settings)
+  const current = field.key === 'speakVoice' ? sound.voice : sound.rate
+
+  if (cmd.op === 'get') {
+    const line = `${agent.name} speaks with ${current || 'the system voice'}`
+    hint(line)
+    announce(line)
+    return true
+  }
+
+  if (cmd.resolve === 'voices') {
+    const name = await resolveVoiceName(cmd.value)
+    if (!name) {
+      hint(`no voice called "${cmd.value}"`)
+      announce(`no voice called ${cmd.value}`)
+      return true
+    }
+    cmd = { ...cmd, value: name }
+  }
+
+  const result = applySettingCommand(cmd, field, current)
+  if (!result.changed) {
+    hint(result.message)
+    announce(result.message)
+    return true
+  }
+
+  const saved = updateAgent(state.settings.agents, agent.name, {
+    [field.key === 'speakVoice' ? 'voice' : 'rate']: result.value
+  })
+  if (!saved.ok) {
+    hint(saved.error)
+    return true
+  }
+  state.settings = await window.transvibe.setSettings({ agents: saved.agents })
+  state.agent = saved.agents.find(a => a.name === agent.name) || agent
+  if (openPanel() === 'settings') state.settingsPanel.render()
+  for (const into of document.querySelectorAll('[data-agents]')) renderAgents(into)
+
+  const line = `${agent.name} ${result.message}`
+  hint(line)
+  // Said in the new voice, which is the only demonstration that matters.
+  announce(line)
   return true
 }
 
@@ -765,15 +828,20 @@ function buildHelp () {
    what was saved. */
 
 function agentsNote (text, warn = false) {
-  const note = $('agents-note')
-  note.textContent = text
-  note.classList.toggle('warn', warn)
+  // The tab inside settings has the settings panel's own footer; the panel on
+  // the strip has its own. Whichever is on screen says it.
+  for (const id of ['agents-note', 'settings-note']) {
+    const note = $(id)
+    if (!note || note.closest('.panel').hidden) continue
+    note.textContent = text
+    note.classList.toggle('warn', warn)
+  }
 }
 
 async function saveAgents (result) {
   if (!result.ok) return agentsNote(result.error, true)
   state.settings = await window.transvibe.setSettings({ agents: result.agents })
-  renderAgents()
+  for (const into of document.querySelectorAll('[data-agents]')) renderAgents(into)
   agentsNote('Saved.')
 }
 
@@ -783,9 +851,10 @@ const KIND_LABELS = {
   external: 'hands it on (not yet)'
 }
 
-async function renderAgents () {
-  const body = $('agents-body')
+async function renderAgents (into = null) {
+  const body = into || $('agents-body')
   const roster = state.settings.agents || []
+  body.dataset.agents = 'yes'
   body.replaceChildren()
 
   body.append(el('p', 'note lead',
@@ -1272,6 +1341,9 @@ function syncHold () {
 async function main () {
   state.settings = await window.transvibe.getSettings()
   state.settingsPanel = createSettingsPanel({
+    // Who you can talk to is a setting, whatever shape it is stored in, so it
+    // is a tab in the settings panel rather than only a panel of its own.
+    panes: [['Agents', pane => { renderAgents(pane) }, 'Command mode']],
     body: $('settings-body'),
     note: text => { $('settings-note').textContent = text },
     getSettings: () => state.settings,
@@ -1357,9 +1429,12 @@ async function main () {
       state.liveSeq++
       state.pending++
       const asCommand = state.commandMode
-      // Armed with a key rather than with a name: the reply still has to sound
-      // like something, so it comes from whoever runs commands.
-      if (asCommand && !state.agent) state.agent = commandAgent(state.settings.agents)
+      /* Armed with a key rather than with a name: there is nobody to address,
+         so it is whoever runs commands — which is also what makes the reply
+         sound like something. A key means "a command", never a question. */
+      if (asCommand && (!state.agent || state.agent.kind !== 'commands')) {
+        state.agent = commandAgent(state.settings.agents)
+      }
       // Read staleness before the new activity clears it: this utterance is
       // what decides whether the faded transcript was the end of a thought.
       const wasStale = state.presence.stale
@@ -1374,7 +1449,14 @@ async function main () {
         else if (!res.text) { /* silence or a filtered artifact */ }
         // Not awaited: command mode has to disarm the moment the utterance is
         // consumed, and the assist fallback may still be thinking.
-        else if (asCommand) runCommand(res.text).catch(err => hint(err.message))
+        /* Armed, and by whom matters: "hey Ada" on its own arms *her*, and the
+           sentence that follows is a question rather than a command that will
+           fail to parse. Straight to runCommand was the bug — being armed by
+           a chat agent and then told "who is the president" answered "not a
+           command", which is the one thing that path must never do. */
+        else if (asCommand) {
+          addressAgent(state.agent, res.text).catch(err => hint(err.message))
+        }
         else {
           /* Nobody armed anything: the words themselves decide. An utterance
              that opens with an agent's name is addressed to it, and — unlike
@@ -1393,11 +1475,19 @@ async function main () {
                that from London" is a follow-up and not dictation. */
             addressAgent(state.agent, res.text).catch(err => hint(err.message))
           } else if (wake.matched) {
-            // The name on its own: you are about to say the rest.
+            // The name on its own: you are about to say the rest of it.
             state.agent = wake.agent
-            window.transvibe.setCommandMode(true)
-            setCommandMode(true)
-            hint(`${wake.agent.name} is listening…`)
+            if (wake.agent.kind === 'chat') {
+              /* Not command mode — there is no command coming. Opening the
+                 conversation window is the same thing an answer does, so what
+                 follows is a question with nothing else to be mistaken for. */
+              state.listeningUntil = Date.now() + (state.settings.conversationMs || 0)
+              hint(`${wake.agent.name} is listening…`)
+            } else {
+              window.transvibe.setCommandMode(true)
+              setCommandMode(true)
+              hint(`${wake.agent.name} is listening…`)
+            }
           } else if (wake.ambiguous) {
             /* Two names equally close to what was heard. Guessing is how you
                address the wrong one, so the words go down as dictation and
