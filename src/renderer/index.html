@@ -19,9 +19,17 @@
          which is the room. -->
     <canvas id="say-viz"></canvas>
 
+    <!-- Sits on the ribbon itself, outside .stage, so it survives the idle
+         fade: whether a follow-up is still expected has to be readable even
+         once the transcript and the bubbles are gone. -->
+    <div class="convo-indicator" id="convo-indicator" hidden>
+      <span class="dot"></span><span id="convo-indicator-label"></span>
+    </div>
+
     <div class="stage">
       <div class="mode"><span class="dot"></span><span>Command</span></div>
       <div class="transcript" id="transcript"></div>
+      <div class="conversation" id="conversation" hidden></div>
       <div class="bar">
         <button class="btn close" id="close" data-hint="Clear the transcript and get out of the way">
           <svg viewBox="0 0 16 16"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7"/></svg>

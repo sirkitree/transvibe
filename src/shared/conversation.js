@@ -28,9 +28,12 @@ export const ASK_PROMPT = [
   'not sure, say you are not sure rather than guessing.'
 ].join(' ')
 
-/** Turns of the conversation kept for context. Enough to follow a thread —
-    "and how far is that from London" — without the prompt growing all day. */
-const KEEP_TURNS = 6
+/** Turns of the conversation kept for context. High enough that the model
+    sees effectively the whole thread for a realistic conversation — the
+    bubbles on screen show every turn, and the model should remember what it
+    said too — while still bounding the worst case: a conversation left open
+    for hours must not grow the prompt without limit. */
+const KEEP_TURNS = 48
 
 const squash = text => String(text == null ? '' : text).replace(/\s+/g, ' ').trim()
 

@@ -311,7 +311,13 @@ const MATCHERS = [
   { re: /^lower ?case ?(.*)$/, build: targeted('lowercase') },
   {
     re: /^(?:delete|scratch|strike|erase|remove|forget) (.+)$/,
-    build: targeted('delete')
+    // "erase the conversation" is a wipe like "erase all", aimed at the
+    // thread; "erase the answer" stays unparsed — there is no single answer
+    // to take out of a thread the way a word comes out of a sentence.
+    build: (m, raw) => targeted('delete')(m, raw) ||
+      (parseChatTarget(m[1]) === 'conversation'
+        ? command('delete', { target: 'conversation', raw })
+        : null)
   },
   { re: /^copy (.+)$/, build: wholeTranscript('copy') },
   { re: /^send (.+)$/, build: wholeTranscript('send') },
@@ -340,13 +346,31 @@ function targeted(action) {
   }
 }
 
+// The other thing on the strip: what a chat agent said. Only the whole-
+// transcript verbs take these, because "delete the answer" has no sensible
+// meaning for an editing rule and would otherwise parse into one.
+//   answer        the last thing the agent said
+//   conversation  the whole thread, both sides
+function parseChatTarget(phrase) {
+  // "the current conversation", "this whole chat": the qualifiers are all
+  // pointing at the one thread there is, so they are dropped, however many.
+  const p = (phrase || '').trim()
+    .replace(/^(?:(?:the|that|this|its|her|his|their|our|last|latest|current|whole|entire) )+/, '')
+    .trim()
+  if (p === 'answer' || p === 'reply' || p === 'response') return 'answer'
+  if (p === 'conversation' || p === 'chat' || p === 'thread') return 'conversation'
+  return null
+}
+
 // copy/clear always act on the whole transcript, but the phrase still has to
 // look like a target so dictation does not trigger them.
 function wholeTranscript(action) {
   return (m, raw) => {
     const t = parseTarget(m[1])
-    if (!t) return null
-    return command(action, { target: 'all', raw })
+    if (t) return command(action, { target: 'all', raw })
+    const chat = parseChatTarget(m[1])
+    if (chat) return command(action, { target: chat, raw })
+    return null
   }
 }
 
@@ -770,18 +794,18 @@ export const COMMANDS = [
   },
   {
     action: 'copy',
-    examples: ['copy that', 'copy all', 'copy everything', 'copy the transcript'],
-    help: 'Copy the transcript to the clipboard.'
+    examples: ['copy that', 'copy all', 'copy the answer', 'copy the conversation'],
+    help: 'Copy the transcript to the clipboard — or what a chat agent said, by asking for the answer or the conversation.'
   },
   {
     action: 'send',
-    examples: ['send that', 'send it', 'send everything', 'ship it'],
-    help: 'Paste the transcript into whatever app is in front.'
+    examples: ['send that', 'send it', 'send the answer', 'ship it'],
+    help: 'Paste the transcript into whatever app is in front. "Send the answer" pastes what the agent said instead.'
   },
   {
     action: 'clear',
-    examples: ['clear all', 'clear everything', 'clear the transcript', 'start over'],
-    help: 'Empty the transcript and start again.'
+    examples: ['clear all', 'clear everything', 'clear the conversation', 'start over'],
+    help: 'Empty the transcript, and end any conversation, and start again.'
   },
   {
     action: 'stopTalking',

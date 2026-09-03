@@ -167,6 +167,28 @@ describe('parseCommand — app-level commands', () => {
     }
   })
 
+  it('lets copy, send and clear name what a chat agent said', () => {
+    for (const u of ['copy the answer', 'send her answer', 'copy that reply', 'send the response']) {
+      expect(parse(u), u).toMatchObject({ target: 'answer' })
+    }
+    for (const u of ['copy the conversation', 'clear the chat', 'copy the whole conversation',
+      'erase the conversation', 'delete the chat', 'forget the thread',
+      'delete the current conversation', 'clear this whole chat']) {
+      expect(parse(u), u).toMatchObject({ target: 'conversation' })
+    }
+    expect(parse('erase the conversation').action).toBe('delete')
+    expect(parse('copy the answer').action).toBe('copy')
+    expect(parse('send the answer').action).toBe('send')
+    expect(parse('clear the conversation').action).toBe('clear')
+  })
+
+  it('does not let the editing rules take a chat target', () => {
+    // "delete the answer" has no editing meaning; it must not become a
+    // delete that then reports on the transcript.
+    expect(parse('delete the answer')).toBeNull()
+    expect(parse('uppercase the conversation')).toBeNull()
+  })
+
   it('recognises pause, resume and hide', () => {
     for (const u of ['stop listening', 'pause listening', 'pause']) {
       expect(actionOf(u), u).toBe('pause')

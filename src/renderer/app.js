@@ -24,6 +24,9 @@ const $ = id => document.getElementById(id)
 // against the window edge.
 const BOTTOM_MARGIN = 18
 const transcriptEl = $('transcript')
+const conversationEl = $('conversation')
+const convoIndicatorEl = $('convo-indicator')
+const convoIndicatorLabelEl = $('convo-indicator-label')
 const hintEl = $('hint')
 
 const state = {
@@ -44,10 +47,21 @@ const state = {
      which voice says it, what colour the ribbon is — belongs to whoever was
      asked, not to the app in general. */
   agent: null,
-  /* What a chat agent said, and what was said to it. Kept apart from `finals`
-     on purpose: the transcript is yours, and ⌃⌥↩ sends it — an answer landing
-     in it would paste the model's words into your document. */
-  reply: '',
+  /* The chat agent whose thread is open, as distinct from `agent`, which is
+     whoever the *current* utterance is for. They part ways the moment you say
+     "hey Trinity, erase all" in the middle of talking to Mira: Trinity runs
+     that one command and speaks its confirmation, and Mira's thread is still
+     open for the next thing you say. A name opens a thread; a different name
+     borrows one sentence from it. */
+  talkingTo: null,
+  /* Every turn of the open conversation, oldest first — what you asked and
+     what came back, each tagged with the agent that answered so it can be
+     coloured and re-sent. Kept apart from `finals` on purpose: the transcript
+     is yours, and ⌃⌥↩ sends it — a question or an answer landing in it would
+     paste the model's words into your document. This *is* what gets fed back
+     to the model on the next turn, trimmed by `trimHistory` at the point it's
+     sent rather than here, so the bubbles on screen always show the whole
+     thread even once the model itself has started forgetting the start of it. */
   history: [],
   /* Until when the next sentence continues the conversation without the name.
      A thread you have to re-address every turn is a query box, not a talk. */
@@ -125,28 +139,82 @@ function finalNode (text) {
   return span
 }
 
-function render () {
-  transcriptEl.replaceChildren(...state.finals.map(finalNode))
-  if (state.reply || state.asking) {
-    const said = document.createElement('span')
-    said.className = 'reply'
-    said.textContent = state.reply || '…'
-    if (state.agent) said.style.color = `hsl(${Math.round(state.agent.hue * 360)} 80% 76%)`
-    transcriptEl.append(said)
+/* One turn of a conversation, as a chat bubble: yours on one side, the
+   agent's on the other, tinted with that agent's own hue so which one
+   answered is visible without reading the words. */
+function bubbleNode (turn) {
+  const bubble = document.createElement('div')
+  bubble.className = `bubble ${turn.role}`
+  if (turn.role === 'assistant') {
+    /* Named as well as coloured: two chat agents can share a thread, and a
+       hue alone is not a name you can read back. */
+    if (turn.name) {
+      const who = document.createElement('div')
+      who.className = 'who'
+      who.textContent = turn.name
+      bubble.append(who)
+    }
+    if (Number.isFinite(turn.hue)) {
+      bubble.style.color = `hsl(${Math.round(turn.hue * 360)} 80% 76%)`
+    }
   }
-  if (state.live || state.pending > 0) {
+  bubble.append(document.createTextNode(turn.content))
+  return bubble
+}
+
+/* Whether there is a thread on screen. Turns stay in `state.history` until
+   the thread itself is cleared (idle timeout, Esc, "clear"), so this covers
+   the "thinking…" gap after a question too — the question is already a
+   bubble by then. */
+function conversing () {
+  return state.history.length > 0 || state.asking
+}
+
+/* The transcript and the conversation are two different things and both can
+   be on screen: dictate a sentence, ask Mira about it, and the sentence is
+   still what ⌃⌥↩ sends, so it must stay visible above the bubbles rather
+   than be hidden behind them. Only the live, in-flight words have to pick a
+   side, and they go to whichever the utterance is for. */
+function render () {
+  const chat = conversing()
+  // Words still being spoken belong to the thread when they are a follow-up
+  // or the question being asked; otherwise they are dictation on the way in.
+  const liveToChat = chat && !state.liveWake && (state.asking || inConversation())
+  const inflight = state.live || state.pending > 0
+
+  transcriptEl.replaceChildren(...state.finals.map(finalNode))
+  if (inflight && !liveToChat) {
     const live = document.createElement('span')
     live.className = 'live'
     live.textContent = state.live || '…'
     transcriptEl.append(live)
   }
+  transcriptEl.hidden = transcriptEl.childElementCount === 0
+  transcriptEl.scrollTop = transcriptEl.scrollHeight
+
+  conversationEl.hidden = !chat
+  if (chat) {
+    conversationEl.replaceChildren(...state.history.map(bubbleNode))
+    if (state.asking) {
+      const who = state.agent && state.agent.kind === 'chat' ? state.agent : null
+      conversationEl.append(bubbleNode({
+        role: 'assistant', content: '…', name: who && who.name, hue: who && who.hue
+      }))
+    }
+    if (inflight && liveToChat) {
+      conversationEl.append(bubbleNode({ role: 'user', content: state.live || '…' }))
+    }
+    // Newest turn is the one worth seeing; the thread scrolls up under it.
+    conversationEl.scrollTop = conversationEl.scrollHeight
+  }
+
   // The scrim behind the text only exists while there is text, so the strip is
   // genuinely empty — not a faint rectangle — when nothing has been said.
-  document.body.classList.toggle('has-text', transcriptEl.childElementCount > 0)
+  document.body.classList.toggle('has-text',
+    !transcriptEl.hidden || (chat && conversationEl.childElementCount > 0))
   document.body.classList.toggle('command-mode', state.commandMode || state.liveWake)
+  renderConvoIndicator()
   syncHeight()
-  // The newest line is the one worth seeing; the older ones scroll off the top.
-  transcriptEl.scrollTop = transcriptEl.scrollHeight
 }
 
 function fullText () {
@@ -157,12 +225,31 @@ function setText (text) {
   state.finals = text ? [text] : []
 }
 
-/* An answer is not transcript. It is shown, it is spoken, and it goes away
-   with everything else — but `fullText()` never sees it, so what you send is
-   only ever what you said. */
-function clearReply () {
-  state.reply = ''
+/* A conversation is not transcript. It is shown, it is spoken, and it goes
+   away with everything else — but `fullText()` never sees it, so what you
+   send with ⌃⌥↩ is only ever what you dictated, never a question or an
+   answer. Ending it here means the next turn starts a new thread rather than
+   picking the old one back up half an hour later. */
+function clearConversation () {
   state.asking = false
+  state.history = []
+  state.talkingTo = null
+  state.listeningUntil = 0
+}
+
+/** The thread as text, both sides, for copying out. */
+function conversationText () {
+  return state.history
+    .map(t => `${t.role === 'user' ? 'You' : (t.name || 'Agent')}: ${t.content}`)
+    .join('\n')
+}
+
+/** The last thing a chat agent said, or ''. */
+function lastAnswer () {
+  for (let i = state.history.length - 1; i >= 0; i--) {
+    if (state.history[i].role === 'assistant') return state.history[i].content
+  }
+  return ''
 }
 
 function setCommandMode (active) {
@@ -231,14 +318,19 @@ async function addressAgent (agent, utterance, { keep = null } = {}) {
  * pointed at a better model than the one doing the cleanup.
  */
 async function converse (agent, question) {
+  // What the model sees on this turn — before the question below joins the
+  // bubbles on screen, so it is not sent to itself as part of its own history.
+  const priorHistory = state.history
+
   state.asking = true
-  state.reply = ''
+  state.talkingTo = agent
+  state.history = [...priorHistory, { role: 'user', content: question }]
   hint(`${agent.name} is thinking…`)
   noteActivity()
   render()
 
   try {
-    const answer = await window.transvibe.ask(question, state.history, { model: agent.model })
+    const answer = await window.transvibe.ask(question, priorHistory, { model: agent.model })
     if (!answer.ok) {
       state.asking = false
       hint(answer.reason || 'no answer')
@@ -247,13 +339,9 @@ async function converse (agent, question) {
       return
     }
 
-    state.reply = answer.text
     state.asking = false
-    state.history = [
-      ...state.history,
-      { role: 'user', content: question },
-      { role: 'assistant', content: answer.text }
-    ]
+    state.history = [...state.history,
+      { role: 'assistant', content: answer.text, name: agent.name, hue: agent.hue }]
     /* The thread stays open for a while, so the next sentence can be "and how
        far is that from London" rather than the whole name again. */
     state.listeningUntil = Date.now() + (state.settings.conversationMs || 0)
@@ -268,10 +356,29 @@ async function converse (agent, question) {
   }
 }
 
-/** Is the last chat agent still owed a follow-up, said without its name? */
+/** Is a chat agent still owed a follow-up, said without its name? Asked of
+    the thread's owner, not of whoever ran the last command — a one-off
+    "hey Trinity, copy the answer" does not hang up on Mira. */
 function inConversation () {
-  return state.agent && state.agent.kind === 'chat' &&
-    state.listeningUntil > Date.now()
+  return !!state.talkingTo && state.listeningUntil > Date.now()
+}
+
+/* On or off, on the ribbon rather than in the stage: this has to be readable
+   whether or not the transcript has faded, so it is redrawn on its own —
+   from the idle tick as well as from render() — rather than only when
+   something else already needed a redraw. `listeningUntil` running out is not
+   an event, it is a clock, and nothing else changing means nothing else
+   would ever notice it happened. */
+function renderConvoIndicator () {
+  const active = inConversation()
+  convoIndicatorEl.hidden = !active
+  if (!active) return
+  convoIndicatorLabelEl.textContent = state.talkingTo.name
+  const dot = convoIndicatorEl.querySelector('.dot')
+  const color = `hsl(${Math.round(state.talkingTo.hue * 360)} 90% 65%)`
+  convoIndicatorEl.style.color = color
+  dot.style.background = color
+  dot.style.boxShadow = `0 0 8px ${color}`
 }
 
 /* One spoken utterance, interpreted as an editing command rather than as text
@@ -340,6 +447,56 @@ async function runCommand (utterance, { retry = true, keep = null, collect = nul
   }
 
   const before = fullText()
+
+  /* The conversation is the other thing a command can be about. Named
+     outright — "copy the answer", "clear the conversation" — it is that,
+     whatever the transcript holds. Unnamed — "copy that", "erase all" — it
+     is the transcript, and only when the transcript is empty does the thread
+     on screen stand in for it: applyCommand never sees the thread, so left
+     alone it would say "nothing to act on" about a screen full of bubbles.
+
+     Wiping is the one verb that takes both. "Erase all" means the screen. */
+  const wipes = cmd.action === 'clear' ||
+    (cmd.action === 'delete' && (cmd.target === 'all' || cmd.target === 'conversation'))
+  const named = cmd.target === 'answer' || cmd.target === 'conversation'
+  const chatty = state.history.length > 0
+  if ((named || (!before.trim() && chatty && wipes)) ||
+      (!before.trim() && chatty && (cmd.action === 'copy' || cmd.action === 'send'))) {
+    if (wipes) {
+      // Named, it is only the thread that goes: "clear the conversation" with
+      // a sentence dictated above it leaves the sentence. Unnamed, on an
+      // empty transcript, the thread is all there is.
+      if (cmd.target !== 'conversation') {
+        if (before) state.undoStack.push(before)
+        setText('')
+      }
+      clearConversation()
+      announce('cleared')
+      hint('cleared conversation')
+      render()
+      return
+    }
+    const text = cmd.target === 'conversation' ? conversationText() : lastAnswer()
+    if (!text) {
+      announce('nothing to act on')
+      return hint('nothing to act on')
+    }
+    const what = cmd.target === 'conversation' ? 'conversation' : 'answer'
+    if (cmd.action === 'copy') {
+      window.transvibe.copy(text)
+      announce('copied')
+      hint(`copied ${what}`)
+      return
+    }
+    if (cmd.action === 'send') {
+      announce('sent')
+      return sendText(text, what)
+    }
+    // A chat target on any other verb is not a thing that can be done.
+    announce('nothing to act on')
+    return hint(`cannot ${cmd.action} the ${what}`)
+  }
+
   const result = applyCommand(cmd, before)
 
   if (result.effect === 'undo') {
@@ -359,6 +516,8 @@ async function runCommand (utterance, { retry = true, keep = null, collect = nul
     state.undoStack.push(before)
     if (state.undoStack.length > 20) state.undoStack.shift()
     setText(result.text)
+    // "Erase all" with both on screen takes both — the same as 'clear' below.
+    if (wipes) clearConversation()
   }
 
   // Said before the effect runs, not after: 'send' hands focus to another app
@@ -369,7 +528,13 @@ async function runCommand (utterance, { retry = true, keep = null, collect = nul
   switch (result.effect) {
     case 'copy': window.transvibe.copy(fullText()); break
     case 'send': doSend(); return
-    case 'clear': state.undoStack.push(before); setText(''); break
+    case 'clear':
+      state.undoStack.push(before)
+      setText('')
+      // Whatever agent said this, "clear" means everything on screen — the
+      // conversation goes with the transcript, the same as the trash button.
+      clearConversation()
+      break
     case 'pause': setListeningState(false); break
     case 'resume': setListeningState(true); break
     case 'hide': window.transvibe.hide(); break
@@ -566,6 +731,12 @@ let setListeningState = () => {}
    new transcript rather than silently appending to something invisible. */
 function dictate (text, wasStale) {
   if (wasStale) state.finals = []
+  /* Dictation is what happens when nobody is being talked to: inside the
+     window every unnamed sentence is a follow-up, so reaching here means the
+     thread has lapsed. It ends here rather than lingering under the new
+     text — you are back to writing, and a stale conversation left on screen
+     reads as one that is still going. */
+  if (state.history.length) clearConversation()
   state.finals.push(text)
   tidy(text, state.finals.length - 1)
 }
@@ -702,27 +873,32 @@ function syncHeight () {
    pasted somewhere by mistake. The undo stack goes with it: "forgotten" that
    ⌘Z brings back is not forgotten. */
 function forgetTranscript () {
-  if (!state.finals.length && !state.live && !state.reply) return
+  if (!state.finals.length && !state.live && !state.history.length) return
+  /* Not while a chat agent is still listening: the conversation window is
+     its own clock and is allowed to be longer than the idle one. The tick
+     asks again once the window has lapsed. */
+  if (inConversation()) return
   state.finals = []
   state.live = ''
   state.liveSeq++
   state.undoStack = []
   // The thread goes with it. Picking a conversation back up half an hour
   // later, out of a strip that has been cleared, is not continuing it.
-  clearReply()
-  state.history = []
-  state.listeningUntil = 0
+  clearConversation()
   render()
 }
 
 /* Esc with nothing else open means "get out of the way": the transcript goes,
-   and the strip is a bare ribbon again. */
+   and the strip is a bare ribbon again. The conversation goes with it too —
+   Esc is as much an ending as letting the thread fade on its own, and it
+   should not leave the model still primed with a thread the screen no longer
+   shows any trace of. */
 function dismiss () {
   state.finals = []
   state.live = ''
   state.liveSeq++
   state.undoStack = []
-  clearReply()
+  clearConversation()
   render()
   closeFixer()
 }
@@ -766,7 +942,9 @@ function buildHelp () {
     ['say a name', 'Same again, no key at all — “hey Claude, delete that”. The names are yours to set'],
     ['it answers back', 'Spoken aloud after each command, in that agent’s voice; the mic is deaf while it talks'],
     ['chain them', 'and / then / a comma: “open settings and change the voice to Karen”'],
-    ['talk to one', 'An agent set to “talks back” answers questions out loud; the thread stays open'],
+    ['talk to one', 'An agent set to “talks back” answers questions out loud; the thread stays open, as bubbles'],
+    ['borrow another', 'Mid-conversation, “hey Trinity, copy the answer” runs one command and hands back to the thread'],
+    ['the answer', '“copy the answer”, “send the answer”, “copy the conversation” — what was said, not what you dictated'],
     ['stop talking', 'Cuts off a spoken reply, whoever you were addressing'],
     ['⌃⌥↩', 'Send the transcript to the app in front'],
     ['⌃⌥Space', 'Show or hide the strip'],
@@ -1202,9 +1380,16 @@ function wireFixer () {
 async function doSend () {
   const text = fullText()
   if (!text) return hint('nothing to send')
+  return sendText(text, 'transcript')
+}
+
+/* Paste `text` into the app in front. The transcript is the usual thing;
+   "send the answer" is the other, and it is the one case a model's words
+   reach your document — because you asked for exactly that, by name. */
+async function sendText (text, what) {
   hint('sending…')
   const res = await window.transvibe.send(text)
-  hint(res.ok ? `sent to ${res.target}` : res.error)
+  hint(res.ok ? `sent ${what} to ${res.target}` : res.error)
 }
 
 /* Only one panel at a time — they occupy the same rectangle. Opening one also
@@ -1538,7 +1723,13 @@ async function main () {
   setInterval(() => {
     const { changed, expired } = state.presence.tick(Date.now())
     if (changed) applyFade()
-    if (expired) forgetTranscript()
+    /* `expired` is reported once, and forgetTranscript declines it while a
+       conversation is still open — so it is asked again on every tick past
+       the line. Cheap: it returns at once unless there is something to do. */
+    if (expired || state.presence.expired) forgetTranscript()
+    // Fires every tick rather than only on an edge: the indicator's own
+    // clock (listeningUntil) is cheaper to just recheck than to track.
+    renderConvoIndicator()
   }, 400)
 
   window.transvibe.onStatus(s => {
@@ -1612,8 +1803,10 @@ async function main () {
           } else if (!wake.matched && !wake.ambiguous && inConversation()) {
             /* Still talking to whoever answered a moment ago. The name opens a
                thread rather than addressing one sentence, so "and how far is
-               that from London" is a follow-up and not dictation. */
-            addressAgent(state.agent, res.text).catch(err => hint(err.message))
+               that from London" is a follow-up and not dictation — even if
+               Trinity was borrowed for a command in between. */
+            state.agent = state.talkingTo
+            addressAgent(state.talkingTo, res.text).catch(err => hint(err.message))
           } else if (wake.matched) {
             // The name on its own: you are about to say the rest of it.
             state.agent = wake.agent
@@ -1621,6 +1814,7 @@ async function main () {
               /* Not command mode — there is no command coming. Opening the
                  conversation window is the same thing an answer does, so what
                  follows is a question with nothing else to be mistaken for. */
+              state.talkingTo = wake.agent
               state.listeningUntil = Date.now() + (state.settings.conversationMs || 0)
               hint(`${wake.agent.name} is listening…`)
             } else {
@@ -1700,6 +1894,12 @@ async function main () {
      guaranteed not to be hearing. */
   state.sayingViz = createSayingViz($('say-viz'))
 
+  /* How tall the thread may grow before the oldest bubbles scroll off. Set
+     from the screen, not the window: the window is sized to its content, so
+     a percentage of *it* would be measuring the thing it is limiting. */
+  document.documentElement.style.setProperty('--convo-max',
+    `${Math.max(200, Math.round((window.screen.availHeight || 800) * 0.5))}px`)
+
   $('copy').onclick = async () => {
     const text = fullText()
     if (!text) return
@@ -1713,7 +1913,7 @@ async function main () {
     state.finals = []
     state.live = ''
     state.liveSeq++
-    clearReply()
+    clearConversation()
     render()
   }
 

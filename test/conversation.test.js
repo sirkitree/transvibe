@@ -35,6 +35,12 @@ describe('trimHistory', () => {
     expect(kept.at(-1).content).toBe('turn 19')
   })
 
+  it('defaults to effectively the whole conversation, not just the last few turns', () => {
+    expect(trimHistory(turns(20))).toHaveLength(20)
+    // Still bounded, for a thread left open long enough to blow past that.
+    expect(trimHistory(turns(200))).toHaveLength(48)
+  })
+
   it('drops anything that is not a turn', () => {
     expect(trimHistory([
       { role: 'user', content: '  ' },
