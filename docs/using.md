@@ -113,7 +113,7 @@ With two displays there are two current desktops, so **"switch to home and commu
 
 The name has to be one of the markers that actually exists, which is the whole reason this is safe to say out loud: with no folder set there are no names, and "go to the store" is a sentence rather than a command. An initialism is matched however whisper wrote it down — "SDSU", "SD SU" and "S.D.S.U." all reach the same desktop — and a prefix is enough when only one marker starts that way. Two that both could be meant match neither: landing on the wrong desktop costs you the trip back as well.
 
-It chains, so "switch to hivemind and send it" jumps there and pastes. The confirmation is spoken *before* the switch, for the same reason as *send* — a line said after it is a line about a desktop you have already left.
+It chains, so "switch to hivemind and send it" jumps there and pastes. "Switched to home and communications" is spoken a moment before it is true, for the same reason as *send* — a line said after the switch is a line about a desktop you have already left.
 
 The jump is a **click on the marker's Dock tile**, not `open -a` — opening the app hands it the menu bar and leaves the desktop exactly where it was, which is the one thing macOS does differently for a Dock click. That needs Accessibility, the same grant that pastes on send; without it the strip says so rather than looking like nothing happened.
 

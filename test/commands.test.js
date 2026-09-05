@@ -703,11 +703,11 @@ describe('parseCommand — named Spaces', () => {
     expect(applyCommand(cmd, 'Some text.').text).toBe('Some text.')
   })
 
-  it('says which desktop it is going to, before it goes', () => {
+  it('says which desktop it went to, in the past tense the rest of them use', () => {
     const cmd = parse('take me to elk grove')
-    expect(spokenFor(cmd, applyCommand(cmd, ''))).toBe('switching to Elk Grove')
+    expect(spokenFor(cmd, applyCommand(cmd, ''))).toBe('switched to Elk Grove')
     const both = parse('switch to home and sdsu')
-    expect(spokenFor(both, applyCommand(both, ''))).toBe('switching to Home and SDSU')
+    expect(spokenFor(both, applyCommand(both, ''))).toBe('switched to Home and SDSU')
   })
 
   it('is for a commands agent, not for one you are chatting with', () => {

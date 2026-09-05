@@ -517,7 +517,7 @@ export function applyCommand(cmd, text) {
   // Switching desktops has nothing to do with the transcript, and least of all
   // with whether there is one.
   if (action === 'space') {
-    return unchanged(`switching to ${(cmd.args && cmd.args.name) || 'that space'}`, 'space')
+    return unchanged(`switched to ${(cmd.args && cmd.args.name) || 'that space'}`, 'space')
   }
   if (action === 'closePanel') return unchanged('closed', 'closePanel')
 
@@ -711,9 +711,10 @@ export function spokenFor (cmd, result) {
     // Saying "hushed" out loud would be the joke that never stops being made.
     case 'stopTalking': return ''
     case 'closePanel': return 'closed'
-    /* Said before the switch, not after: the desktop is about to change and
-       the name is the confirmation that it is the right one. */
-    case 'space': return `switching to ${(cmd.args && cmd.args.name) || 'that space'}`
+    /* Past tense said a moment early, the same as "copied" and "sent": the
+       desktop is about to change and a line spoken after it is a line about a
+       desktop you have already left. */
+    case 'space': return `switched to ${(cmd.args && cmd.args.name) || 'that space'}`
   }
 
   const verb = SPOKEN_VERBS[cmd.action]
