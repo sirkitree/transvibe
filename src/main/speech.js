@@ -68,13 +68,37 @@ export function stopSpeaking () {
   try { p.kill() } catch { /* already gone */ }
 }
 
+/* Words a minute `say` manages at its default rate, near enough to size a
+   timeout with. */
+const DEFAULT_WPM = 175
+
+/**
+ * How long to let one line take before deciding `say` has hung.
+ *
+ * It has to scale with the line. A confirmation is four words and a chat
+ * agent's answer is up to sixty — twenty seconds of speech — and a cap sized
+ * for the first cuts the second off mid-sentence.
+ *
+ * Twice the time the words should take, plus a few seconds of starting up.
+ * Generous on purpose: this is a guard against a hung process, not a schedule,
+ * and `say` finishing normally resolves long before it.
+ *
+ * @param {string} text
+ * @param {number|null} rate  words per minute, if the voice was given one
+ */
+export function speechTimeout (text, rate = null) {
+  const words = String(text == null ? '' : text).trim().split(/\s+/).filter(Boolean).length
+  const wpm = Number.isFinite(rate) && rate > 0 ? rate : DEFAULT_WPM
+  const spoken = (words / wpm) * 60000
+  return Math.min(60000, Math.max(8000, Math.round(3000 + spoken * 2)))
+}
+
 /**
  * Say one line, and resolve when the speaker is quiet again.
  *
  * The caller deafens the microphone for exactly this window, so resolving late
  * is worse than not speaking at all: a hung `say` would leave the app unable
- * to hear. Hence the cap — a four-word confirmation that has not finished in
- * eight seconds is not going to.
+ * to hear. Hence the cap, sized to the line rather than fixed.
  *
  * A second command interrupts the first rather than queueing behind it: by the
  * time you have said the next thing, hearing about the last one is noise.
@@ -83,9 +107,10 @@ export function stopSpeaking () {
  * @param {{voice?: string|null, rate?: number|null, timeoutMs?: number}} options
  * @returns {Promise<{ok: boolean, error?: string}>}
  */
-export function speak (text, { voice = null, rate = null, timeoutMs = 8000 } = {}) {
+export function speak (text, { voice = null, rate = null, timeoutMs = null } = {}) {
   const line = String(text == null ? '' : text).trim()
   if (!line) return Promise.resolve({ ok: false, error: 'nothing to say' })
+  const cap = Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : speechTimeout(line, rate)
 
   stopSpeaking()
 
@@ -114,7 +139,7 @@ export function speak (text, { voice = null, rate = null, timeoutMs = 8000 } = {
     const timer = setTimeout(() => {
       try { p.kill() } catch { /* already gone */ }
       done({ ok: false, error: 'timed out' })
-    }, timeoutMs)
+    }, cap)
 
     p.on('error', err => done({ ok: false, error: err.message }))
     p.on('close', () => done({ ok: true }))
