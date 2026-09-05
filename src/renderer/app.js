@@ -572,7 +572,11 @@ async function runCommand (utterance, { retry = true, keep = null, collect = nul
       state.listeningUntil = 0
       break
     case 'closePanel': closeOpenPanel(); break
-    case 'space': goToSpace(cmd.args.spaces, cmd.args.name); break
+    /* Awaited, unlike the rest. The others are done the moment they are asked
+       for; a jump is not, and the next command in a chain is usually "send it"
+       — which pastes into whatever is frontmost. Let this one run loose and
+       the paste lands in the app you were switching away from. */
+    case 'space': await goToSpace(cmd.args.spaces, cmd.args.name); break
   }
 
   hint(result.message)
