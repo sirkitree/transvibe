@@ -57,7 +57,7 @@ export function createAssist ({
      which have no history — or a messages array for a conversation, which
      does. `at` names the model, because a chat agent may be pointed at a
      better one than the small model doing the cleanup. */
-  async function chat (message, ms = timeoutMs, at = model) {
+  async function chat (message, ms = timeoutMs, at = model, think = false) {
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), ms)
     try {
@@ -71,9 +71,13 @@ export function createAssist ({
             : [{ role: 'user', content: message }],
           temperature: 0,
           stream: false,
-          // Thinking is on by default and costs ~1s of latency for a task that
-          // needs none — it turned a 290ms call into 1.4s in testing.
-          reasoning_effort: 'none'
+          /* Thinking is on by default and costs ~1s of latency for a task that
+             needs none — it turned a 290ms call into 1.4s in testing. Asked
+             for, though, it is left alone: on qwen3:30b-a3b this parameter
+             does not stop the model reasoning, it stops the reasoning being
+             held apart from the answer, and the whole chain of thought lands
+             in what gets said out loud. */
+          ...(think ? {} : { reasoning_effort: 'none' })
         }),
         signal: controller.signal
       })
@@ -162,16 +166,17 @@ export function createAssist ({
      *
      * @param {string} question
      * @param {Array<{role: string, content: string}>} history earlier turns
-     * @param {{model?: string}} options the agent's own model, if it has one
+     * @param {{model?: string, thinking?: boolean}} options the agent's own
+     *   model and whether it is allowed to reason before answering
      * @returns {Promise<{text: string, ok: boolean, reason?: string}>}
      */
-    async ask (question, history = [], { model: at = null } = {}) {
+    async ask (question, history = [], { model: at = null, thinking = false } = {}) {
       if (!String(question || '').trim()) return { text: '', ok: false, reason: 'nothing asked' }
       if (available === false && !at) {
         return { text: '', ok: false, reason: 'the local model is not running' }
       }
       try {
-        const reply = await chat(buildAskMessages(question, history), 20000, at || model)
+        const reply = await chat(buildAskMessages(question, history), 20000, at || model, thinking)
         return acceptAnswer(reply)
       } catch (err) {
         return {

@@ -210,3 +210,22 @@ describe('a model each', () => {
     expect(addAgent(roster, { name: 'bob' }).agents.at(-1).model).toBe('gemma4:e2b')
   })
 })
+
+describe('thinking', () => {
+  it('is on for one that talks back and off for one that runs commands', () => {
+    // Reasoning is worth a second when the answer is the point, and is a
+    // second wasted on tidying an utterance or guessing a command.
+    expect(normalizeAgent({ name: 'mira', kind: 'chat' }).thinking).toBe(true)
+    expect(normalizeAgent({ name: 'atlas', kind: 'commands' }).thinking).toBe(false)
+  })
+
+  it('is whatever it was set to, either way', () => {
+    expect(normalizeAgent({ name: 'mira', kind: 'chat', thinking: false }).thinking).toBe(false)
+    expect(normalizeAgent({ name: 'atlas', kind: 'commands', thinking: true }).thinking).toBe(true)
+  })
+
+  it('falls back to the kind when the file says something that is not a boolean', () => {
+    expect(normalizeAgent({ name: 'mira', kind: 'chat', thinking: 'yes' }).thinking).toBe(true)
+    expect(normalizeAgent({ name: 'a', kind: 'commands', thinking: null }).thinking).toBe(false)
+  })
+})

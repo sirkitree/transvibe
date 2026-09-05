@@ -81,6 +81,19 @@ export function normalizeAgent (raw, index = 0) {
        hearing. Both are that agent's thinking, so both are its model to
        choose. Null means the default in Advanced. */
     model: text(source.model) || null,
+    /* Whether that model is allowed to think before it answers.
+   
+       Only a chat agent uses it. The other three jobs a model does here —
+       tidying an utterance, guessing a command, shortening a confirmation —
+       are mechanical rewrites on a tight clock, and reasoning through one
+       costs a second for nothing.
+   
+       On by default for a chat agent and off for the rest, which is both the
+       useful default and the safe one: measured on qwen3:30b-a3b, asking for
+       no reasoning does not stop it reasoning, it only stops the reasoning
+       being kept separate — the whole chain of thought arrives in the answer
+       and gets said out loud. */
+    thinking: typeof source.thinking === 'boolean' ? source.thinking : kind === 'chat',
     run: kind === 'external' ? (text(source.run) || null) : null
   }
 }

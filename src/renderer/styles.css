@@ -889,4 +889,6 @@ body.awake .bar {
 }
 
 .agent-sub select { flex: 1; }
+/* The model name is the long one; "thinks first" needs only its own width. */
+.agent-sub .agent-thinking { flex: 0 1 auto; }
 .agent-sub .note { font-size: 11px; white-space: nowrap; }

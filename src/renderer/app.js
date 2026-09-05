@@ -340,7 +340,8 @@ async function converse (agent, question) {
   render()
 
   try {
-    const answer = await window.transvibe.ask(question, priorHistory, { model: agent.model })
+    const answer = await window.transvibe.ask(question, priorHistory,
+      { model: agent.model, thinking: agent.thinking })
     if (!answer.ok) {
       state.asking = false
       hint(answer.reason || 'no answer')
@@ -1215,6 +1216,29 @@ async function renderAgents (into = null) {
         model: model.value || null
       }))
       sub.append(model)
+
+      /* Whether it may reason before answering, next to the model because it
+         is a property of the pairing rather than of either one: the same model
+         is a different agent with it on. Only offered to a chat agent — the
+         jobs a commands agent does with its model are rewrites on a tight
+         clock, where reasoning is a second spent on nothing. */
+      if (agent.kind === 'chat') {
+        const thinking = el('select', 'agent-thinking')
+        for (const [value, label] of [['yes', 'thinks first'], ['no', 'answers straight']]) {
+          const node = el('option', null, label)
+          node.value = value
+          thinking.append(node)
+        }
+        thinking.value = agent.thinking ? 'yes' : 'no'
+        thinking.title = 'Thinking is slower but better reasoned. Not every ' +
+          'model can be told to skip it — some answer with their reasoning ' +
+          'in the reply instead.'
+        thinking.onchange = () => saveAgents(updateAgent(roster, agent.name, {
+          thinking: thinking.value === 'yes'
+        }))
+        sub.append(thinking)
+      }
+
       sub.append(el('span', 'note', note || ''))
       row.append(sub)
     }
