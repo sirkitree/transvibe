@@ -5,7 +5,9 @@ import path from 'node:path'
 import {
   spaceKey, spaceAliases, matchSpace, matchSpaces, spokenList
 } from '../src/shared/spaces.js'
-import { listSpaces, expandHome, dockClickScript } from '../src/main/spaces.js'
+import {
+  listSpaces, listRunningApps, listSwitchTargets, expandHome, dockClickScript
+} from '../src/main/spaces.js'
 
 describe('spaceKey', () => {
   it('reduces a marker name and the way it is said to the same thing', () => {
@@ -218,5 +220,26 @@ describe('dockClickScript', () => {
   it('escapes a name that would otherwise end the AppleScript string', () => {
     expect(dockClickScript('We"ird')).toContain('"We\\"ird"')
     expect(dockClickScript('back\\slash')).toContain('"back\\\\slash"')
+  })
+})
+
+/* The main process is only loaded by Electron at launch, so a missing export
+   here is a dialog on startup rather than a failing test. Reaching the
+   functions is most of the point. */
+describe('listSwitchTargets', () => {
+  it('offers the markers and whatever is running, as one list', async () => {
+    const targets = await listSwitchTargets(null)
+    expect(Array.isArray(targets)).toBe(true)
+    // No folder, so anything here came from the running apps.
+    for (const t of targets) {
+      expect(typeof t.name).toBe('string')
+      expect(typeof t.title).toBe('string')
+      expect(Array.isArray(t.keys)).toBe(true)
+    }
+  })
+
+  it('asks the system for the running apps without throwing', async () => {
+    // Empty is a legitimate answer — it is what no Accessibility looks like.
+    expect(Array.isArray(await listRunningApps())).toBe(true)
   })
 })
