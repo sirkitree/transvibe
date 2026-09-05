@@ -14,7 +14,8 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
-import { spaceKey } from '../shared/spaces.js'
+import { spawn } from 'node:child_process'
+import { spaceKey, spaceAliases } from '../shared/spaces.js'
 
 /* The launcher is a marker-shaped thing that is not a marker: opening it
    re-runs the whole login sequence. */
@@ -92,7 +93,8 @@ export function listSpaces (dir) {
     const app = path.join(root, `${name}.app`)
     if (!fs.existsSync(app)) continue
     seen.add(key)
-    out.push({ name: name.replace(/\s+Space$/i, ''), title: name, key, app, display })
+    const short = name.replace(/\s+Space$/i, '')
+    out.push({ name: short, title: name, key, keys: spaceAliases(short), app, display })
   }
   return out
 }
@@ -115,4 +117,65 @@ export function dockClickScript (title) {
     .replace(/\\/g, '\\\\')
     .replace(/"/g, '\\"')
   return `tell application "System Events" to tell process "Dock" to click UI element "${escaped}" of list 1`
+}
+
+/* Every app you could switch to right now. Deliberately the running ones and
+   not everything installed: the list stays short enough that half a name is
+   still unambiguous, and it is exactly the set of apps that has a Dock tile to
+   click and a desktop to be on.
+
+   `background only is false` is what separates an app from a daemon — it means
+   it has a menu bar and a Dock tile. */
+const RUNNING_APPS = [
+  'tell application "System Events" to set found to name of every application process whose background only is false',
+  'set text item delimiters to linefeed',
+  'return found as text'
+]
+
+/**
+ * @returns {Promise<Array<{name, title, key, keys, app, display}>>} empty when
+ *   System Events cannot be asked, which is the no-Accessibility case and is
+ *   not an error: it means no app names, the same as no folder means no Spaces.
+ */
+export function listRunningApps () {
+  return new Promise(resolve => {
+    const args = RUNNING_APPS.flatMap(line => ['-e', line])
+    const p = spawn('osascript', args, { stdio: ['ignore', 'pipe', 'ignore'] })
+    let out = ''
+    const done = names => resolve(names)
+    const timer = setTimeout(() => { p.kill(); done([]) }, 1500)
+
+    p.stdout.on('data', d => { out += d })
+    p.on('error', () => { clearTimeout(timer); done([]) })
+    p.on('close', code => {
+      clearTimeout(timer)
+      if (code !== 0) return done([])
+      const names = out.split('\n').map(n => n.trim()).filter(Boolean)
+      done(names.map(name => ({
+        name,
+        title: name,
+        key: spaceKey(name),
+        keys: spaceAliases(name),
+        // `open -a` takes a name as happily as a path, and it is only the
+        // fallback for when the Dock click cannot be made.
+        app: name,
+        display: null
+      })).filter(a => a.key))
+    })
+  })
+}
+
+/**
+ * Everywhere "switch to" can take you: the markers first, then whatever is
+ * running.
+ *
+ * Markers win a name outright. A marker that is running is also an app process
+ * — "Home Space" turns up in both lists — and the marker record is the better
+ * one: it knows the bundle and which display it moves.
+ */
+export async function listSwitchTargets (dir) {
+  const markers = listSpaces(dir)
+  const taken = new Set(markers.map(m => m.key))
+  const apps = (await listRunningApps()).filter(a => !taken.has(a.key))
+  return [...markers, ...apps]
 }

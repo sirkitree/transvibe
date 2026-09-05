@@ -102,16 +102,19 @@ The rules are generated from the settings panel itself, so the two can't drift a
 
 The verb and the setting's name have to be adjacent, which is what keeps this out of ordinary speech — "turn off the lights" names no setting and is transcribed as what it is. A settings change is not on the transcript's undo stack; undo it by saying the opposite.
 
-### Named desktop Spaces
+### Switching to a Space, or an app
 
-macOS will not tell you a desktop's name or switch to one on request. The workaround is a *marker*: a tiny app assigned to one desktop, which drags you there when it is activated — see [space-markers](https://github.com/sirkitree/space-markers). Point **Settings › Sending › Space markers folder** at a folder of `<Name> Space.app` bundles and their names become sayable:
+macOS will not tell you a desktop's name or switch to one on request. The workaround is a *marker*: a tiny app assigned to one desktop, which drags you there when it is activated — see [space-markers](https://github.com/sirkitree/space-markers). Point **Settings › Sending › Space markers folder** at a folder of `<Name> Space.app` bundles and their names become sayable, alongside every app you have open:
 
     "hey Claude, switch to SDSU"
     "go to home" / "jump to hivemind" / "take me to elk grove"
+    "switch to slack" / "go to chrome"     ← any app that is running
 
 With two displays there are two current desktops, so **"switch to home and communications"** moves both — each marker takes the display it lives on, and the last one named is left in front. It is all or nothing, like a chain: if one name does not resolve the whole sentence stays dictation, which is what keeps "switch to home and send it" working as two commands instead of one confused jump. Two markers on the same display can't both be in front of you, and the strip says so rather than letting one of them look ignored.
 
-The name has to be one of the markers that actually exists, which is the whole reason this is safe to say out loud: with no folder set there are no names, and "go to the store" is a sentence rather than a command. An initialism is matched however whisper wrote it down — "SDSU", "SD SU" and "S.D.S.U." all reach the same desktop — and a prefix is enough when only one marker starts that way. Two that both could be meant match neither: landing on the wrong desktop costs you the trip back as well.
+**Any running app is a name too**, with no setup at all — Slack, Chrome, Telegram, whatever is open. The list is fetched at the moment you say a sentence that starts with the verb, so it is never stale, and it is only the running apps rather than everything installed: a short list keeps half a name unambiguous, and words like *Notes* and *Music* stay ordinary speech while those apps are closed. Half a name works where it is the end of one — "chrome" reaches Google Chrome, "grove" reaches Elk Grove — because the part people drop is the front. A marker wins a name outright when both could be meant.
+
+The name has to be one of the markers or apps that actually exists, which is the whole reason this is safe to say out loud: with no folder set there are no names, and "go to the store" is a sentence rather than a command. An initialism is matched however whisper wrote it down — "SDSU", "SD SU" and "S.D.S.U." all reach the same desktop — and a prefix is enough when only one marker starts that way. Two that both could be meant match neither: landing on the wrong desktop costs you the trip back as well.
 
 It chains, so "switch to hivemind and send it" jumps there and pastes. "Switched to home and communications" is spoken a moment before it is true, for the same reason as *send* — a line said after the switch is a line about a desktop you have already left.
 

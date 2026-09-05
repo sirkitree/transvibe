@@ -2,7 +2,9 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { spaceKey, matchSpace, matchSpaces, spokenList } from '../src/shared/spaces.js'
+import {
+  spaceKey, spaceAliases, matchSpace, matchSpaces, spokenList
+} from '../src/shared/spaces.js'
 import { listSpaces, expandHome, dockClickScript } from '../src/main/spaces.js'
 
 describe('spaceKey', () => {
@@ -31,6 +33,24 @@ describe('spaceKey', () => {
   })
 })
 
+describe('spaceAliases', () => {
+  it('answers to the whole name and to the end of it', () => {
+    // Nobody says "Google Chrome", and a prefix rule cannot get there.
+    expect(spaceAliases('Google Chrome')).toEqual(['googlechrome', 'chrome'])
+    expect(spaceAliases('Elk Grove')).toEqual(['elkgrove', 'grove'])
+  })
+
+  it('is just the name when there is only one word', () => {
+    expect(spaceAliases('Slack')).toEqual(['slack'])
+    expect(spaceAliases('SDSU')).toEqual(['sdsu'])
+  })
+
+  it('survives nothing at all', () => {
+    expect(spaceAliases('')).toEqual([])
+    expect(spaceAliases(null)).toEqual([])
+  })
+})
+
 describe('matchSpace', () => {
   const spaces = [
     { name: 'SDSU', key: 'sdsu' },
@@ -52,6 +72,16 @@ describe('matchSpace', () => {
 
   it('refuses an ambiguous prefix rather than guessing a desktop', () => {
     expect(matchSpace('h', spaces)).toBeNull()
+  })
+
+  it('takes an app by the half of its name people actually say', () => {
+    const apps = [
+      { name: 'Google Chrome', keys: spaceAliases('Google Chrome') },
+      { name: 'Slack', keys: spaceAliases('Slack') }
+    ]
+    expect(matchSpace('chrome', apps).name).toBe('Google Chrome')
+    expect(matchSpace('google chrome', apps).name).toBe('Google Chrome')
+    expect(matchSpace('slack', apps).name).toBe('Slack')
   })
 
   it('refuses a name that is not there', () => {

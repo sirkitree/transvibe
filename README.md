@@ -9,7 +9,7 @@ Local voice-to-text for macOS. A click-through strip across the top of the scree
 - Name your own agents: each has its own wake name, its own voice, and its own colour on the strip
 - One of them can talk back — a local model, answered out loud, never mixed into your transcript
 - Ignores music and background noise rather than transcribing it, while the visualizer still reacts to it
-- Name your desktop Spaces and say "switch to SDSU" to land on one
+- "Switch to Slack" goes there; name your desktop Spaces and "switch to SDSU" lands on one
 - Commands chain: "open settings and change the voice to Karen"
 - Settings change by voice too — "turn off spoken replies", "set the fade to ten seconds", "what's the threshold"
 - A second, smaller ribbon appears in the middle while it is talking back — the same visualizer, turned around

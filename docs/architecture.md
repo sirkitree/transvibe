@@ -97,13 +97,13 @@ src/main/       index.js      window, tray, shortcuts, IPC, send
                 whisper-parse.js  output parsing, artifact filter, queue
                 wav.js        Float32 → 16-bit PCM WAV
                 models.js     find or download a ggml model
-                spaces.js     find the desktop-Space marker apps
+                spaces.js     the markers, and the apps that are running
                 overlay.js    strip geometry + hover-wake rule (pure)
                 config.js     settings persistence
                 assist.js     optional local LLM pass (Ollama)
                 speech.js     saying a confirmation out loud via `say`
 src/shared/     agents.js     who you can talk to, and what a name means (pure)
-                spaces.js     which Space a spoken name meant (pure)
+                spaces.js     which Space or app a spoken name meant (pure)
                 conversation.js  prompts and guards for talking to one (pure)
                 glossary.js   vocabulary prompt + corrections (pure)
                 assist.js     assist prompts + reply guards (pure)

@@ -13,7 +13,7 @@ import { speak, stopSpeaking, listVoices } from './speech.js'
 import { findModel, downloadModel, listModels, humanSize, MODELS_DIR } from './models.js'
 import * as config from './config.js'
 import { stripBounds, contains, nextWake } from './overlay.js'
-import { listSpaces, dockClickScript } from './spaces.js'
+import { listSpaces, listSwitchTargets, dockClickScript } from './spaces.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -461,10 +461,10 @@ async function sendTranscript (text) {
   })
 }
 
-/* Named desktop Spaces. The list goes to the renderer without its paths: the
-   parser only needs the names to recognise one being said, and the jump is
-   this end's job anyway. */
-const spaceList = () => listSpaces(settings.spacesDir)
+/* Everywhere "switch to" can go: the markers, and whatever is running. The
+   list reaches the renderer without its paths — the parser only needs the
+   names to recognise one being said, and the jump is this end's job anyway. */
+const spaceList = () => listSwitchTargets(settings.spacesDir)
 
 /* How long to leave between two markers. Empirical, and the same order as the
    waits in the space-markers launcher: the desktop switch is an animation, and
@@ -498,7 +498,8 @@ async function activateSpace (space) {
   if (!result.ok) spawn('open', ['-a', space.app], { stdio: 'ignore' })
   return result
 }
-const spaceNames = () => spaceList().map(({ name, key }) => ({ name, key }))
+const spaceNames = async () =>
+  (await spaceList()).map(({ name, key, keys }) => ({ name, key, keys }))
 
 /* ---------------------------------------------------------------------- IPC */
 
@@ -509,7 +510,7 @@ ipcMain.handle('spaces:list', () => spaceNames())
    the order they were said, and the last one named is the one left in front. */
 ipcMain.handle('space:open', async (_e, keys) => {
   const wanted = Array.isArray(keys) ? keys : [keys]
-  const all = spaceList()
+  const all = await spaceList()
   const found = wanted.map(key => all.find(s => s.key === key)).filter(Boolean)
   if (!found.length || found.length !== wanted.length) {
     return { ok: false, error: 'no such space' }
@@ -592,7 +593,7 @@ ipcMain.handle('settings:set', (_e, patch) => {
   }
   if ('stripHeight' in patch || 'panelHeight' in patch) applyStripBounds()
   // A new folder means a new set of names the parser will answer to.
-  if ('spacesDir' in patch) send('spaces', spaceNames())
+  if ('spacesDir' in patch) spaceNames().then(list => send('spaces', list))
   return settings
 })
 

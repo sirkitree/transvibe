@@ -2,7 +2,8 @@ import { startCapture } from './audio.js'
 import { createVisualizer } from './visualizer.js'
 import { createSayingViz } from './saying-viz.js'
 import {
-  parseCommand, applyCommand, spokenFor, splitChain, UNIVERSAL, COMMANDS
+  parseCommand, applyCommand, spokenFor, splitChain, looksLikeSwitch, UNIVERSAL,
+  COMMANDS
 } from './commands.js'
 import { matchAgent } from './wake.js'
 import { parseSettingCommand, applySettingCommand, settingPhrases } from './settings-voice.js'
@@ -393,6 +394,13 @@ function renderConvoIndicator () {
 /* One spoken utterance, interpreted as an editing command rather than as text
    to insert. A parse failure must never silently swallow what was said. */
 async function runCommand (utterance, { retry = true, keep = null, collect = null } = {}) {
+  /* Asked for at the moment it is needed rather than kept up to date, because
+     what you can switch to includes whatever is running, and that is different
+     every time you look. Only for a sentence that opens with the verb — the
+     lookup costs a quarter of a second, which is not worth paying on "delete
+     that". */
+  if (looksLikeSwitch(utterance)) await refreshSpaces()
+
   const cmd = parseCommand(utterance, { spaces: state.spaces })
 
   /* Inside a chain the confirmations are gathered and said once at the end.
@@ -577,6 +585,14 @@ async function runCommand (utterance, { retry = true, keep = null, collect = nul
  * as with 'send': the screen is about to be replaced and a line spoken after
  * the switch is a line about a desktop you have already left. Only the failure
  * is reported here, and only because it means nothing happened at all. */
+async function refreshSpaces () {
+  try {
+    state.spaces = await window.transvibe.listSpaces()
+  } catch (err) {
+    console.warn('[transvibe] could not list places to switch to:', err.message)
+  }
+}
+
 async function goToSpace (spaces, name) {
   const result = await window.transvibe.openSpace(spaces.map(s => s.key))
   if (!result || !result.ok) {
@@ -1712,7 +1728,7 @@ function syncHold () {
 
 async function main () {
   state.settings = await window.transvibe.getSettings()
-  state.spaces = await window.transvibe.listSpaces()
+  await refreshSpaces()
   // Point the folder setting somewhere else and the names change with it.
   window.transvibe.onSpaces(list => { state.spaces = Array.isArray(list) ? list : [] })
   state.settingsPanel = createSettingsPanel({

@@ -11,6 +11,9 @@
  * than one name: each marker moves the display it lives on, and the pair is one
  * command rather than two.
  *
+ * A running app is a jump target too, and the same click reaches it: apps are
+ * on desktops just as markers are, and "switch to Slack" is the same sentence.
+ *
  * Pure — no fs, no Electron. `src/main/spaces.js` does the reading.
  */
 
@@ -31,6 +34,32 @@ export function spaceKey (name) {
 }
 
 /**
+ * Every key a target answers to: its whole name, and each trailing run of its
+ * words.
+ *
+ * "Google Chrome" is called Chrome by everybody, and a prefix rule cannot get
+ * there from "chrome" — the shortening people do is at the front, not the end.
+ * "Elk Grove Space" answers to "elk grove" and to "grove" for the same reason.
+ *
+ * @returns {string[]} longest first, so the fullest name is the primary key
+ */
+export function spaceAliases (name) {
+  const words = String(name == null ? '' : name).trim().split(/\s+/).filter(Boolean)
+  const out = []
+  for (let i = 0; i < words.length; i++) {
+    const key = spaceKey(words.slice(i).join(' '))
+    if (key && !out.includes(key)) out.push(key)
+  }
+  return out
+}
+
+const keysOf = space => {
+  if (!space) return []
+  if (Array.isArray(space.keys) && space.keys.length) return space.keys
+  return space.key ? [space.key] : []
+}
+
+/**
  * The one space a spoken name can only mean.
  *
  * A prefix counts — "elk" is enough when nothing else starts that way — but an
@@ -46,11 +75,11 @@ export function matchSpace (name, spaces) {
   const key = spaceKey(name)
   if (!key || !Array.isArray(spaces)) return null
 
-  const exact = spaces.filter(s => s && s.key === key)
+  const exact = spaces.filter(s => keysOf(s).includes(key))
   if (exact.length === 1) return exact[0]
   if (exact.length > 1) return null
 
-  const starts = spaces.filter(s => s && typeof s.key === 'string' && s.key.startsWith(key))
+  const starts = spaces.filter(s => keysOf(s).some(k => k.startsWith(key)))
   return starts.length === 1 ? starts[0] : null
 }
 

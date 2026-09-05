@@ -293,6 +293,8 @@ const EXACT = {
   dismiss: { action: 'hide' }
 }
 
+const SWITCH_RE = /^(?:switch|jump|go|take me|move) (?:over )?to (.+)$/
+
 // Each matcher owns a phrasing family. A matcher that recognises the verb but
 // not the target returns null on purpose: better no command than a wrong one.
 const MATCHERS = [
@@ -328,7 +330,7 @@ const MATCHERS = [
        actually exist — without that check "go to the store" is a command, and
        a dictated sentence that takes your screen away is the worst false
        positive in here. */
-    re: /^(?:switch|jump|go|take me|move) (?:over )?to (.+)$/,
+    re: SWITCH_RE,
     build: (m, raw, { spaces } = {}) => {
       /* More than one name is one command, not a chain: with two displays
          there are two current desktops, and "switch to home and
@@ -402,6 +404,18 @@ function wholeTranscript(action) {
  *   apps on this machine, so a Space can be named out loud. Absent means there
  *   are none, and "switch to X" is left as dictation.
  */
+/**
+ * Does this sentence want to go somewhere?
+ *
+ * Only the verb, not the name — the caller uses it to go and find out what is
+ * running before parsing, because the list of apps you could switch to is
+ * different every time you look at it. A sentence that passes this may still
+ * be dictation; that is decided by whether the name resolves.
+ */
+export function looksLikeSwitch (utterance) {
+  return SWITCH_RE.test(normalize(utterance))
+}
+
 export function parseCommand(utterance, options = {}) {
   if (typeof utterance !== 'string') return null
   const text = normalize(utterance)
@@ -872,7 +886,7 @@ export const COMMANDS = [
   {
     action: 'space',
     examples: ['switch to home', 'go to home', 'jump to home', 'take me to home'],
-    help: 'Jump to a named desktop Space. The names are the marker apps in the folder set under Sending — with no folder set, there are none and this is left as dictation.'
+    help: 'Jump to a desktop Space or an app that is running. The Space names are the marker apps in the folder set under Sending; the app names are whatever is open right now. A name that is neither is left as dictation.'
   },
   {
     action: 'closePanel',

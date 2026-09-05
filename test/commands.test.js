@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
+  looksLikeSwitch,
   parseCommand,
   applyCommand,
   splitSentences,
@@ -690,6 +691,15 @@ describe('parseCommand — named Spaces', () => {
        desktops — which is exactly what returning null here buys. */
     expect(parse('switch to home and send it')).toBeNull()
     expect(splitChain('switch to home and send it').map(parse).every(Boolean)).toBe(true)
+  })
+
+  it('recognises the verb without the name, so the caller can go and look', () => {
+    // What is running changes between one sentence and the next, so the list
+    // is fetched only once a sentence has shown it might need one.
+    expect(looksLikeSwitch('switch to slack')).toBe(true)
+    expect(looksLikeSwitch('Go to Home.')).toBe(true)
+    expect(looksLikeSwitch('delete that')).toBe(false)
+    expect(looksLikeSwitch('go away')).toBe(false)
   })
 
   it('is not a command at all when no folder of markers is set', () => {
