@@ -204,9 +204,15 @@ describe('listSpaces', () => {
 
 describe('dockClickScript', () => {
   it('clicks the tile the Dock knows by that name', () => {
-    expect(dockClickScript('CATIC Space')).toBe(
-      'tell application "System Events" to tell process "Dock" ' +
-      'to click UI element "CATIC Space" of list 1')
+    expect(dockClickScript('CATIC Space'))
+      .toContain('click UI element "CATIC Space" of list 1 of process "Dock"')
+  })
+
+  it('waits until the target is really in front, so a send lands in it', () => {
+    const script = dockClickScript('Telegram')
+    expect(script).toContain('(name of first process whose frontmost is true) is "Telegram"')
+    expect(script).toContain('return "front"')
+    expect(script).toContain('return "timeout"')
   })
 
   it('escapes a name that would otherwise end the AppleScript string', () => {

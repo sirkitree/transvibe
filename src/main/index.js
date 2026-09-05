@@ -473,26 +473,35 @@ const spaceList = () => listSwitchTargets(settings.spacesDir)
 const SPACE_SWITCH_MS = 500
 
 /**
- * Go to the desktop a marker is assigned to, by clicking its Dock tile.
+ * Go where a target is, by clicking its Dock tile.
  *
- * Not by opening the app, which is the obvious thing and does not work: `open
- * -a` hands the marker the menu bar and leaves the desktop where it was. The
- * Dock click is what macOS treats as worth following.
+ * Not by opening it, which is the obvious thing and does not work: `open -a`
+ * hands the app the menu bar and leaves the desktop where it was. The Dock
+ * click is what macOS treats as worth following.
+ *
+ * Resolves once the target is actually frontmost, not once the click has been
+ * made. "Switch to slack and send it" depends on that: the paste goes to
+ * whatever is in front, so the next command must not start until the switch
+ * has landed.
  *
  * The fallback is that same `open -a`, for when the click cannot be made —
- * Accessibility not granted, or no tile because the marker was quit. It
- * activates the app without going anywhere, which is not the jump, but it does
- * leave the marker running so the next attempt has a tile to click.
+ * Accessibility not granted, or no tile because the app was quit. It activates
+ * without going anywhere, which is not the jump, but it does leave the app
+ * running so the next attempt has a tile to click.
  */
 async function activateSpace (space) {
   const result = await new Promise(resolve => {
     const p = spawn('osascript', ['-e', dockClickScript(space.title)],
-      { stdio: ['ignore', 'ignore', 'pipe'] })
+      { stdio: ['ignore', 'pipe', 'pipe'] })
+    let out = ''
     let err = ''
+    p.stdout.on('data', d => { out += d })
     p.stderr.on('data', d => { err += d })
     p.on('error', e => resolve({ ok: false, error: e.message }))
+    /* A timeout is a slow switch, not a failed one — the click was made, and
+       falling back to `open -a` on top of it would only muddle the focus. */
     p.on('close', code => resolve(code === 0
-      ? { ok: true }
+      ? { ok: true, front: out.trim() === 'front' }
       : { ok: false, error: err.trim() || 'could not click the Dock tile' }))
   })
   if (!result.ok) spawn('open', ['-a', space.app], { stdio: 'ignore' })

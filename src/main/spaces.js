@@ -100,82 +100,38 @@ export function listSpaces (dir) {
 }
 
 /**
- * Clicking the marker's Dock tile, as AppleScript.
+ * Clicking a target's Dock tile, and waiting until it is really in front.
  *
  * `open -a` is the obvious way to activate an app and it is the wrong one: it
- * hands the marker the menu bar and leaves the desktop exactly where it was.
+ * hands the target the menu bar and leaves the desktop exactly where it was.
  * Whatever macOS does with the Space on activation, it does for a click on the
  * Dock and not for a LaunchServices open — measured on this machine, watching
  * the marker window go on-screen for one and not the other.
  *
- * So the jump is a Dock click. It needs Accessibility, which transvibe already
- * asks for to paste, and it needs the tile's name — the marker's whole name,
- * "Space" and all.
+ * The waiting is the other half, and it is what makes "switch to slack and send
+ * it" work: the paste goes to whatever is frontmost, so the switch has to have
+ * finished landing before the next command runs. Polled inside the script
+ * rather than out here, because one osascript that waits costs a fraction of
+ * what asking repeatedly from Node would.
+ *
+ * Returns "front" once it is, or "timeout" after two seconds — the click still
+ * happened, so that is a slow switch rather than a failed one.
+ *
+ * Needs Accessibility, which transvibe already asks for to paste, and the
+ * tile's name — for a marker, its whole name, "Space" and all.
  */
 export function dockClickScript (title) {
   const escaped = String(title == null ? '' : title)
     .replace(/\\/g, '\\\\')
     .replace(/"/g, '\\"')
-  return `tell application "System Events" to tell process "Dock" to click UI element "${escaped}" of list 1`
-}
-
-/* Every app you could switch to right now. Deliberately the running ones and
-   not everything installed: the list stays short enough that half a name is
-   still unambiguous, and it is exactly the set of apps that has a Dock tile to
-   click and a desktop to be on.
-
-   `background only is false` is what separates an app from a daemon — it means
-   it has a menu bar and a Dock tile. */
-const RUNNING_APPS = [
-  'tell application "System Events" to set found to name of every application process whose background only is false',
-  'set text item delimiters to linefeed',
-  'return found as text'
-]
-
-/**
- * @returns {Promise<Array<{name, title, key, keys, app, display}>>} empty when
- *   System Events cannot be asked, which is the no-Accessibility case and is
- *   not an error: it means no app names, the same as no folder means no Spaces.
- */
-export function listRunningApps () {
-  return new Promise(resolve => {
-    const args = RUNNING_APPS.flatMap(line => ['-e', line])
-    const p = spawn('osascript', args, { stdio: ['ignore', 'pipe', 'ignore'] })
-    let out = ''
-    const done = names => resolve(names)
-    const timer = setTimeout(() => { p.kill(); done([]) }, 1500)
-
-    p.stdout.on('data', d => { out += d })
-    p.on('error', () => { clearTimeout(timer); done([]) })
-    p.on('close', code => {
-      clearTimeout(timer)
-      if (code !== 0) return done([])
-      const names = out.split('\n').map(n => n.trim()).filter(Boolean)
-      done(names.map(name => ({
-        name,
-        title: name,
-        key: spaceKey(name),
-        keys: spaceAliases(name),
-        // `open -a` takes a name as happily as a path, and it is only the
-        // fallback for when the Dock click cannot be made.
-        app: name,
-        display: null
-      })).filter(a => a.key))
-    })
-  })
-}
-
-/**
- * Everywhere "switch to" can take you: the markers first, then whatever is
- * running.
- *
- * Markers win a name outright. A marker that is running is also an app process
- * — "Home Space" turns up in both lists — and the marker record is the better
- * one: it knows the bundle and which display it moves.
- */
-export async function listSwitchTargets (dir) {
-  const markers = listSpaces(dir)
-  const taken = new Set(markers.map(m => m.key))
-  const apps = (await listRunningApps()).filter(a => !taken.has(a.key))
-  return [...markers, ...apps]
+  return [
+    'tell application "System Events"',
+    `\tclick UI element "${escaped}" of list 1 of process "Dock"`,
+    '\trepeat 40 times',
+    `\t\tif (name of first process whose frontmost is true) is "${escaped}" then return "front"`,
+    '\t\tdelay 0.05',
+    '\tend repeat',
+    'end tell',
+    'return "timeout"'
+  ].join('\n')
 }
