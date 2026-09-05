@@ -617,7 +617,19 @@ ipcMain.handle('assist:cleanup', async (_e, text) => {
    delivery" and llama3 gets it right. */
 ipcMain.handle('assist:ask', async (_e, question, history, options) => {
   if (!assist) return { text: '', ok: false, reason: 'the local model is not running' }
-  return assist.ask(question, history, options || {})
+  const answer = await assist.ask(question, history, options || {})
+  if (answer.ok && answer.model && Number.isFinite(answer.ms)) {
+    /* Kept for the picker. One answer is a small sample and the panel says so
+       by calling it the last one rather than an average — an average over a
+       cold start and five warm ones describes neither. */
+    settings = config.save({
+      modelStats: {
+        ...settings.modelStats,
+        [answer.model]: { ms: answer.ms, tokens: answer.tokens || 0, at: Date.now() }
+      }
+    })
+  }
+  return answer
 })
 
 /** Cut off a spoken reply mid-sentence. */
@@ -702,7 +714,16 @@ ipcMain.handle('models:list', () => ({
 /* Asked at the URL the settings currently hold, so pointing Ollama somewhere
    else and then opening the list shows that server's models, not the last
    one's. */
-ipcMain.handle('assist:models', () => listOllamaModels(settings.assistUrl))
+ipcMain.handle('assist:models', async () => {
+  const listed = await listOllamaModels(settings.assistUrl)
+  // The measurements live here rather than being asked for separately: the
+  // picker wants one list, and this end owns both halves of it.
+  const stats = settings.modelStats || {}
+  return {
+    ...listed,
+    models: listed.models.map(m => ({ ...m, stat: stats[m.name] || null }))
+  }
+})
 
 ipcMain.handle('login-item:get', () => app.getLoginItemSettings().openAtLogin)
 ipcMain.handle('login-item:set', (_e, value) => {

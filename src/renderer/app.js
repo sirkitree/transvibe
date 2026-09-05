@@ -16,6 +16,7 @@ import {
   addTerms, removeTerm, addCorrection, removeCorrection, sortedEntries, splitWords
 } from './glossary-edit.js'
 import { applyCorrections } from '../shared/glossary.js'
+import { describeModel, canThink } from '../shared/assist.js'
 import { createPresence } from './presence.js'
 import { clampPlacement, heightFor, isReachable, MARGIN } from './placement.js'
 import { createSettingsPanel } from './settings-panel.js'
@@ -1236,6 +1237,17 @@ async function renderAgents (into = null) {
         thinking.onchange = () => saveAgents(updateAgent(roster, agent.name, {
           thinking: thinking.value === 'yes'
         }))
+
+        /* A model with no reasoning to do should not be offered the choice.
+           Said rather than hidden: the switch was there a moment ago for a
+           different model, and a control that silently vanishes reads as a
+           bug. Only when Ollama actually said so — an unknown model keeps the
+           switch, because withholding it on a guess is worse. */
+        const chosen = options.find(o => o.value === model.value)
+        if (chosen && chosen.thinks === false) {
+          thinking.disabled = true
+          thinking.title = `${model.value} does not think — there is nothing to switch off`
+        }
         sub.append(thinking)
       }
 
@@ -1560,7 +1572,14 @@ async function voiceOptions () {
    coming up empty and looking broken. */
 async function assistModelOptions () {
   const { models, reachable } = await window.transvibe.listAssistModels()
-  const options = models.map(name => ({ value: name, label: name }))
+  /* What each one costs and what it did last time, on the line you choose it
+     from. `thinks` rides along so the picker beside it can tell whether the
+     model it has been paired with has any reasoning to switch off. */
+  const options = models.map(model => ({
+    value: model.name,
+    label: describeModel(model),
+    thinks: canThink(model)
+  }))
   if (!reachable) {
     return { options, note: 'Ollama not running' }
   }

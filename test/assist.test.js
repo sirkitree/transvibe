@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   buildCleanupMessage, acceptCleanup, buildCommandMessage, parseCommandReply,
-  buildSpeakMessage, acceptSpoken, worthShortening
+  buildSpeakMessage, acceptSpoken, worthShortening, describeModel, canThink
 } from '../src/shared/assist.js'
 
 describe('buildCleanupMessage', () => {
@@ -203,5 +203,42 @@ describe('acceptSpoken — staying on topic', () => {
     expect(acceptSpoken('deleted the last 3 words', 'Deleted last three words.').used).toBe(true)
     // Prefix match, so a plural is still the same word.
     expect(acceptSpoken('the fade is 10 seconds', 'Fade ten second.').used).toBe(true)
+  })
+})
+
+describe('describeModel', () => {
+  it('says what a model costs and what it did last time', () => {
+    expect(describeModel({
+      name: 'gpt-oss:20b', params: '20.9B', bytes: 13793441244, stat: { ms: 1630 }
+    })).toBe('gpt-oss:20b — 20.9B, 14 GB, 1.6s last answer')
+  })
+
+  it('leaves the timing out until the model has actually answered', () => {
+    expect(describeModel({ name: 'qwen3:30b-a3b', params: '30.5B', bytes: 18556699314 }))
+      .toBe('qwen3:30b-a3b — 30.5B, 19 GB')
+  })
+
+  it('is just the name when nothing is known, which is what a dead Ollama looks like', () => {
+    expect(describeModel({ name: 'mystery' })).toBe('mystery')
+    expect(describeModel({ name: 'mystery', bytes: null, params: null, stat: null }))
+      .toBe('mystery')
+  })
+
+  it('is empty rather than a stray dash for a model with no name', () => {
+    expect(describeModel({})).toBe('')
+    expect(describeModel(null)).toBe('')
+  })
+})
+
+describe('canThink', () => {
+  it('reads the capability Ollama reports', () => {
+    expect(canThink({ capabilities: ['completion', 'tools', 'thinking'] })).toBe(true)
+    expect(canThink({ capabilities: ['completion'] })).toBe(false)
+  })
+
+  it('is unknown rather than false when Ollama did not say', () => {
+    // The difference matters: unknown keeps the switch, false takes it away.
+    expect(canThink({})).toBeNull()
+    expect(canThink(null)).toBeNull()
   })
 })

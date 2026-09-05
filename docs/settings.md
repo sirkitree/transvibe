@@ -30,6 +30,7 @@ Behind it is `~/Library/Application Support/transvibe/settings.json`, written on
 | `speakRate` | `0` | words per minute; `0` = the voice's own pace |
 | `sendTarget` | `null` | app to focus before pasting; null = whatever is in front |
 | `spacesDir` | `null` | folder of `<Name> Space.app` markers; names them for "switch to …" |
+| `modelStats` | `{}` | written by the app: how long each model took to answer last |
 | `sendPressesEnter` | `false` | also hit Return after pasting |
 | `clearAfterSend` | `true` | empty the transcript once delivered |
 | `panelPosition` | `null` | where a panel was last dragged to; `null` is centred. Set by moving one, not by typing |

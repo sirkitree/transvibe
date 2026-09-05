@@ -219,3 +219,45 @@ export function acceptSpoken (fallback, reply) {
 
   return { text: after, used: true }
 }
+
+/* ------------------------------------------------------------------ *
+ * describing a model in the picker
+ * ------------------------------------------------------------------ */
+
+const GB = bytes => `${(bytes / 1e9).toFixed(bytes < 1e10 ? 1 : 0)} GB`
+
+/**
+ * One model, as a line in the picker.
+ *
+ * Size and parameter count come from Ollama and say roughly what it will cost
+ * to keep around and how long a cold start will be. The measured time comes
+ * from the last answer it actually gave, and is the only one of the three that
+ * settles the question — 30B answers in two and a half seconds where 20B
+ * answers in one and a half, and nothing about the sizes predicts that.
+ *
+ * Never more than the name when nothing is known, which is what an
+ * unreachable Ollama and a freshly pulled model both look like.
+ *
+ * @param {{name: string, params?: string|null, bytes?: number|null,
+ *          stat?: {ms: number}|null}} model
+ * @returns {string}
+ */
+export function describeModel (model) {
+  const name = String(model?.name ?? '').trim()
+  if (!name) return ''
+
+  const facts = []
+  if (model.params) facts.push(model.params)
+  if (Number.isFinite(model.bytes) && model.bytes > 0) facts.push(GB(model.bytes))
+  if (model.stat && Number.isFinite(model.stat.ms) && model.stat.ms > 0) {
+    facts.push(`${(model.stat.ms / 1000).toFixed(1)}s last answer`)
+  }
+  return facts.length ? `${name} — ${facts.join(', ')}` : name
+}
+
+/** Whether a model will reason before answering if asked to. Null means Ollama
+    did not say, in which case the switch is offered rather than withheld. */
+export function canThink (model) {
+  const list = model && model.capabilities
+  return Array.isArray(list) ? list.includes('thinking') : null
+}

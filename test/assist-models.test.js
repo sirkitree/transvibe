@@ -13,10 +13,9 @@ describe('listOllamaModels', () => {
     vi.stubGlobal('fetch', reply({
       models: [{ name: 'qwen3:4b' }, { name: 'gemma4:e2b' }]
     }))
-    expect(await listOllamaModels()).toEqual({
-      models: ['gemma4:e2b', 'qwen3:4b'],
-      reachable: true
-    })
+    const { models, reachable } = await listOllamaModels()
+    expect(reachable).toBe(true)
+    expect(models.map(m => m.name)).toEqual(['gemma4:e2b', 'qwen3:4b'])
   })
 
   it('reads an empty Ollama as reachable with nothing pulled', async () => {
@@ -38,7 +37,26 @@ describe('listOllamaModels', () => {
 
   it('drops entries with no name rather than listing a blank', async () => {
     vi.stubGlobal('fetch', reply({ models: [{ name: 'gemma4:e2b' }, {}, { name: '' }] }))
-    expect((await listOllamaModels()).models).toEqual(['gemma4:e2b'])
+    expect((await listOllamaModels()).models.map(m => m.name)).toEqual(['gemma4:e2b'])
+  })
+
+  it('carries what the picker needs to tell one model from another', async () => {
+    vi.stubGlobal('fetch', reply({
+      models: [{
+        name: 'gpt-oss:20b',
+        size: 13793441244,
+        details: { parameter_size: '20.9B', quantization_level: 'MXFP4' }
+      }]
+    }))
+    expect((await listOllamaModels()).models[0]).toMatchObject({
+      name: 'gpt-oss:20b', bytes: 13793441244, params: '20.9B', quant: 'MXFP4'
+    })
+  })
+
+  it('leaves unknown what an unlabelled model does not say', async () => {
+    vi.stubGlobal('fetch', reply({ models: [{ name: 'mystery' }] }))
+    expect((await listOllamaModels()).models[0])
+      .toMatchObject({ name: 'mystery', bytes: null, params: null, quant: null })
   })
 
   it('asks the URL it is given', async () => {

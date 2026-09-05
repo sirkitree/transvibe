@@ -43,8 +43,10 @@ export const PANEL_KEYS = ['agents']
 
 /** Keys nobody sets, only ends up with. A panel's position is remembered from
     having been dragged there; a row offering to type it in would be a worse
-    way to do the same thing. */
-export const REMEMBERED_KEYS = ['panelPosition']
+    way to do the same thing. How long each model took to answer is the same
+    kind of thing — observed, not chosen, and shown where it is useful, which
+    is next to the model rather than in a row of its own. */
+export const REMEMBERED_KEYS = ['panelPosition', 'modelStats']
 
 export const SECTIONS = [
   {

@@ -50,6 +50,13 @@ export const DEFAULTS = {
      that Space is the only way there. Naming the folder is what turns "switch
      to SDSU" into a command; null leaves those words as dictation. */
   spacesDir: null,
+
+  /* How each model actually performed, the last time it answered: how long it
+     took and how much it said. Observed rather than chosen — it sits among the
+     preferences because the model picker needs it to survive a restart, and a
+     number you only see after using a model in this session is a number you
+     never see. Written by the app, not by you. */
+  modelStats: {},
   sendPressesEnter: false,  // also hit Return after pasting
   clearAfterSend: true,
 

@@ -18,6 +18,25 @@ import { buildAskMessages, acceptAnswer } from '../shared/conversation.js'
  * off the end of a long sentence). Whisper keeps the audio; this model gets
  * the text, which is the job it is actually better at.
  */
+/* What /api/show says about one model, or nothing if it will not say.
+   Capabilities are the useful part: a model that cannot think should not be
+   offered a switch that silently does nothing. */
+async function modelCapabilities (url, name) {
+  try {
+    const res = await fetch(`${url}/api/show`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ model: name }),
+      signal: AbortSignal.timeout(2000)
+    })
+    if (!res.ok) return null
+    const body = await res.json()
+    return Array.isArray(body?.capabilities) ? body.capabilities : null
+  } catch {
+    return null
+  }
+}
+
 /**
  * What Ollama has pulled on this machine, newest-looking first.
  *
@@ -37,9 +56,27 @@ export async function listOllamaModels (url = 'http://127.0.0.1:11434') {
     if (!res.ok) return { models: [], reachable: false }
     const body = await res.json()
     const models = (body.models || [])
-      .map(m => String(m?.name ?? ''))
-      .filter(Boolean)
-      .sort((a, b) => a.localeCompare(b))
+      .filter(m => m && String(m.name ?? '').trim())
+      .map(m => ({
+        name: String(m.name),
+        /* Everything the picker can say about a model without running it:
+           roughly what it will cost in memory, and how long a cold start is
+           going to be. Missing fields are left null rather than guessed —
+           an unlabelled model reads as its bare name, which is what it did
+           before any of this. */
+        bytes: Number.isFinite(m.size) ? m.size : null,
+        params: String(m?.details?.parameter_size ?? '') || null,
+        quant: String(m?.details?.quantization_level ?? '') || null
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name))
+
+    /* Asked for each of them at once. It is a handful of local calls and the
+       panel is already waiting on the list; a model that will not answer is
+       reported as unknown rather than as incapable. */
+    const capabilities = await Promise.all(
+      models.map(m => modelCapabilities(url, m.name)))
+    models.forEach((m, i) => { m.capabilities = capabilities[i] })
+
     return { models, reachable: true }
   } catch {
     return { models: [], reachable: false }
@@ -56,7 +93,11 @@ export function createAssist ({
   /* One exchange. `message` is either a string — the three prompt-shaped jobs,
      which have no history — or a messages array for a conversation, which
      does. `at` names the model, because a chat agent may be pointed at a
-     better one than the small model doing the cleanup. */
+     better one than the small model doing the cleanup.
+   
+     Returns the reply and how many tokens it took, because how long a model
+     takes to answer is the number that decides which one to use and no amount
+     of knowing its size will tell you. */
   async function chat (message, ms = timeoutMs, at = model, think = false) {
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), ms)
@@ -83,7 +124,10 @@ export function createAssist ({
       })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const body = await res.json()
-      return String(body?.choices?.[0]?.message?.content ?? '')
+      return {
+        text: String(body?.choices?.[0]?.message?.content ?? ''),
+        tokens: Number(body?.usage?.completion_tokens) || 0
+      }
     } finally {
       clearTimeout(timer)
     }
@@ -121,7 +165,7 @@ export function createAssist ({
       const before = String(text == null ? '' : text)
       if (!before.trim() || available === false) return { text: before, used: false, reason: 'skipped' }
       try {
-        return acceptCleanup(before, await chat(buildCleanupMessage(before)))
+        return acceptCleanup(before, (await chat(buildCleanupMessage(before))).text)
       } catch (err) {
         return { text: before, used: false, reason: err.name === 'AbortError' ? 'timed out' : err.message }
       }
@@ -148,7 +192,8 @@ export function createAssist ({
       // confirmation of something that did not happen.
       if (!worthShortening(before)) return { text: before, used: false, reason: 'short enough' }
       try {
-        return acceptSpoken(before, await chat(buildSpeakMessage(before), 1200, at || model))
+        return acceptSpoken(before,
+          (await chat(buildSpeakMessage(before), 1200, at || model)).text)
       } catch (err) {
         return { text: before, used: false, reason: err.name === 'AbortError' ? 'timed out' : err.message }
       }
@@ -175,9 +220,19 @@ export function createAssist ({
       if (available === false && !at) {
         return { text: '', ok: false, reason: 'the local model is not running' }
       }
+      const started = Date.now()
       try {
         const reply = await chat(buildAskMessages(question, history), 20000, at || model, thinking)
-        return acceptAnswer(reply)
+        /* How long it took and how much it said, reported alongside the
+           answer. The caller keeps it: this is the only honest source for
+           "which of these models is worth waiting for", and it costs nothing
+           because the question was being asked anyway. */
+        return {
+          ...acceptAnswer(reply.text),
+          ms: Date.now() - started,
+          tokens: reply.tokens,
+          model: at || model
+        }
       } catch (err) {
         return {
           text: '',
@@ -198,7 +253,7 @@ export function createAssist ({
       if (!String(text || '').trim() || available === false) return null
       try {
         return parseCommandReply(
-          await chat(buildCommandMessage(text, phrases), timeoutMs, at || model), phrases)
+          (await chat(buildCommandMessage(text, phrases), timeoutMs, at || model)).text, phrases)
       } catch {
         return null
       }
