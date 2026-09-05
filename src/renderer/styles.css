@@ -888,7 +888,9 @@ body.awake .bar {
   padding-bottom: 4px;
 }
 
-.agent-sub select { flex: 1; }
-/* The model name is the long one; "thinks first" needs only its own width. */
-.agent-sub .agent-thinking { flex: 0 1 auto; }
+.agent-sub select { flex: 1; min-width: 0; }
+/* The model name is the long one and gets the room. "Thinks first" is two
+   words and never needs more than its own width, so it neither grows into
+   the space nor shrinks its own text away. */
+.agent-sub .agent-thinking { flex: 0 0 auto; width: auto; }
 .agent-sub .note { font-size: 11px; white-space: nowrap; }
