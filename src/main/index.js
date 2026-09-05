@@ -13,7 +13,7 @@ import { speak, stopSpeaking, listVoices } from './speech.js'
 import { findModel, downloadModel, listModels, humanSize, MODELS_DIR } from './models.js'
 import * as config from './config.js'
 import { stripBounds, contains, nextWake } from './overlay.js'
-import { listSpaces } from './spaces.js'
+import { listSpaces, dockClickScript } from './spaces.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -471,6 +471,33 @@ const spaceList = () => listSpaces(settings.spacesDir)
    activating the second marker while the first is still moving loses the
    second jump. */
 const SPACE_SWITCH_MS = 500
+
+/**
+ * Go to the desktop a marker is assigned to, by clicking its Dock tile.
+ *
+ * Not by opening the app, which is the obvious thing and does not work: `open
+ * -a` hands the marker the menu bar and leaves the desktop where it was. The
+ * Dock click is what macOS treats as worth following.
+ *
+ * The fallback is that same `open -a`, for when the click cannot be made —
+ * Accessibility not granted, or no tile because the marker was quit. It
+ * activates the app without going anywhere, which is not the jump, but it does
+ * leave the marker running so the next attempt has a tile to click.
+ */
+async function activateSpace (space) {
+  const result = await new Promise(resolve => {
+    const p = spawn('osascript', ['-e', dockClickScript(space.title)],
+      { stdio: ['ignore', 'ignore', 'pipe'] })
+    let err = ''
+    p.stderr.on('data', d => { err += d })
+    p.on('error', e => resolve({ ok: false, error: e.message }))
+    p.on('close', code => resolve(code === 0
+      ? { ok: true }
+      : { ok: false, error: err.trim() || 'could not click the Dock tile' }))
+  })
+  if (!result.ok) spawn('open', ['-a', space.app], { stdio: 'ignore' })
+  return result
+}
 const spaceNames = () => spaceList().map(({ name, key }) => ({ name, key }))
 
 /* ---------------------------------------------------------------------- IPC */
@@ -499,15 +526,19 @@ ipcMain.handle('space:open', async (_e, keys) => {
     perDisplay.set(space.display, space.name)
   }
 
+  const stuck = []
   for (const [i, space] of found.entries()) {
-    /* `open` activates the marker, and macOS goes to the desktop that marker
-       is assigned to. If the assignment was lost — a rebuild, or the app
-       having been quit — this still activates it, just on the desktop you are
-       already on, which is a no-op rather than a wrong answer. */
     if (i) await wait(SPACE_SWITCH_MS)
-    spawn('open', ['-a', space.app], { stdio: 'ignore' })
+    const jumped = await activateSpace(space)
+    if (!jumped.ok) stuck.push(space.name)
   }
-  return { ok: true, name: found.map(s => s.name).join(', '), clashed: [...new Set(clashed)] }
+
+  return {
+    ok: true,
+    name: found.map(s => s.name).join(', '),
+    clashed: [...new Set(clashed)],
+    stuck
+  }
 })
 
 ipcMain.handle('send', async (_e, text) => {

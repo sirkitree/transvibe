@@ -115,6 +115,8 @@ The name has to be one of the markers that actually exists, which is the whole r
 
 It chains, so "switch to hivemind and send it" jumps there and pastes. The confirmation is spoken *before* the switch, for the same reason as *send* — a line said after it is a line about a desktop you have already left.
 
+The jump is a **click on the marker's Dock tile**, not `open -a` — opening the app hands it the menu bar and leaves the desktop exactly where it was, which is the one thing macOS does differently for a Dock click. That needs Accessibility, the same grant that pastes on send; without it the strip says so rather than looking like nothing happened.
+
 If the folder has a `markers.json`, its lists are the roster and their `display1` / `display2` grouping is where the shared-display warning comes from; otherwise every `.app` in the folder counts, minus anything with "launcher" in the name, and nothing is known about which screen is which.
 
 ### Talking to one of them

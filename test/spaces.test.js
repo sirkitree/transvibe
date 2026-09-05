@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { spaceKey, matchSpace, matchSpaces, spokenList } from '../src/shared/spaces.js'
-import { listSpaces, expandHome } from '../src/main/spaces.js'
+import { listSpaces, expandHome, dockClickScript } from '../src/main/spaces.js'
 
 describe('spaceKey', () => {
   it('reduces a marker name and the way it is said to the same thing', () => {
@@ -119,6 +119,8 @@ describe('listSpaces', () => {
   it('reads the folder when there is no manifest', () => {
     const found = listSpaces(dir)
     expect(found.map(s => s.name).sort()).toEqual(['Home', 'SDSU'])
+    // The Dock calls the tile by the marker's whole name, "Space" and all.
+    expect(found.map(s => s.title).sort()).toEqual(['Home Space', 'SDSU Space'])
     expect(found.find(s => s.key === 'sdsu').app).toBe(path.join(dir, 'SDSU Space.app'))
   })
 
@@ -167,5 +169,18 @@ describe('listSpaces', () => {
       .toBe(path.join(os.homedir(), 'repos/space-markers'))
     expect(expandHome('/already/absolute')).toBe('/already/absolute')
     expect(expandHome(null)).toBeNull()
+  })
+})
+
+describe('dockClickScript', () => {
+  it('clicks the tile the Dock knows by that name', () => {
+    expect(dockClickScript('CATIC Space')).toBe(
+      'tell application "System Events" to tell process "Dock" ' +
+      'to click UI element "CATIC Space" of list 1')
+  })
+
+  it('escapes a name that would otherwise end the AppleScript string', () => {
+    expect(dockClickScript('We"ird')).toContain('"We\\"ird"')
+    expect(dockClickScript('back\\slash')).toContain('"back\\\\slash"')
   })
 })

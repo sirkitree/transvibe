@@ -66,8 +66,9 @@ function fromFolder (dir) {
  *
  * `name` is what the marker is called with the "Space" left off, because that
  * word is in every one of them and saying it back — "switching to SDSU Space"
- * — is a stutter. `app` is the bundle to activate, `display` the screen it
- * moves, or null when nothing said.
+ * — is a stutter. `title` keeps the whole thing, because that is what the Dock
+ * calls the tile. `app` is the bundle, `display` the screen it moves, or null
+ * when nothing said.
  *
  * @param {string|null} dir  the setting, `~` and all
  * @returns {Array<{name: string, key: string, app: string, display: number|null}>}
@@ -91,7 +92,27 @@ export function listSpaces (dir) {
     const app = path.join(root, `${name}.app`)
     if (!fs.existsSync(app)) continue
     seen.add(key)
-    out.push({ name: name.replace(/\s+Space$/i, ''), key, app, display })
+    out.push({ name: name.replace(/\s+Space$/i, ''), title: name, key, app, display })
   }
   return out
+}
+
+/**
+ * Clicking the marker's Dock tile, as AppleScript.
+ *
+ * `open -a` is the obvious way to activate an app and it is the wrong one: it
+ * hands the marker the menu bar and leaves the desktop exactly where it was.
+ * Whatever macOS does with the Space on activation, it does for a click on the
+ * Dock and not for a LaunchServices open — measured on this machine, watching
+ * the marker window go on-screen for one and not the other.
+ *
+ * So the jump is a Dock click. It needs Accessibility, which transvibe already
+ * asks for to paste, and it needs the tile's name — the marker's whole name,
+ * "Space" and all.
+ */
+export function dockClickScript (title) {
+  const escaped = String(title == null ? '' : title)
+    .replace(/\\/g, '\\\\')
+    .replace(/"/g, '\\"')
+  return `tell application "System Events" to tell process "Dock" to click UI element "${escaped}" of list 1`
 }

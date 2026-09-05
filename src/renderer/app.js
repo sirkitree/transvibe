@@ -576,6 +576,14 @@ async function goToSpace (spaces, name) {
     say(`no space called ${name}`)
     return
   }
+  /* The Dock click is the jump, and it needs Accessibility. Without it the
+     marker is merely activated — the menu bar changes and the desktop does
+     not — which looks like nothing happened, so it has to be said. */
+  if (result.stuck && result.stuck.length) {
+    hint('switching a desktop needs Accessibility permission')
+    return
+  }
+
   /* Two markers on the same display cannot both be in front of you: the second
      one lands on top of the first and the first jump is undone. Worth saying,
      because from here it looks like a name was ignored. */

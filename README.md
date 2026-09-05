@@ -62,7 +62,7 @@ Three macOS permissions are involved, each degrading on its own rather than taki
 |---|---|---|
 | Microphone | everything | the app says so in the status line |
 | Input Monitoring | right-⌥ hold | falls back to ⌃⌥C |
-| Accessibility | pasting on send | text is still on the clipboard |
+| Accessibility | pasting on send, switching desktops | text is still on the clipboard; the strip says why a desktop did not move |
 
 ## The short version
 
