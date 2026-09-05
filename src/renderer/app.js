@@ -398,7 +398,10 @@ async function runCommand (utterance, { retry = true, keep = null, collect = nul
   /* Inside a chain the confirmations are gathered and said once at the end.
      Saying each one as it happens would not work anyway: a second `say`
      interrupts the first, so all you would hear is the last command. */
-  const announce = line => { if (collect) collect.push(line); else say(line) }
+  const announce = (line, options) => {
+    if (collect) collect.push(line)
+    else say(line, options)
+  }
 
   /* "change voice to Karen" is a replace as far as the editing rules are
      concerned — swap the word "voice" for the word "Karen" — and a settings
@@ -529,10 +532,15 @@ async function runCommand (utterance, { retry = true, keep = null, collect = nul
     if (wipes) clearConversation()
   }
 
-  // Said before the effect runs, not after: 'send' hands focus to another app
-  // and never comes back here, and 'hide' takes the strip away, so a
-  // confirmation queued behind either would be a confirmation of nothing.
-  announce(spokenFor(cmd, result))
+  /* Said before the effect runs, not after: 'send' hands focus to another app
+     and never comes back here, and 'hide' takes the strip away, so a
+     confirmation queued behind either would be a confirmation of nothing.
+
+     A jump is said plainly, never handed to the model to shorten. The names
+     *are* the confirmation — "switched to Home and Communications" is five
+     words, one over the threshold, and what came back was "switched to Home",
+     which is a report of half the thing that happened. */
+  announce(spokenFor(cmd, result), { plain: result.effect === 'space' })
 
   switch (result.effect) {
     case 'copy': window.transvibe.copy(fullText()); break
