@@ -1,8 +1,12 @@
 // Voice "command mode": turn one transcribed utterance into a structured
 // command and apply it to the running transcript.
 //
-// This module is deliberately pure — no DOM, no Electron, no I/O, no imports —
-// so it can be reasoned about and unit tested in isolation.
+// This module is deliberately pure — no DOM, no Electron, no I/O — so it can be
+// reasoned about and unit tested in isolation. Its one import is another pure
+// module, shared with the main process because both ends have to agree on what
+// a spoken Space name means.
+
+import { matchSpaces, spokenList } from '../shared/spaces.js'
 
 const NUMBER_WORDS = {
   one: 1,
@@ -319,6 +323,24 @@ const MATCHERS = [
         ? command('delete', { target: 'conversation', raw })
         : null)
   },
+  {
+    /* Switching desktops. The name has to resolve against the markers that
+       actually exist — without that check "go to the store" is a command, and
+       a dictated sentence that takes your screen away is the worst false
+       positive in here. */
+    re: /^(?:switch|jump|go|take me|move) (?:over )?to (.+)$/,
+    build: (m, raw, { spaces } = {}) => {
+      /* More than one name is one command, not a chain: with two displays
+         there are two current desktops, and "switch to home and
+         communications" moves each of them. A chain would be tried anyway if
+         this returns null, which is what makes "switch to home and send it"
+         still work. */
+      const found = matchSpaces(m[1], spaces)
+      return found
+        ? command('space', { args: { spaces: found, name: spokenList(found) }, raw })
+        : null
+    }
+  },
   { re: /^copy (.+)$/, build: wholeTranscript('copy') },
   { re: /^send (.+)$/, build: wholeTranscript('send') },
   { re: /^clear (.+)$/, build: wholeTranscript('clear') }
@@ -374,7 +396,13 @@ function wholeTranscript(action) {
   }
 }
 
-export function parseCommand(utterance) {
+/**
+ * @param {string} utterance
+ * @param {{spaces?: Array<{name: string, key: string}>}} [options] the marker
+ *   apps on this machine, so a Space can be named out loud. Absent means there
+ *   are none, and "switch to X" is left as dictation.
+ */
+export function parseCommand(utterance, options = {}) {
   if (typeof utterance !== 'string') return null
   const text = normalize(utterance)
   if (!text) return null
@@ -390,7 +418,7 @@ export function parseCommand(utterance) {
 
   for (const matcher of MATCHERS) {
     const m = text.match(matcher.re)
-    if (m) return matcher.build(m, utterance)
+    if (m) return matcher.build(m, utterance, options)
   }
   return null
 }
@@ -486,6 +514,11 @@ export function applyCommand(cmd, text) {
   if (action === 'settings') return unchanged('settings', 'settings')
   if (action === 'agents') return unchanged('agents', 'agents')
   if (action === 'stopTalking') return unchanged('hushed', 'stopTalking')
+  // Switching desktops has nothing to do with the transcript, and least of all
+  // with whether there is one.
+  if (action === 'space') {
+    return unchanged(`switching to ${(cmd.args && cmd.args.name) || 'that space'}`, 'space')
+  }
   if (action === 'closePanel') return unchanged('closed', 'closePanel')
 
   if (empty) return unchanged('nothing to act on')
@@ -678,6 +711,9 @@ export function spokenFor (cmd, result) {
     // Saying "hushed" out loud would be the joke that never stops being made.
     case 'stopTalking': return ''
     case 'closePanel': return 'closed'
+    /* Said before the switch, not after: the desktop is about to change and
+       the name is the confirmation that it is the right one. */
+    case 'space': return `switching to ${(cmd.args && cmd.args.name) || 'that space'}`
   }
 
   const verb = SPOKEN_VERBS[cmd.action]
@@ -831,6 +867,11 @@ export const COMMANDS = [
     action: 'agents',
     examples: ['open agents', 'show agents', 'agents'],
     help: 'Open the agents panel — who you can talk to, and how each one sounds.'
+  },
+  {
+    action: 'space',
+    examples: ['switch to home', 'go to home', 'jump to home', 'take me to home'],
+    help: 'Jump to a named desktop Space. The names are the marker apps in the folder set under Sending — with no folder set, there are none and this is left as dictation.'
   },
   {
     action: 'closePanel',

@@ -178,6 +178,12 @@ export const SECTIONS = [
         type: 'text', placeholder: 'frontmost app', nullable: true
       },
       {
+        key: 'spacesDir',
+        label: 'Space markers folder',
+        help: 'A folder of "<Name> Space.app" marker apps. Naming it makes "switch to <name>" a command. Empty means no Spaces are named.',
+        type: 'text', placeholder: '~/repos/space-markers', nullable: true
+      },
+      {
         key: 'sendPressesEnter',
         label: 'Press Return after pasting',
         spoken: ['return after pasting', 'pressing return', 'the return key'],

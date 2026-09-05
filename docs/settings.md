@@ -12,7 +12,7 @@ Six tabs, grouped by what you are trying to change rather than by which part of 
 
 ![The Transcription tab: a dropdown of the whisper models found on this machine, the language, and the glossary-echo toggle](images/settings-transcription.png)
 
-Most of it is reachable by voice too — "hey Claude, turn off spoken replies", "set the fade to ten seconds", "what's the threshold". Everything in the table below is, except `agents`, `language`, `sendTarget`, `modelPath` and `assistUrl`: those are free text or paths, and a misheard wake phrase would take the voice commands with it. [Using transvibe](using.md#settings-by-voice) has the grammar.
+Most of it is reachable by voice too — "hey Claude, turn off spoken replies", "set the fade to ten seconds", "what's the threshold". Everything in the table below is, except `agents`, `language`, `sendTarget`, `spacesDir`, `modelPath` and `assistUrl`: those are free text or paths, and a misheard wake phrase would take the voice commands with it. [Using transvibe](using.md#settings-by-voice) has the grammar.
 
 Behind it is `~/Library/Application Support/transvibe/settings.json`, written on change and merged over the defaults, so deleting the file resets everything. Editing it by hand still works; the panel reads it fresh each time it opens.
 
@@ -29,6 +29,7 @@ Behind it is `~/Library/Application Support/transvibe/settings.json`, written on
 | `speakVoice` | `null` | macOS voice name for agents that have none of their own; null = the system voice |
 | `speakRate` | `0` | words per minute; `0` = the voice's own pace |
 | `sendTarget` | `null` | app to focus before pasting; null = whatever is in front |
+| `spacesDir` | `null` | folder of `<Name> Space.app` markers; names them for "switch to …" |
 | `sendPressesEnter` | `false` | also hit Return after pasting |
 | `clearAfterSend` | `true` | empty the transcript once delivered |
 | `panelPosition` | `null` | where a panel was last dragged to; `null` is centred. Set by moving one, not by typing |

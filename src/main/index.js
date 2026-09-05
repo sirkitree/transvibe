@@ -13,6 +13,7 @@ import { speak, stopSpeaking, listVoices } from './speech.js'
 import { findModel, downloadModel, listModels, humanSize, MODELS_DIR } from './models.js'
 import * as config from './config.js'
 import { stripBounds, contains, nextWake } from './overlay.js'
+import { listSpaces } from './spaces.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -460,7 +461,54 @@ async function sendTranscript (text) {
   })
 }
 
+/* Named desktop Spaces. The list goes to the renderer without its paths: the
+   parser only needs the names to recognise one being said, and the jump is
+   this end's job anyway. */
+const spaceList = () => listSpaces(settings.spacesDir)
+
+/* How long to leave between two markers. Empirical, and the same order as the
+   waits in the space-markers launcher: the desktop switch is an animation, and
+   activating the second marker while the first is still moving loses the
+   second jump. */
+const SPACE_SWITCH_MS = 500
+const spaceNames = () => spaceList().map(({ name, key }) => ({ name, key }))
+
 /* ---------------------------------------------------------------------- IPC */
+
+ipcMain.handle('spaces:list', () => spaceNames())
+
+/* One name or several. With two displays there are two current desktops, and
+   "switch to home and communications" moves both — so this takes a list, in
+   the order they were said, and the last one named is the one left in front. */
+ipcMain.handle('space:open', async (_e, keys) => {
+  const wanted = Array.isArray(keys) ? keys : [keys]
+  const all = spaceList()
+  const found = wanted.map(key => all.find(s => s.key === key)).filter(Boolean)
+  if (!found.length || found.length !== wanted.length) {
+    return { ok: false, error: 'no such space' }
+  }
+
+  /* Two markers on one display: the second lands on top of the first, so the
+     first jump is real for a moment and then gone. Reported rather than
+     refused — the jump that survives is still the one that was asked for. */
+  const clashed = []
+  const perDisplay = new Map()
+  for (const space of found) {
+    if (space.display == null) continue
+    if (perDisplay.has(space.display)) clashed.push(perDisplay.get(space.display), space.name)
+    perDisplay.set(space.display, space.name)
+  }
+
+  for (const [i, space] of found.entries()) {
+    /* `open` activates the marker, and macOS goes to the desktop that marker
+       is assigned to. If the assignment was lost — a rebuild, or the app
+       having been quit — this still activates it, just on the desktop you are
+       already on, which is a no-op rather than a wrong answer. */
+    if (i) await wait(SPACE_SWITCH_MS)
+    spawn('open', ['-a', space.app], { stdio: 'ignore' })
+  }
+  return { ok: true, name: found.map(s => s.name).join(', '), clashed: [...new Set(clashed)] }
+})
 
 ipcMain.handle('send', async (_e, text) => {
   const result = await sendTranscript(text)
@@ -512,6 +560,8 @@ ipcMain.handle('settings:set', (_e, patch) => {
     win.setAlwaysOnTop(settings.alwaysOnTop, 'screen-saver')
   }
   if ('stripHeight' in patch || 'panelHeight' in patch) applyStripBounds()
+  // A new folder means a new set of names the parser will answer to.
+  if ('spacesDir' in patch) send('spaces', spaceNames())
   return settings
 })
 

@@ -43,6 +43,13 @@ export const DEFAULTS = {
   conversationMs: 25000,
 
   sendTarget: null,         // app name to focus before pasting; null = frontmost
+
+  /* A folder of Space marker apps — the space-markers layout, `<Name>
+     Space.app` bundles beside an optional markers.json. macOS will not name a
+     desktop Space or switch to one on request; activating an app assigned to
+     that Space is the only way there. Naming the folder is what turns "switch
+     to SDSU" into a command; null leaves those words as dictation. */
+  spacesDir: null,
   sendPressesEnter: false,  // also hit Return after pasting
   clearAfterSend: true,
 

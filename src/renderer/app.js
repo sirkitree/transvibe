@@ -39,6 +39,12 @@ const state = {
   pending: 0,
   listening: true,
   settings: null,
+  /* The named desktop Spaces, from the marker folder. Held here rather than
+     asked for per utterance: the parser needs them to tell "switch to SDSU"
+     from a sentence about switching, and that decision happens on every
+     command. Empty until the main process answers, and empty for good if no
+     folder is set — in which case those words stay dictation. */
+  spaces: [],
   capture: null,
   viz: null,
   sayingViz: null,   // the app's own voice, drawn while it is talking
@@ -262,9 +268,12 @@ function setCommandMode (active) {
    generated from the schema, so "make it stop talking to me" can land on
    "turn off spoken replies" without a rule for that phrasing, and a wrong
    answer still cannot name a setting the app does not have. */
-const COMMAND_PHRASES = [
+const commandPhrases = () => [
   ...COMMANDS.flatMap(c => c.examples),
-  ...settingPhrases(FIELDS)
+  ...settingPhrases(FIELDS),
+  // Space names come from this machine, not from the contract, so they are
+  // added here rather than living in COMMANDS' examples.
+  ...state.spaces.map(s => `switch to ${s.name}`)
 ]
 
 /**
@@ -287,7 +296,7 @@ async function addressAgent (agent, utterance, { keep = null } = {}) {
        able to interrupt it, and switching names to close a panel would be
        absurd. Everything else said to a chat agent is a question, including
        the sentences that happen to look like commands. */
-    const cmd = parseCommand(utterance)
+    const cmd = parseCommand(utterance, { spaces: state.spaces })
     if (cmd && UNIVERSAL.has(cmd.action)) return runCommand(utterance)
     return converse(agent, utterance)
   }
@@ -384,7 +393,7 @@ function renderConvoIndicator () {
 /* One spoken utterance, interpreted as an editing command rather than as text
    to insert. A parse failure must never silently swallow what was said. */
 async function runCommand (utterance, { retry = true, keep = null, collect = null } = {}) {
-  const cmd = parseCommand(utterance)
+  const cmd = parseCommand(utterance, { spaces: state.spaces })
 
   /* Inside a chain the confirmations are gathered and said once at the end.
      Saying each one as it happens would not work anyway: a second `say`
@@ -424,7 +433,7 @@ async function runCommand (utterance, { retry = true, keep = null, collect = nul
        to put the words back if nothing lands. */
     if (retry && state.settings.commandFallback) {
       hint('working out what you meant…')
-      const phrase = await window.transvibe.assistCommand(utterance, COMMAND_PHRASES,
+      const phrase = await window.transvibe.assistCommand(utterance, commandPhrases(),
         { model: state.agent && state.agent.model })
       if (phrase) return runCommand(phrase, { retry: false, keep, collect })
     }
@@ -547,10 +556,32 @@ async function runCommand (utterance, { retry = true, keep = null, collect = nul
       state.listeningUntil = 0
       break
     case 'closePanel': closeOpenPanel(); break
+    case 'space': goToSpace(cmd.args.spaces, cmd.args.name); break
   }
 
   hint(result.message)
   render()
+}
+
+/* Jump to a named desktop Space.
+ *
+ * The confirmation has already been said by the time this runs — deliberately,
+ * as with 'send': the screen is about to be replaced and a line spoken after
+ * the switch is a line about a desktop you have already left. Only the failure
+ * is reported here, and only because it means nothing happened at all. */
+async function goToSpace (spaces, name) {
+  const result = await window.transvibe.openSpace(spaces.map(s => s.key))
+  if (!result || !result.ok) {
+    hint(`could not switch to ${name}`)
+    say(`no space called ${name}`)
+    return
+  }
+  /* Two markers on the same display cannot both be in front of you: the second
+     one lands on top of the first and the first jump is undone. Worth saying,
+     because from here it looks like a name was ignored. */
+  if (result.clashed && result.clashed.length) {
+    hint(`${result.clashed.join(' and ')} share a display`)
+  }
 }
 
 /**
@@ -571,7 +602,7 @@ async function runChain (utterance) {
   if (parts.length < 2) return false
 
   const parsed = parts.map(part => {
-    const cmd = parseCommand(part)
+    const cmd = parseCommand(part, { spaces: state.spaces })
     const setting = parseSettingCommand(part, FIELDS)
     // Same preference as a single command: naming a setting beats a replace.
     if (setting && (!cmd || cmd.action === 'replace')) return { part, setting }
@@ -1665,6 +1696,9 @@ function syncHold () {
 
 async function main () {
   state.settings = await window.transvibe.getSettings()
+  state.spaces = await window.transvibe.listSpaces()
+  // Point the folder setting somewhere else and the names change with it.
+  window.transvibe.onSpaces(list => { state.spaces = Array.isArray(list) ? list : [] })
   state.settingsPanel = createSettingsPanel({
     // Who you can talk to is a setting, whatever shape it is stored in, so it
     // is a tab in the settings panel rather than only a panel of its own.

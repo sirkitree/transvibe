@@ -10,9 +10,18 @@ import {
   COMMANDS
 } from '../src/renderer/commands.js'
 
-const parse = (utterance) => parseCommand(utterance)
+/* The markers this machine is pretending to have. Threaded through every
+   parse, because "switch to X" is only a command when X is a Space that
+   exists — which is also what keeps "go to the store" out of the parser. */
+const SPACES = [
+  { name: 'Home', key: 'home' },
+  { name: 'SDSU', key: 'sdsu' },
+  { name: 'Elk Grove', key: 'elkgrove' }
+]
+
+const parse = (utterance) => parseCommand(utterance, { spaces: SPACES })
 const actionOf = (utterance) => {
-  const c = parseCommand(utterance)
+  const c = parse(utterance)
   return c && c.action
 }
 
@@ -543,7 +552,7 @@ describe('COMMANDS stays in sync with the parser', () => {
     expect(actions.sort()).toEqual([
       'agents', 'capitalize', 'clear', 'closePanel', 'copy', 'delete', 'hide',
       'lowercase', 'newParagraph', 'pause', 'punctuate', 'replace', 'resume',
-      'send', 'settings', 'stopTalking', 'undo', 'uppercase'
+      'send', 'settings', 'space', 'stopTalking', 'undo', 'uppercase'
     ].sort())
   })
 
@@ -559,7 +568,7 @@ describe('COMMANDS stays in sync with the parser', () => {
   it('parses every documented example to its own action', () => {
     for (const entry of COMMANDS) {
       for (const example of entry.examples) {
-        const parsed = parseCommand(example)
+        const parsed = parse(example)
         expect(parsed, example).not.toBeNull()
         expect(parsed.action, example).toBe(entry.action)
       }
@@ -570,7 +579,7 @@ describe('COMMANDS stays in sync with the parser', () => {
     const sample = 'The quick brown fox. It jumped over a lazy cat.'
     for (const entry of COMMANDS) {
       for (const example of entry.examples) {
-        const cmd = parseCommand(example)
+        const cmd = parse(example)
         let result
         expect(() => { result = applyCommand(cmd, sample) }, example).not.toThrow()
         expect(typeof result.text, example).toBe('string')
@@ -626,7 +635,13 @@ describe('parseCommand — false positives in ordinary dictation', () => {
     'erase that drawing on the board',
     'change my flight to Tuesday',
     'swap the tires for winter ones',
-    'replace it with something better'
+    'replace it with something better',
+    // The Space commands: a verb that turns up constantly in ordinary speech,
+    // held back by the fact that none of these names a marker that exists.
+    'go to the store',
+    'switch to a different approach',
+    'take me to the airport tomorrow',
+    'move to the next item on the agenda'
   ]
 
   for (const u of dictation) {
@@ -634,6 +649,71 @@ describe('parseCommand — false positives in ordinary dictation', () => {
       expect(parse(u), u).toBeNull()
     })
   }
+})
+
+describe('parseCommand — named Spaces', () => {
+  it('takes every phrasing there is', () => {
+    for (const said of [
+      'switch to home', 'go to home', 'jump to home', 'take me to home',
+      'move to home', 'go over to home', 'switch to the home space'
+    ]) {
+      expect(parse(said), said).toMatchObject({
+        action: 'space',
+        args: { name: 'Home', spaces: [{ name: 'Home', key: 'home' }] }
+      })
+    }
+  })
+
+  it('hears an initialism however whisper wrote it down', () => {
+    for (const said of ['switch to SDSU', 'switch to sd su', 'go to S.D.S.U.']) {
+      expect(actionOf(said), said).toBe('space')
+      expect(parse(said).args.spaces[0].key, said).toBe('sdsu')
+    }
+  })
+
+  it('takes both displays in one breath', () => {
+    expect(parse('switch to home and sdsu')).toMatchObject({
+      action: 'space',
+      args: { name: 'Home and SDSU' }
+    })
+    expect(parse('switch to home and sdsu').args.spaces.map(s => s.key))
+      .toEqual(['home', 'sdsu'])
+    expect(parse('go to home, elk grove and sdsu').args.spaces).toHaveLength(3)
+  })
+
+  it('says the same name twice as one jump', () => {
+    expect(parse('switch to home and home').args.spaces).toHaveLength(1)
+  })
+
+  it('leaves the sentence to the chain when only part of it is a Space', () => {
+    /* "switch to home and send it" is two commands, not one jump to two
+       desktops — which is exactly what returning null here buys. */
+    expect(parse('switch to home and send it')).toBeNull()
+    expect(splitChain('switch to home and send it').map(parse).every(Boolean)).toBe(true)
+  })
+
+  it('is not a command at all when no folder of markers is set', () => {
+    expect(parseCommand('switch to home')).toBeNull()
+    expect(parseCommand('switch to home', { spaces: [] })).toBeNull()
+  })
+
+  it('switches whether or not there is a transcript to act on', () => {
+    const cmd = parse('switch to sdsu')
+    expect(applyCommand(cmd, '')).toMatchObject({ effect: 'space', changed: false })
+    expect(applyCommand(cmd, 'Some text.').text).toBe('Some text.')
+  })
+
+  it('says which desktop it is going to, before it goes', () => {
+    const cmd = parse('take me to elk grove')
+    expect(spokenFor(cmd, applyCommand(cmd, ''))).toBe('switching to Elk Grove')
+    const both = parse('switch to home and sdsu')
+    expect(spokenFor(both, applyCommand(both, ''))).toBe('switching to Home and SDSU')
+  })
+
+  it('is for a commands agent, not for one you are chatting with', () => {
+    // "switch to plan B" said to a chat agent is a sentence, not a desktop.
+    expect(UNIVERSAL.has('space')).toBe(false)
+  })
 })
 
 describe('parseCommand — survives real whisper output', () => {
@@ -803,7 +883,7 @@ describe('splitSentences — more speech-shaped edge cases', () => {
 
 describe('spokenFor', () => {
   const run = (utterance, text) => {
-    const cmd = parseCommand(utterance)
+    const cmd = parse(utterance)
     return spokenFor(cmd, applyCommand(cmd, text))
   }
   const TEXT = 'The cat sat on the mat. It was a good mat.'
@@ -927,13 +1007,13 @@ describe('splitChain', () => {
     // sentence like this is rejected as a chain rather than half-executed.
     const parts = splitChain('set the rate to two hundred and fifty')
     expect(parts).toEqual(['set the rate to two hundred', 'fifty'])
-    expect(parts.map(parseCommand).every(Boolean)).toBe(false)
+    expect(parts.map(parse).every(Boolean)).toBe(false)
   })
 
   it('is never reached by a sentence that parses on its own', () => {
     // The app splits only after the whole sentence has failed to parse, and
     // this one does not fail: "cat and dog" stays one operand.
-    expect(parseCommand('replace cat and dog with pets'))
+    expect(parse('replace cat and dog with pets'))
       .toMatchObject({ action: 'replace', args: { from: 'cat and dog', to: 'pets' } })
   })
 })

@@ -32,6 +32,10 @@ contextBridge.exposeInMainWorld('transvibe', {
   /** cut off whatever is being said */
   hush: () => ipcRenderer.send('speak:stop'),
   send: text => ipcRenderer.invoke('send', text),
+  /** the named desktop Spaces this machine has markers for */
+  listSpaces: () => ipcRenderer.invoke('spaces:list'),
+  /** activate the marker assigned to one Space, which jumps macOS to it */
+  openSpace: key => ipcRenderer.invoke('space:open', key),
   hide: () => ipcRenderer.send('window:hide'),
   /* Opening a panel goes out to the main process and comes back as a
      'command': the strip may be hidden, and a panel opened onto a hidden
@@ -45,6 +49,7 @@ contextBridge.exposeInMainWorld('transvibe', {
   setHeight: px => ipcRenderer.send('overlay:height', px),
   /** a panel needs more room than the strip normally has */
   setPanelOpen: open => ipcRenderer.send('overlay:panel', open),
+  onSpaces: fn => ipcRenderer.on('spaces', (_e, list) => fn(list)),
   onAwake: fn => ipcRenderer.on('awake', (_e, value) => fn(value)),
   setListening: value => ipcRenderer.send('listening', value),
   onStatus: fn => ipcRenderer.on('status', (_e, payload) => fn(payload)),
