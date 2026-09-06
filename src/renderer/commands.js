@@ -281,6 +281,42 @@ const EXACT = {
   'open the agents': { action: 'agents' },
   'agents panel': { action: 'agents' },
 
+  glossary: { action: 'glossary' },
+  'open glossary': { action: 'glossary' },
+  'show glossary': { action: 'glossary' },
+  'open the glossary': { action: 'glossary' },
+  'glossary panel': { action: 'glossary' },
+  'open the word list': { action: 'glossary' },
+
+  help: { action: 'help' },
+  'open help': { action: 'help' },
+  'show help': { action: 'help' },
+  'what can you do': { action: 'help' },
+  'what can i say': { action: 'help' },
+  'show the commands': { action: 'help' },
+  'show me the commands': { action: 'help' },
+  'keys and commands': { action: 'help' },
+
+  /* The other half of "hide". Said to a strip that is not on screen — the
+     microphone is still listening, the window is only invisible — so it is
+     worth having a way back that is not the keyboard. */
+  show: { action: 'show' },
+  'show yourself': { action: 'show' },
+  'come back': { action: 'show' },
+  'show the strip': { action: 'show' },
+
+  'reveal the model folder': { action: 'revealModels' },
+  'reveal model folder': { action: 'revealModels' },
+  'show the model folder': { action: 'revealModels' },
+  'where are the models': { action: 'revealModels' },
+
+  /* Deliberately not the bare word. Everything else here is undoable or
+     reopenable and this is neither: a "quit" heard inside a sentence takes the
+     app away mid-dictation, and the transcript with it. The full phrase is
+     what nobody says by accident. */
+  'quit transvibe': { action: 'quit' },
+  'quit the app': { action: 'quit' },
+
   'close settings': { action: 'closePanel' },
   'close the settings': { action: 'closePanel' },
   'close the panel': { action: 'closePanel' },
@@ -294,6 +330,27 @@ const EXACT = {
 }
 
 const SWITCH_RE = /^(?:switch|jump|go|take me|move) (?:over )?to (.+)$/
+
+// The ways of saying "someone else should answer this". Every one of them puts
+// the name straight after the verb, so what follows the capture is a name
+// first and the question, if there is one, second.
+/* Two shapes, because there are two ways to say it and only one of them was
+   here. "ask codex about X" names the agent as the thing you are addressing;
+   "use codex to look that up" names it as the thing that should do the work,
+   and that second shape is what people actually reach for when the small model
+   has just got something wrong — "use Claude or Codex to look that up,
+   please", said to a model that then invented having done so. Both put the
+   name straight after the verb, which is what the anchor depends on. */
+const ESCALATE_RE = new RegExp('^(?:' + [
+  'ask',
+  'check with',
+  'run (?:that|this|it) (?:past|by)',
+  'get (?:a |another )?(?:second )?opinion (?:from|of)',
+  // "use codex to research X", "have claude look that up", "get codex to check"
+  '(?:use|have|get|try)',
+  'look (?:that|this|it) up (?:with|on|using)',
+  '(?:search|check) (?:that|this|it)? ?(?:with|on|using)'
+].join('|') + ') (.+)$')
 
 // Each matcher owns a phrasing family. A matcher that recognises the verb but
 // not the target returns null on purpose: better no command than a wrong one.
@@ -343,6 +400,24 @@ const MATCHERS = [
         : null
     }
   },
+  {
+    /* Handing the question to a frontier model. Same guard as the Space
+       matcher above, for the same reason: "ask <name>" is only a command when
+       the name is a remote agent that is actually on the roster, so "ask Sarah
+       about the invoice" stays a sentence. The name has to come first — "I
+       need to ask Claude about this later" never reaches this anchor. */
+    re: ESCALATE_RE,
+    build: (m, raw, { remotes } = {}) => {
+      const hit = matchRemote(m[1], remotes)
+      if (!hit) return null
+      const { target, question } = askTail(hit.tail, remotes)
+      return command('escalate', {
+        target,
+        args: { to: hit.agent.name, question, target },
+        raw
+      })
+    }
+  },
   { re: /^copy (.+)$/, build: wholeTranscript('copy') },
   { re: /^send (.+)$/, build: wholeTranscript('send') },
   { re: /^clear (.+)$/, build: wholeTranscript('clear') }
@@ -386,6 +461,75 @@ function parseChatTarget(phrase) {
   return null
 }
 
+/* A spoken name, flattened enough that "S.D.S.U." and "sd su" are the same
+   string. Punctuation is whisper's guess, never the user's. */
+function flatName (s) {
+  return String(s == null ? '' : s).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+}
+
+/* One name against the remote agents there are. The provider words are
+   accepted as names in their own right because that is what people say: the
+   agent may be called Mira, but you ask *Claude*, and there is no ambiguity
+   while a roster holds at most one agent per provider. */
+function findRemote (name, remotes) {
+  const want = flatName(name)
+  if (!want) return null
+  const list = Array.isArray(remotes) ? remotes.filter(Boolean) : []
+  return list.find(a => flatName(a.name) === want) ||
+    list.find(a => flatName(a.provider) === want) ||
+    null
+}
+
+/* Split "claude what a VAD is" into the agent and the rest. Longest name
+   first, so an agent called "big claude" wins over the provider word inside
+   its own name. Three words is the whole search: past that a name is not
+   something anyone says to start a sentence. */
+function matchRemote (phrase, remotes) {
+  const words = splitWords(phrase)
+  for (let n = Math.min(3, words.length); n >= 1; n--) {
+    const agent = findRemote(words.slice(0, n).join(' '), remotes)
+    if (agent) return { agent, tail: words.slice(n).join(' ') }
+  }
+  return null
+}
+
+/* What is left after the name. Three shapes: nothing at all ("ask claude"),
+   a referent ("about this", "about the answer"), or the question itself
+   ("what a VAD is"). "about" and "to" are dropped because they belong to the
+   asking, not to the question — "ask codex to check that" is asking for
+   "check that". Anything that is not a referent is the question, and
+   everything is asked in the context of the thread, so the target falls back
+   to the conversation rather than to nothing. */
+/**
+ * What is left after the name, as a target or a question.
+ *
+ * @param {string} tail
+ * @param {object[]} remotes so a second name offered as an alternative can be
+ *   dropped rather than read as the question. "Use Claude or Codex to look
+ *   that up" means either will do; without this the first one is asked the
+ *   question "or Codex to look that up".
+ */
+function askTail (tail, remotes) {
+  let rest = String(tail || '').trim()
+  const alternative = /^(?:or|and) (.+)$/.exec(rest)
+  if (alternative) {
+    const other = matchRemote(alternative[1], remotes)
+    if (other) rest = other.tail
+  }
+
+  const p = rest
+    .replace(/^(?:about|regarding|on) /, '')
+    .replace(/^to /, '')
+    .trim()
+  if (!p) return { target: 'conversation', question: '' }
+  const chat = parseChatTarget(p)
+  if (chat) return { target: chat, question: '' }
+  // parseChatTarget eats these as qualifiers and comes back with nothing;
+  // said on their own they are the thread.
+  if (/^(?:this|that|it)$/.test(p)) return { target: 'conversation', question: '' }
+  return { target: 'conversation', question: p }
+}
+
 // copy/clear always act on the whole transcript, but the phrase still has to
 // look like a target so dictation does not trigger them.
 function wholeTranscript(action) {
@@ -400,9 +544,12 @@ function wholeTranscript(action) {
 
 /**
  * @param {string} utterance
- * @param {{spaces?: Array<{name: string, key: string}>}} [options] the marker
- *   apps on this machine, so a Space can be named out loud. Absent means there
- *   are none, and "switch to X" is left as dictation.
+ * @param {{spaces?: Array<{name: string, key: string}>,
+ *          remotes?: Array<{name: string, provider: string}>}} [options] the
+ *   marker apps on this machine, so a Space can be named out loud, and the
+ *   agents that can be escalated to, so one can be asked for by name. Either
+ *   absent means there are none, and "switch to X" / "ask X" are left as
+ *   dictation.
  */
 /**
  * Does this sentence want to go somewhere?
@@ -527,6 +674,11 @@ export function applyCommand(cmd, text) {
   // just as happily as a full one, so they sit above the emptiness check.
   if (action === 'settings') return unchanged('settings', 'settings')
   if (action === 'agents') return unchanged('agents', 'agents')
+  if (action === 'glossary') return unchanged('glossary', 'glossary')
+  if (action === 'help') return unchanged('help', 'help')
+  if (action === 'show') return unchanged('here', 'show')
+  if (action === 'revealModels') return unchanged('model folder', 'revealModels')
+  if (action === 'quit') return unchanged('goodbye', 'quit')
   if (action === 'stopTalking') return unchanged('hushed', 'stopTalking')
   // Switching desktops has nothing to do with the transcript, and least of all
   // with whether there is one.
@@ -534,6 +686,17 @@ export function applyCommand(cmd, text) {
     return unchanged(`switched to ${(cmd.args && cmd.args.name) || 'that space'}`, 'space')
   }
   if (action === 'closePanel') return unchanged('closed', 'closePanel')
+  /* Escalation is the one command whose answer is not ready when it returns.
+     Spawning a CLI takes seconds — 2.7 measured for claude, 14 for codex with
+     web search — and none of that can happen in a pure module, so what comes
+     back is the effect and the arguments, and the renderer goes and does it.
+     The transcript is untouched; this is a question, not an edit, and it is
+     asked whether or not there is anything on the strip, because by the time
+     you say it the thing you are asking about is usually the agent's answer
+     rather than your own words. */
+  if (action === 'escalate') {
+    return unchanged(`asking ${(cmd.args && cmd.args.to) || 'the other model'}`, 'escalate')
+  }
 
   if (empty) return unchanged('nothing to act on')
 
@@ -629,9 +792,15 @@ export function applyCommand(cmd, text) {
  * able to interrupt it, and you should not have to switch names to close a
  * panel or stop the microphone. Everything else said to a chat agent is a
  * question, including sentences that happen to look like commands.
+ *
+ * Escalation is in here for the opposite reason to the rest: not that it
+ * survives being said to a chat agent, but that it has no other home. "Ask
+ * Claude about that" is only ever said in the middle of a conversation that
+ * has just gone wrong.
  */
 export const UNIVERSAL = new Set([
-  'stopTalking', 'pause', 'resume', 'hide', 'closePanel', 'settings', 'agents'
+  'stopTalking', 'pause', 'resume', 'hide', 'show', 'closePanel', 'settings',
+  'agents', 'glossary', 'help', 'revealModels', 'quit', 'escalate'
 ])
 
 /* ------------------------------------------------------------------ *
@@ -729,6 +898,10 @@ export function spokenFor (cmd, result) {
        desktop is about to change and a line spoken after it is a line about a
        desktop you have already left. */
     case 'space': return `switched to ${(cmd.args && cmd.args.name) || 'that space'}`
+    /* Present tense, alone in here, because alone in here it has not happened
+       yet: this is said into the silence while the CLI runs, and it is the
+       only thing telling you the silence is on purpose. */
+    case 'escalate': return `asking ${(cmd.args && cmd.args.to) || 'the other model'}`
   }
 
   const verb = SPOKEN_VERBS[cmd.action]
@@ -884,9 +1057,48 @@ export const COMMANDS = [
     help: 'Open the agents panel — who you can talk to, and how each one sounds.'
   },
   {
+    action: 'glossary',
+    examples: ['open glossary', 'show glossary', 'glossary'],
+    help: 'Open the glossary — the words to listen for, and the fixes for what it still gets wrong. Your agents’ names belong in there: a name misheard is a sentence that never reaches the agent.'
+  },
+  {
+    action: 'help',
+    examples: ['show help', 'what can i say', 'what can you do'],
+    help: 'Open this list.'
+  },
+  {
+    action: 'show',
+    examples: ['show yourself', 'come back'],
+    help: 'Bring the strip back after “hide”. It is still listening while it is hidden, which is what makes saying this work at all.'
+  },
+  {
+    action: 'revealModels',
+    examples: ['reveal the model folder', 'where are the models'],
+    help: 'Open the folder holding the whisper model that is actually loaded, in Finder.'
+  },
+  {
+    action: 'quit',
+    examples: ['quit transvibe', 'quit the app'],
+    help: 'Quit. The whole phrase is required — “quit” on its own is a word people say, and this is the one command with nothing to undo it.'
+  },
+  {
     action: 'space',
     examples: ['switch to home', 'go to home', 'jump to home', 'take me to home'],
     help: 'Jump to a desktop Space or an app that is running. The Space names are the marker apps in the folder set under Sending; the app names are whatever is open right now. A name that is neither is left as dictation.'
+  },
+  {
+    action: 'escalate',
+    examples: [
+      'ask claude',
+      'ask claude about this',
+      'ask claude about the answer',
+      'ask claude what a VAD is',
+      'ask codex to check that',
+      'check with claude',
+      'run that past claude',
+      'get a second opinion from claude'
+    ],
+    help: 'Put the question to a frontier model instead — Claude or Codex, run as the CLI you are already signed in to, so it bills against your subscription. Only the named agent and the thread it is in are sent; dictation never leaves the machine. The name has to be an agent on the roster, so "ask Sarah about the invoice" is left as dictation.'
   },
   {
     action: 'closePanel',

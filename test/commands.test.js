@@ -20,7 +20,14 @@ const SPACES = [
   { name: 'Elk Grove', key: 'elkgrove' }
 ]
 
-const parse = (utterance) => parseCommand(utterance, { spaces: SPACES })
+/* And the agents it can hand a question to. Threaded through the same way and
+   for the same reason: "ask X" is only a command when X is one of these. */
+const REMOTES = [
+  { name: 'Claude', provider: 'claude' },
+  { name: 'Codex', provider: 'codex' }
+]
+
+const parse = (utterance) => parseCommand(utterance, { spaces: SPACES, remotes: REMOTES })
 const actionOf = (utterance) => {
   const c = parse(utterance)
   return c && c.action
@@ -546,14 +553,49 @@ describe('send', () => {
   })
 })
 
+describe('the rest of the menu, said out loud', () => {
+  it('opens the panels the menu bar opens', () => {
+    for (const said of ['open glossary', 'show glossary', 'glossary', 'open the word list']) {
+      expect(parse(said).action, said).toBe('glossary')
+    }
+    for (const said of ['show help', 'what can i say', 'what can you do', 'keys and commands']) {
+      expect(parse(said).action, said).toBe('help')
+    }
+  })
+
+  it('has a way back from hide, since it was listening the whole time', () => {
+    expect(parse('show yourself').action).toBe('show')
+    expect(parse('come back').action).toBe('show')
+  })
+
+  /* The one command with nothing to undo it, so it asks for the whole phrase.
+     "Quit" on its own is a word people dictate, and hearing it inside a
+     sentence would take the app away along with the transcript. */
+  it('quits only when told in full', () => {
+    expect(parse('quit transvibe').action).toBe('quit')
+    expect(parse('quit the app').action).toBe('quit')
+    expect(parse('quit')).toBeNull()
+    expect(parse('I quit')).toBeNull()
+  })
+
+  it('reaches them whoever you are addressing', () => {
+    // A chat agent is for talking to, but closing a panel or bringing the
+    // strip back should never need you to switch names first.
+    for (const action of ['glossary', 'help', 'show', 'revealModels', 'quit']) {
+      expect(UNIVERSAL.has(action), action).toBe(true)
+    }
+  })
+})
+
 describe('COMMANDS stays in sync with the parser', () => {
   it('covers every action the contract lists, once each', () => {
     const actions = COMMANDS.map((c) => c.action)
     expect(new Set(actions).size).toBe(actions.length)
     expect(actions.sort()).toEqual([
-      'agents', 'capitalize', 'clear', 'closePanel', 'copy', 'delete', 'hide',
-      'lowercase', 'newParagraph', 'pause', 'punctuate', 'replace', 'resume',
-      'send', 'settings', 'space', 'stopTalking', 'undo', 'uppercase'
+      'agents', 'capitalize', 'clear', 'closePanel', 'copy', 'delete',
+      'escalate', 'glossary', 'help', 'hide', 'lowercase', 'newParagraph',
+      'pause', 'punctuate', 'quit', 'replace', 'resume', 'revealModels',
+      'send', 'settings', 'show', 'space', 'stopTalking', 'undo', 'uppercase'
     ].sort())
   })
 
@@ -723,6 +765,140 @@ describe('parseCommand — named Spaces', () => {
   it('is for a commands agent, not for one you are chatting with', () => {
     // "switch to plan B" said to a chat agent is a sentence, not a desktop.
     expect(UNIVERSAL.has('space')).toBe(false)
+  })
+})
+
+describe('parseCommand — asking a frontier model', () => {
+  it('takes every phrasing there is', () => {
+    for (const said of [
+      'ask claude', 'ask claude about this', 'ask claude about that',
+      'check with claude', 'run that past claude', 'run this by claude',
+      'get a second opinion from claude', 'get another opinion from claude'
+    ]) {
+      expect(parse(said), said).toMatchObject({
+        action: 'escalate',
+        target: 'conversation',
+        args: { to: 'Claude', question: '', target: 'conversation' }
+      })
+    }
+  })
+
+  /* The other half of how people say it. "Ask X" addresses the agent; "use X
+     to look that up" puts it to work — and that second shape is the one
+     reached for when the small model has just got something wrong, which is
+     exactly when it needs to be understood. */
+  it('takes the phrasings that put the model to work rather than address it', () => {
+    expect(parse('use codex to research the microduck').args)
+      .toMatchObject({ to: 'Codex', question: 'research the microduck' })
+    expect(parse('have claude look that up').args)
+      .toMatchObject({ to: 'Claude', question: 'look that up' })
+    expect(parse('get codex to check that').args.to).toBe('Codex')
+    expect(parse('try claude on that').args.to).toBe('Claude')
+    expect(parse('look that up with codex')).toMatchObject({
+      target: 'conversation', args: { to: 'Codex', question: '' }
+    })
+    expect(parse('search that with codex').args.to).toBe('Codex')
+  })
+
+  it('takes the first of two names offered, and not as the question', () => {
+    // "Use Claude or Codex to look that up" means either will do. Without
+    // this the first is asked the question "or Codex to look that up".
+    expect(parse('use claude or codex to look that up').args)
+      .toMatchObject({ to: 'Claude', question: 'look that up' })
+  })
+
+  it('does not turn the ordinary uses of those verbs into commands', () => {
+    // The guard is the same one the Space matcher uses: the name has to
+    // resolve, so these stay dictation however they begin.
+    expect(parse('use the last three words')).toBeNull()
+    expect(parse('get the last word')).toBeNull()
+    expect(parse('use my laptop to do that')).toBeNull()
+    expect(parse('have another look at that')).toBeNull()
+  })
+
+  it('hears which of them you asked for', () => {
+    expect(parse('ask codex to check that').args.to).toBe('Codex')
+    expect(parse('ask claude about this').args.to).toBe('Claude')
+  })
+
+  it('takes the referent the chat verbs already know', () => {
+    expect(parse('ask claude about the answer')).toMatchObject({
+      target: 'answer',
+      args: { target: 'answer', question: '' }
+    })
+    expect(parse('ask claude about the conversation').target).toBe('conversation')
+  })
+
+  it('treats free text after the name as the question itself', () => {
+    expect(parse('ask claude what a VAD is').args).toMatchObject({
+      to: 'Claude',
+      question: 'what a vad is'
+    })
+    // "to" and "about" belong to the asking, not to what is being asked.
+    expect(parse('ask codex to check that').args.question).toBe('check that')
+    expect(parse('ask claude about the release date').args.question)
+      .toBe('the release date')
+  })
+
+  it('answers to the provider word whatever the agent is called', () => {
+    // You ask Claude; the agent on the roster is called something else.
+    const remotes = [{ name: 'Ada', provider: 'claude' }]
+    expect(parseCommand('ask claude about this', { remotes })).toMatchObject({
+      action: 'escalate',
+      args: { to: 'Ada' }
+    })
+    expect(parseCommand('ask ada about this', { remotes }).args.to).toBe('Ada')
+  })
+
+  it('leaves a name that is nobody on the roster as dictation', () => {
+    expect(parse('ask Sarah about the invoice')).toBeNull()
+    expect(parse('ask him about the invoice')).toBeNull()
+  })
+
+  it('needs the name at the front, so a sentence about asking is not asking', () => {
+    expect(parse('I need to ask Claude about this later')).toBeNull()
+    expect(parse('we should ask claude tomorrow')).toBeNull()
+  })
+
+  it('is not a command at all when there are no remote agents', () => {
+    expect(parseCommand('ask claude about this')).toBeNull()
+    expect(parseCommand('ask claude about this', { remotes: [] })).toBeNull()
+    expect(parseCommand('ask claude what a VAD is', { spaces: SPACES })).toBeNull()
+  })
+
+  it('chains with the commands either side of it', () => {
+    const parts = splitChain('open settings and ask claude about this')
+    expect(parts).toHaveLength(2)
+    expect(parts.map(parse).map(c => c && c.action)).toEqual(['settings', 'escalate'])
+  })
+
+  it('hands the work back as an effect, because the answer takes seconds', () => {
+    // Nothing else in here returns without having already done the thing; a
+    // CLI takes 3 to 14 seconds, so all commands.js can do is say who to ask.
+    const cmd = parse('ask claude about this')
+    const res = applyCommand(cmd, 'The quick brown fox.')
+    expect(res).toMatchObject({ effect: 'escalate', changed: false })
+    expect(res.text).toBe('The quick brown fox.')
+    expect(res.message).toBe('asking Claude')
+  })
+
+  it('asks whether or not there is a transcript to act on', () => {
+    // By the time you say it, what you are asking about is usually the
+    // agent's answer rather than anything of yours still on the strip.
+    expect(applyCommand(parse('ask claude about the answer'), '')).toMatchObject({
+      effect: 'escalate'
+    })
+  })
+
+  it('says who it is asking, in the present tense, because it has not happened', () => {
+    const cmd = parse('run that past claude')
+    expect(spokenFor(cmd, applyCommand(cmd, 'Some text.'))).toBe('asking Claude')
+  })
+
+  it('is a command whoever you are addressing', () => {
+    // It exists to be said mid-conversation, to the chat agent that just got
+    // something wrong.
+    expect(UNIVERSAL.has('escalate')).toBe(true)
   })
 })
 

@@ -10,14 +10,16 @@ import { parseSettingCommand, applySettingCommand, settingPhrases } from './sett
 import { FIELDS } from './settings-schema.js'
 import {
   speechFor, commandAgent, defaultModel, addAgent, updateAgent, removeAgent,
-  nextHue, KINDS
+  nextHue, isRemote, KINDS, PROVIDERS, DEFAULT_MODELS
 } from '../shared/agents.js'
+import { attribute, escalationChain } from '../shared/escalate.js'
 import {
   addTerms, removeTerm, addCorrection, removeCorrection, sortedEntries, splitWords
 } from './glossary-edit.js'
 import { applyCorrections } from '../shared/glossary.js'
 import { describeModel, canThink } from '../shared/assist.js'
 import { createPresence } from './presence.js'
+import { createWaiting } from './waiting.js'
 import { clampPlacement, heightFor, isReachable, MARGIN } from './placement.js'
 import { createSettingsPanel } from './settings-panel.js'
 
@@ -75,6 +77,7 @@ const state = {
      A thread you have to re-address every turn is a query box, not a talk. */
   listeningUntil: 0,
   asking: false,
+  askSeq: 0,         // guards against a slow answer landing after a newer question
   pendingPlacement: null,   // where a panel is being dragged to, until released
   // The word fixer's checkboxes, remembered across opens: whoever turns
   // 'remember' off is usually making a run of one-off fixes, not one.
@@ -82,6 +85,11 @@ const state = {
   fixListen: true,
   awake: false,
   presence: null,
+  /* The clock on a question that has gone off the machine. Null until the
+     first one: a roster that never escalates never builds it, and everything
+     that reads it checks. Its `holdsStrip` is the reason it is on `state` at
+     all — `syncHold` has to be able to ask about a call it did not start. */
+  waiting: null,
   // How many spoken replies are in flight. A count rather than a flag: two
   // commands in quick succession must not have the first one's reply un-deafen
   // the microphone while the second is still talking.
@@ -204,9 +212,18 @@ function render () {
   if (chat) {
     conversationEl.replaceChildren(...state.history.map(bubbleNode))
     if (state.asking) {
-      const who = state.agent && state.agent.kind === 'chat' ? state.agent : null
+      /* A local answer lands before you have finished looking at the bubble,
+         so '…' is the whole truth about it. A frontier CLI takes between two
+         and fourteen seconds and prints nothing until it is done, so the same
+         bubble carries the name of whoever was asked and a second count that
+         moves — the only honest difference between "working" and "hung". */
+      const wait = state.waiting && state.waiting.waiting ? state.waiting : null
+      const who = wait || (state.agent && state.agent.kind === 'chat' ? state.agent : null)
       conversationEl.append(bubbleNode({
-        role: 'assistant', content: '…', name: who && who.name, hue: who && who.hue
+        role: 'assistant',
+        content: wait ? wait.label(Date.now()) : '…',
+        name: who && who.name,
+        hue: who && who.hue
       }))
     }
     if (inflight && liveToChat) {
@@ -298,7 +315,7 @@ async function addressAgent (agent, utterance, { keep = null } = {}) {
        able to interrupt it, and switching names to close a panel would be
        absurd. Everything else said to a chat agent is a question, including
        the sentences that happen to look like commands. */
-    const cmd = parseCommand(utterance, { spaces: state.spaces })
+    const cmd = parseCommand(utterance, parseOptions())
     if (cmd && UNIVERSAL.has(cmd.action)) return runCommand(utterance)
     return converse(agent, utterance)
   }
@@ -314,6 +331,102 @@ async function addressAgent (agent, utterance, { keep = null } = {}) {
   }
 
   return runCommand(utterance, { keep })
+}
+
+/* Everything the parsers have to be told about this machine. `spaces` decides
+   whether "switch to home" is a command; `remotes` decides the same thing for
+   "ask Claude" — with no remote agent on the roster the words are dictation,
+   which is why the roster is passed rather than a flag. */
+function parseOptions () {
+  return { spaces: state.spaces, remotes: (state.settings.agents || []).filter(isRemote) }
+}
+
+/* The wait clock, built the first time something is waited on and kept after
+   that — a roster that never leaves this machine never builds one at all. Its
+   timeout is fixed at construction, so changing that setting drops it and the
+   next wait builds a new one. */
+function waiting () {
+  if (!state.waiting) {
+    state.waiting = createWaiting({
+      timeoutMs: state.settings && state.settings.remoteTimeoutMs
+    })
+  }
+  return state.waiting
+}
+
+/**
+ * Who this question is likely to end up with, off the machine, or null.
+ *
+ * Asked before the question goes out, because the answer decides whether the
+ * strip shows a counting bubble or the ordinary '…'. It is a guess and it is
+ * allowed to be: a local agent that *can* escalate usually will not, and when
+ * it does not the clock is stopped again a few hundred milliseconds later,
+ * before the bubble has had a second to count. Guessing the other way is what
+ * costs — a fourteen-second wait behind a static ellipsis reads as a hang.
+ */
+function remoteTarget (agent) {
+  if (!agent || !state.settings.remote) return null
+  if (isRemote(agent)) return agent
+  return escalationChain(state.settings.agents || [], agent).find(isRemote) || null
+}
+
+/* Both edges of a wait. The hold is the important half: the transcript fades
+   after `idleFadeMs` — 6s by default — of nothing being said, and a remote
+   call is silent by definition, so without it the question, the thread and the
+   indicator all fade out from under an answer that has not arrived yet. It
+   goes through `syncHold` rather than straight at presence, because a panel
+   may be holding the strip too and the last one to speak must not win. */
+function startWaiting (who) {
+  waiting().start(Date.now(), { name: who.name, hue: who.hue })
+  syncHold()
+  noteActivity()
+  if (!pulseFrame) pulseFrame = requestAnimationFrame(pulseIndicator)
+}
+
+function stopWaiting () {
+  if (!state.waiting || !state.waiting.waiting) return
+  state.waiting.stop()
+  syncHold()
+  // The loop notices on its own next frame; the redraw here is what puts the
+  // dot back to a steady glow rather than leaving it wherever it stopped.
+  renderConvoIndicator()
+}
+
+/* "stop", "be quiet" and Esc all mean the same thing about a call in flight:
+   kill the subprocess and stop pretending. The answer may already be sitting
+   on the CLI's stdout — the main process throws it away rather than speak it,
+   because after "stop" nothing is what you asked for.
+   @returns {boolean} whether there was anything to stop */
+function cancelEscalation () {
+  if (!state.waiting || !state.waiting.waiting) return false
+  window.transvibe.cancelEscalation()
+  state.asking = false
+  stopWaiting()
+  hint('stopped asking')
+  /* Said here rather than left to the caller, because one of the callers is
+     the Esc key and has no voice of its own — and a call that stopped without
+     saying so is indistinguishable from one still running. */
+  say('stopped asking', { plain: true })
+  render()
+  return true
+}
+
+/** The last thing you asked, for a follow-up that names no question of its own. */
+function lastQuestion () {
+  for (let i = state.history.length - 1; i >= 0; i--) {
+    if (state.history[i].role === 'user') return state.history[i].content
+  }
+  return ''
+}
+
+/* The agent an answer came back from, by the name the main process reported.
+   A remote answer is attributed to a roster agent when one matches, so the
+   bubble can wear its colour, and to the bare name when none does — 'claude'
+   said outright names no agent and still has to be credited. */
+function agentNamed (name) {
+  const flat = String(name || '').trim().toLowerCase()
+  if (!flat) return null
+  return (state.settings.agents || []).find(a => a.name.toLowerCase() === flat) || null
 }
 
 /**
@@ -333,38 +446,195 @@ async function converse (agent, question) {
   // bubbles on screen, so it is not sent to itself as part of its own history.
   const priorHistory = state.history
 
+  /* Which question this is, the way `liveSeq` guards a slow interim. A local
+     answer is back in half a second and nobody can speak over it, but a
+     frontier one takes three to fourteen, which is long enough to say
+     something else — and then the first answer lands in the thread underneath
+     the second question, answering something nobody can see any more. So a
+     newer question ends the older one: it is cancelled where it is running,
+     and if it answers anyway that answer is dropped on the floor here. */
+  if (state.asking) window.transvibe.cancelEscalation()
+  const seq = ++state.askSeq
+
   state.asking = true
   state.talkingTo = agent
   state.history = [...priorHistory, { role: 'user', content: question }]
   hint(`${agent.name} is thinking…`)
   noteActivity()
+
+  /* Started before the question goes out and stopped in a `finally`, so the
+     strip is held awake for every way this can end — an answer, a refusal, a
+     timeout, Ollama being down. Only when the question can leave the machine:
+     a local answer is back before a counter would show anything but 0s. */
+  const bound = remoteTarget(agent)
+  if (bound) startWaiting(bound)
   render()
 
   try {
     const answer = await window.transvibe.ask(question, priorHistory,
-      { model: agent.model, thinking: agent.thinking })
+      { agent: agent.name, model: agent.model, thinking: agent.thinking })
+    // Overtaken while it was out. Someone else's turn now, and everything
+    // below would be writing into a thread that has moved on.
+    if (seq !== state.askSeq) return
+    state.asking = false
     if (!answer.ok) {
-      state.asking = false
+      /* Cancelled is the one failure nobody needs told about out loud: you
+         are the one who said stop, and the strip has already said so. */
+      if (answer.reason === 'cancelled') { render(); return }
       hint(answer.reason || 'no answer')
       say(answer.reason || 'no answer', { plain: true })
       render()
       return
     }
 
-    state.asking = false
-    state.history = [...state.history,
-      { role: 'assistant', content: answer.text, name: agent.name, hue: agent.hue }]
-    /* The thread stays open for a while, so the next sentence can be "and how
-       far is that from London" rather than the whole name again. */
-    state.listeningUntil = Date.now() + (state.settings.conversationMs || 0)
-    hint(answer.text)
-    noteActivity()
-    render()
-    say(answer.text, { plain: true })
+    say(landAnswer(answer, agent), { plain: true })
   } catch (err) {
+    if (seq !== state.askSeq) return
     state.asking = false
     hint(err.message)
     render()
+  } finally {
+    // The newer question started its own clock; stopping it here would take
+    // the counter off the screen while that one is still running.
+    if (seq === state.askSeq) stopWaiting()
+  }
+}
+
+/* The four ways a question ends up somewhere else, said the way you would say
+   them. `shouldEscalate` returns the word; this turns it into the half of a
+   sentence that goes after the agent's name. */
+const WHY = {
+  pass: 'said it could not answer',
+  unsure: 'was not sure',
+  failed: 'did not answer',
+  empty: 'came back with nothing',
+  fresh: 'has no clock'
+}
+
+/**
+ * One answer, however it was reached: put on screen and turned into the line
+ * to speak.
+ *
+ * Attribution is the whole point of escalating. An answer from a better model
+ * that arrives in Mira's voice, in Mira's colour, with no mention of where it
+ * came from, is the app quietly taking credit for a call it made on your
+ * behalf and billed to your subscription. So when `via` names somebody other
+ * than the agent you asked, the bubble wears that one's name and hue and the
+ * spoken line is prefixed — "Claude said, …".
+ *
+ * Once, not twice: the name is a label on the bubble and a prefix in the
+ * sentence, and you are only ever taking in one of the two.
+ *
+ * @returns {string} what to say
+ */
+function landAnswer (answer, asked) {
+  const from = answer.via || ''
+  const via = from && from.toLowerCase() !== asked.name.toLowerCase() ? from : null
+  const who = via ? (agentNamed(via) || { name: via, hue: null }) : asked
+
+  state.history = [...state.history,
+    { role: 'assistant', content: answer.text, name: who.name, hue: who.hue }]
+  /* The thread stays open for a while, so the next sentence can be "and how
+     far is that from London" rather than the whole name again. */
+  state.listeningUntil = Date.now() + (state.settings.conversationMs || 0)
+  hint(answer.text)
+  /* The daily cap and a frontier model that would not answer are both facts
+     about an answer that still arrived, from the local model. They go to the
+     status line rather than into the spoken reply: the reply is an answer to
+     what you asked, and neither of these is. */
+  if (answer.note) hint(answer.note)
+  else if (answer.remoteFailed) hint(`${answer.remoteFailed} — answered locally`)
+  /* Why a question left the machine, in the status line. Not narrated and not
+     spoken — you asked a question, not for an account of how it was routed —
+     but written down, because "it went to Claude and I do not know why" is a
+     complaint with nothing to act on. Each of these names one rule in
+     escalate.js, so the line and the rule that fired can be read together. */
+  else if (via && answer.escalated) hint(`${asked.name} ${WHY[answer.escalated] || 'gave up'} — asked ${via}`)
+  noteActivity()
+  render()
+
+  /* What is said is the answer with its addresses taken out — they are on the
+     strip, where they can be read and copied, and a URL spoken aloud is a
+     minute of slashes you cannot write down. Same words otherwise: the bubble
+     is not a longer version of the reply, it is the same reply with the parts
+     that only work in writing left in. */
+  const line = answer.spoken || answer.text
+
+  // Off, the escalation still happens and is still visible; it just stops
+  // being narrated. The bubble is the record either way.
+  return via && state.settings.remoteAnnounce !== false
+    ? attribute(via, line)
+    : line
+}
+
+/**
+ * Hand the question to a frontier model, because you said so.
+ *
+ * The automatic path escalates when the local model admits it is stuck. This
+ * is the other half: you heard the answer, you did not believe it, and you
+ * said "ask Claude about that". What gets sent is the thread — the question
+ * that is already on screen and the answer that disappointed you — and never
+ * the transcript. There is no referent without a thread, and rather than
+ * reach for the nearest text and send your dictation off the machine, it
+ * refuses.
+ */
+async function escalate (args, announce) {
+  const speak = announce || ((line, options) => say(line, options))
+  const to = agentNamed(args.to)
+  const named = (to && to.name) || args.to
+
+  if (!state.settings.remote) {
+    hint('asking a frontier model is switched off')
+    speak('that is switched off', { plain: true })
+    return
+  }
+
+  const question = args.question || lastQuestion()
+  if (!question) {
+    hint('nothing to ask about')
+    speak('nothing to ask about', { plain: true })
+    return
+  }
+
+  // The thread as it stood, so the frontier model is not shown the question
+  // twice, and the answer it is being asked to check.
+  const priorHistory = state.history
+  const priorAnswer = lastAnswer()
+
+  state.asking = true
+  if (!state.talkingTo && to) state.talkingTo = to
+  if (args.question) state.history = [...priorHistory, { role: 'user', content: question }]
+  hint(`asking ${named}…`)
+  noteActivity()
+  startWaiting(to || { name: named, hue: null })
+  render()
+
+  try {
+    const answer = await window.transvibe.escalate(question, priorAnswer, priorHistory,
+      { to: args.to })
+    state.asking = false
+    if (!answer || !answer.ok) {
+      if (answer && answer.reason === 'cancelled') { render(); return }
+      const why = (answer && answer.reason) || 'no answer'
+      hint(why)
+      speak(why, { plain: true })
+      render()
+      return
+    }
+    /* Credited against whoever's thread this is. Mid-conversation that is the
+       local agent, so the frontier answer is somebody else's and is spoken as
+       "Claude said" — the case this command exists for. Said into no thread at
+       all, `talkingTo` is the frontier agent itself, the two names match and
+       the prefix is dropped: you addressed Claude, the bubble says Claude, and
+       being told so a third time is the duplication landAnswer avoids. */
+    speak(landAnswer(answer, state.talkingTo || { name: '', hue: null }), { plain: true })
+  } catch (err) {
+    state.asking = false
+    hint(err.message)
+    speak(err.message, { plain: true })
+    render()
+  } finally {
+    stopWaiting()
   }
 }
 
@@ -402,15 +672,42 @@ function addressed () {
    an event, it is a clock, and nothing else changing means nothing else
    would ever notice it happened. */
 function renderConvoIndicator () {
-  const who = addressed()
+  /* A call that has left the machine takes the indicator over: for the ten
+     seconds it may run, who the app is waiting on matters more than who it is
+     listening to, and they are usually not the same one. */
+  const wait = state.waiting && state.waiting.waiting && state.waiting.name
+    ? state.waiting
+    : null
+  const who = wait || addressed()
   convoIndicatorEl.hidden = !who
   if (!who) return
   convoIndicatorLabelEl.textContent = who.name
   const dot = convoIndicatorEl.querySelector('.dot')
-  const color = `hsl(${Math.round(who.hue * 360)} 90% 65%)`
+  const hue = Number.isFinite(who.hue) ? who.hue : 0.58
+  const color = `hsl(${Math.round(hue * 360)} 90% 65%)`
   convoIndicatorEl.style.color = color
   dot.style.background = color
-  dot.style.boxShadow = `0 0 8px ${color}`
+  /* Breathing rather than steady, and only while waiting: the dot is the one
+     thing on the strip that can say "still going" without words, and it is
+     drawn off the wait's own clock so it cannot drift from the count in the
+     bubble. Not the speaking ribbon — that one means the app is talking, and
+     it is silent for every second of this. */
+  const breath = wait ? wait.pulse(Date.now()) : null
+  dot.style.boxShadow = `0 0 ${(breath === null ? 8 : 6 + 10 * breath).toFixed(1)}px ${color}`
+  dot.style.opacity = breath === null ? '' : (0.45 + 0.55 * breath).toFixed(2)
+}
+
+/* The breath, on its own frame loop for exactly as long as a call is out.
+   Everything else on the strip is redrawn by the 400ms idle tick, which is
+   right for a number that changes once a second and visibly wrong for
+   something meant to look alive: sampled two and a half times a second, a
+   0.55Hz pulse reads as a stutter. The loop is started by `startWaiting` and
+   ends by itself the moment the wait does. */
+let pulseFrame = null
+function pulseIndicator () {
+  pulseFrame = null
+  renderConvoIndicator()
+  if (state.waiting && state.waiting.waiting) pulseFrame = requestAnimationFrame(pulseIndicator)
 }
 
 /* One spoken utterance, interpreted as an editing command rather than as text
@@ -423,7 +720,7 @@ async function runCommand (utterance, { retry = true, keep = null, collect = nul
      that". */
   if (looksLikeSwitch(utterance)) await refreshSpaces()
 
-  const cmd = parseCommand(utterance, { spaces: state.spaces })
+  const cmd = parseCommand(utterance, parseOptions())
 
   /* Inside a chain the confirmations are gathered and said once at the end.
      Saying each one as it happens would not work anyway: a second `say`
@@ -488,6 +785,11 @@ async function runCommand (utterance, { retry = true, keep = null, collect = nul
     return
   }
 
+  /* Asking someone else is not an edit, and it has to be taken out before the
+     referent rules below: they read "the conversation" as a thing to copy or
+     wipe, and "ask Claude about the conversation" is neither. */
+  if (cmd.action === 'escalate') return escalate(cmd.args, announce)
+
   const before = fullText()
 
   /* The conversation is the other thing a command can be about. Named
@@ -542,6 +844,10 @@ async function runCommand (utterance, { retry = true, keep = null, collect = nul
   const result = applyCommand(cmd, before)
 
   if (result.effect === 'undo') {
+    /* "Never mind" is an undo, except while a question is out: then it is
+       about the question, which is the only thing that has not finished
+       happening yet. Nothing has changed in the transcript to take back. */
+    if (cancelEscalation()) return
     const previous = state.undoStack.pop()
     if (previous === undefined) {
       announce('nothing to undo')
@@ -587,8 +893,16 @@ async function runCommand (utterance, { retry = true, keep = null, collect = nul
     case 'hide': window.transvibe.hide(); break
     case 'settings': window.transvibe.openPanel('settings'); break
     case 'agents': window.transvibe.openPanel('agents'); break
+    case 'glossary': window.transvibe.openPanel('glossary'); break
+    case 'help': window.transvibe.openPanel('help'); break
+    case 'show': window.transvibe.showWindow(); break
+    case 'revealModels': window.transvibe.revealModels(); break
+    case 'quit': window.transvibe.quit(); break
     case 'stopTalking':
       window.transvibe.hush()
+      /* "Be quiet" is about every noise the app is making, and a subprocess
+         that is going to speak in eight seconds is one of them. */
+      cancelEscalation()
       // Interrupting is also how you end a conversation: the next thing said
       // after cutting one off is not a follow-up.
       state.listeningUntil = 0
@@ -660,7 +974,7 @@ async function runChain (utterance) {
   if (parts.length < 2) return false
 
   const parsed = parts.map(part => {
-    const cmd = parseCommand(part, { spaces: state.spaces })
+    const cmd = parseCommand(part, parseOptions())
     const setting = parseSettingCommand(part, FIELDS)
     // Same preference as a single command: naming a setting beats a replace.
     if (setting && (!cmd || cmd.action === 'replace')) return { part, setting }
@@ -1131,6 +1445,15 @@ const KIND_LABELS = {
   external: 'hands it on (not yet)'
 }
 
+/* Where an agent thinks, said as what it does rather than as a product name:
+   the choice you are making is whether this name's answers leave the machine,
+   and 'ask Claude' says that where 'claude' does not. */
+const PROVIDER_LABELS = {
+  local: 'stays on this Mac',
+  claude: 'ask Claude',
+  codex: 'ask Codex'
+}
+
 async function renderAgents (into = null) {
   const body = into || $('agents-body')
   const roster = state.settings.agents || []
@@ -1215,63 +1538,169 @@ async function renderAgents (into = null) {
        you want deciding whether you said "delete that". */
     if (agent.kind !== 'external') {
       const sub = el('div', 'agent-sub')
-      sub.append(el('span', 'note', agent.kind === 'chat' ? 'answers with' : 'thinks with'))
-      const model = el('select')
-      const { options, note } = await assistModelOptions()
-      for (const option of options) {
-        const node = el('option', null, option.label)
-        node.value = option.value
-        model.append(node)
-      }
-      model.value = agent.model || defaultModel(roster)
-      // A model that is no longer pulled must not silently read as another
-      // one: it is still what the file says, and saying so is how you find out
-      // why the answers stopped coming.
-      if (!options.some(o => o.value === model.value)) {
-        const missing = el('option', null, `${model.value} — not pulled`)
-        missing.value = model.value
-        model.append(missing)
-        model.value = model.value
-      }
-      model.onchange = () => saveAgents(updateAgent(roster, agent.name, {
-        model: model.value || null
-      }))
-      sub.append(model)
+      const remote = isRemote(agent)
 
-      /* Whether it may reason before answering, next to the model because it
-         is a property of the pairing rather than of either one: the same model
-         is a different agent with it on. Only offered to a chat agent — the
-         jobs a commands agent does with its model are rewrites on a tight
-         clock, where reasoning is a second spent on nothing. */
+      /* Where it thinks. Offered to a chat agent and to nothing else: the jobs
+         a commands agent does with a model are tidying up your dictation and
+         guessing what an unrecognised command meant, and both of those *are*
+         the transcript. That never leaves this machine, so there is nothing
+         here to choose between. In the second row rather than beside the kind
+         because the first row is a fixed five-column grid and this is a fifth
+         thing about the agent, not a fifth column. */
       if (agent.kind === 'chat') {
-        const thinking = el('select', 'agent-thinking')
-        for (const [value, label] of [['yes', 'thinks first'], ['no', 'answers straight']]) {
-          const node = el('option', null, label)
-          node.value = value
-          thinking.append(node)
+        const provider = el('select', 'agent-provider')
+        for (const value of PROVIDERS) {
+          const option = el('option', null, PROVIDER_LABELS[value])
+          option.value = value
+          provider.append(option)
         }
-        thinking.value = agent.thinking ? 'yes' : 'no'
-        thinking.title = 'Thinking is slower but better reasoned. Not every ' +
-          'model can be told to skip it — some answer with their reasoning ' +
-          'in the reply instead.'
-        thinking.onchange = () => saveAgents(updateAgent(roster, agent.name, {
-          thinking: thinking.value === 'yes'
+        provider.value = agent.provider || 'local'
+        provider.title = 'A remote agent spawns the CLI you are already signed ' +
+          'in to, so it bills against that subscription rather than an API key. ' +
+          'Only what you say to this name is ever sent; your dictation is not.'
+        provider.style.flex = '0 0 auto'
+        provider.style.width = 'auto'
+        provider.onchange = () => saveAgents(updateAgent(roster, agent.name, {
+          provider: provider.value
         }))
-
-        /* A model with no reasoning to do should not be offered the choice.
-           Said rather than hidden: the switch was there a moment ago for a
-           different model, and a control that silently vanishes reads as a
-           bug. Only when Ollama actually said so — an unknown model keeps the
-           switch, because withholding it on a guess is worse. */
-        const chosen = options.find(o => o.value === model.value)
-        if (chosen && chosen.thinks === false) {
-          thinking.disabled = true
-          thinking.title = `${model.value} does not think — there is nothing to switch off`
-        }
-        sub.append(thinking)
+        sub.append(provider)
       }
 
-      sub.append(el('span', 'note', note || ''))
+      /* Every local agent gets its own Ollama model. A chat agent answers with
+         it; one that runs commands uses it for the guesswork — what an
+         unrecognised command meant, and how to shorten a confirmation. Worth
+         separating: asked what a VAD is, the small fast one offers
+         "video-assisted delivery" while a bigger one gets it right, and the
+         small fast one is exactly what you want deciding whether you said
+         "delete that".
+
+         A remote agent has no Ollama list to pick from, and showing it one
+         would say the wrong thing about where its answers come from — so the
+         row says what actually applies to the CLI instead. */
+      if (!remote) {
+        sub.append(el('span', 'note', agent.kind === 'chat' ? 'answers with' : 'thinks with'))
+        const model = el('select')
+        const { options, note } = await assistModelOptions()
+        for (const option of options) {
+          const node = el('option', null, option.label)
+          node.value = option.value
+          model.append(node)
+        }
+        model.value = agent.model || defaultModel(roster)
+        // A model that is no longer pulled must not silently read as another
+        // one: it is still what the file says, and saying so is how you find out
+        // why the answers stopped coming.
+        if (!options.some(o => o.value === model.value)) {
+          const missing = el('option', null, `${model.value} — not pulled`)
+          missing.value = model.value
+          model.append(missing)
+          model.value = model.value
+        }
+        model.onchange = () => saveAgents(updateAgent(roster, agent.name, {
+          model: model.value || null
+        }))
+        sub.append(model)
+
+        /* Whether it may reason before answering, next to the model because it
+           is a property of the pairing rather than of either one: the same model
+           is a different agent with it on. Only offered to a chat agent — the
+           jobs a commands agent does with its model are rewrites on a tight
+           clock, where reasoning is a second spent on nothing. It is not
+           offered to a remote one either: a frontier CLI decides that for
+           itself and there is no flag here that would change its mind. */
+        if (agent.kind === 'chat') {
+          const thinking = el('select', 'agent-thinking')
+          for (const [value, label] of [['yes', 'thinks first'], ['no', 'answers straight']]) {
+            const node = el('option', null, label)
+            node.value = value
+            thinking.append(node)
+          }
+          thinking.value = agent.thinking ? 'yes' : 'no'
+          thinking.title = 'Thinking is slower but better reasoned. Not every ' +
+            'model can be told to skip it — some answer with their reasoning ' +
+            'in the reply instead.'
+          thinking.onchange = () => saveAgents(updateAgent(roster, agent.name, {
+            thinking: thinking.value === 'yes'
+          }))
+
+          /* A model with no reasoning to do should not be offered the choice.
+             Said rather than hidden: the switch was there a moment ago for a
+             different model, and a control that silently vanishes reads as a
+             bug. Only when Ollama actually said so — an unknown model keeps the
+             switch, because withholding it on a guess is worse. */
+          const chosen = options.find(o => o.value === model.value)
+          if (chosen && chosen.thinks === false) {
+            thinking.disabled = true
+            thinking.title = `${model.value} does not think — there is nothing to switch off`
+          }
+          sub.append(thinking)
+        }
+
+        sub.append(el('span', 'note', note || ''))
+      } else if (agent.provider === 'claude') {
+        /* Typed rather than picked from a list: the models the CLI accepts are
+           whatever Anthropic is shipping this month, and a stale list that
+           quietly rules out a new one is worse than an empty box. A wrong name
+           is caught by the CLI, whose complaint is what you hear back. */
+        sub.append(el('span', 'note', 'answers with'))
+        const model = el('input', 'agent-model')
+        model.type = 'text'
+        model.spellcheck = false
+        model.value = agent.model || DEFAULT_MODELS.claude || ''
+        model.placeholder = DEFAULT_MODELS.claude || ''
+        model.title = 'The --model the claude CLI is given. Empty uses its default.'
+        model.onchange = () => saveAgents(updateAgent(roster, agent.name, {
+          model: model.value.trim() || null
+        }))
+        sub.append(model)
+        sub.append(el('span', 'note', 'via your own claude CLI'))
+      } else {
+        /* No model box for codex: the CLI chooses, and a field that cannot
+           change anything is a field that lies about what it does. */
+        const note = el('span', 'note', 'codex picks its own model')
+        note.title = 'codex exec is given no --model; whatever it is configured ' +
+          'with is what answers.'
+        sub.append(note)
+      }
+
+      /* Who catches the question this one cannot answer. Only a local agent
+         has anywhere to fall to: the frontier model is already the end of the
+         chain, and pointing one at another would spend eight more seconds
+         asking a second expensive question about an answer that was fine.
+
+         Named agents only, never a bare "ask Claude" — what gets asked is a
+         roster entry with a voice and a colour, so the answer arrives sounding
+         like somebody rather than like the machine. */
+      if (agent.kind === 'chat' && !remote) {
+        const others = roster.filter(a => isRemote(a) && a.name !== agent.name)
+        if (others.length) {
+          sub.append(el('span', 'note', 'falls back to'))
+          const to = el('select', 'agent-escalate')
+          const none = el('option', null, 'nothing')
+          none.value = ''
+          to.append(none)
+          for (const other of others) {
+            const node = el('option', null, other.name)
+            node.value = other.name
+            to.append(node)
+          }
+          /* Matched case-insensitively: `escalateTo` is stored as it was
+             typed, and a select whose value misses by a capital letter reads
+             as "nothing" — which is the one answer it must not give wrongly. */
+          const pointsAt = others.find(a =>
+            a.name.toLowerCase() === String(agent.escalateTo || '').toLowerCase())
+          to.value = pointsAt ? pointsAt.name : ''
+          to.title = 'When it says it does not know, the question is asked ' +
+            'again — out loud, in that one\u2019s name.'
+          to.style.flex = '0 0 auto'
+          to.style.width = 'auto'
+          to.onchange = () => saveAgents(updateAgent(roster, agent.name, {
+            escalateTo: to.value || null
+          }))
+          sub.append(to)
+        }
+      }
+
       row.append(sub)
     }
 
@@ -1648,6 +2077,10 @@ function applyLiveSetting (key, { preview = true } = {}) {
   if (key === 'interimMs' && capture) capture.setInterimMs(value)
   if (key === 'idleFadeMs' && state.presence) state.presence.setIdleFadeMs(value)
   if (key === 'idleClearMs' && state.presence) state.presence.setIdleClearMs(value)
+  /* The wait clock is built with the timeout it should give up drawing at, so
+     changing that setting means building a new one. Safe to drop the old:
+     nothing is in flight while the settings panel has focus. */
+  if (key === 'remoteTimeoutMs') state.waiting = null
   if (preview && (key === 'speakVoice' || key === 'speakRate')) previewVoice()
   if (key.startsWith('viz')) rebuildVisualizer()
 }
@@ -1781,13 +2214,18 @@ function wirePanelDragging () {
   }
 }
 
-/* One place decides whether the strip is mid-interaction: any panel, or the
-   word fixer. Both the hold (stay awake) and the height (make room) follow
-   from it, so they can never disagree. */
+/* One place decides whether the strip is mid-interaction: any panel, the word
+   fixer, or a question waiting on a frontier model. Both the hold (stay awake)
+   and the height (make room) follow from it, so they can never disagree — and
+   one owner is what stops a call ending from releasing a hold that an open
+   panel still wants. */
 function syncHold () {
   const panel = openPanel()
   document.body.classList.toggle('panel-open', !!panel)
-  const held = !!panel || !$('fixer').hidden
+  /* A question that has left the machine holds it too. The strip fades after
+     six seconds of quiet and a remote call is quiet for up to thirty, so
+     without this the thread you are waiting on disappears mid-call. */
+  const held = !!panel || !$('fixer').hidden || !!(state.waiting && state.waiting.holdsStrip)
   window.transvibe.setPanelOpen(!!panel)
   window.transvibe.setHold(held)
   if (state.presence) state.presence.setHeld(held, Date.now())
@@ -1863,6 +2301,16 @@ async function main () {
     // Fires every tick rather than only on an edge: the indicator's own
     // clock (listeningUntil) is cheaper to just recheck than to track.
     renderConvoIndicator()
+    /* And the other clock. The second count in the pending bubble has to move
+       or the wait reads as a hang, and past the threshold the app says so out
+       loud — once, latched inside the module, because the premise of this app
+       is that you are looking at the window you are dictating into and not at
+       the strip. The 2.7s claude path never reaches it. */
+    if (state.waiting && state.waiting.waiting) {
+      const beat = state.waiting.tick(Date.now())
+      if (beat.nudge) say(state.waiting.nudgeText, { plain: true })
+      render()
+    }
   }, 400)
 
   window.transvibe.onStatus(s => {
@@ -2080,6 +2528,9 @@ async function main () {
     // fields, so the shortcut yields whenever a text field has focus.
     const typing = e.target instanceof HTMLInputElement
     if (e.key === 'Escape') {
+      // A call in flight is the topmost layer there is: it is the only one
+      // that is still costing you something while you wait for it.
+      if (cancelEscalation()) return
       if (!$('fixer').hidden) return closeFixer()
       const open = openPanel()
       if (open) return togglePanel(open, false)

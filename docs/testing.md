@@ -1,27 +1,38 @@
 # Tests
 
 ```sh
-npm test          # 417
+npm test          # 790
 npm run test:unit # pure modules only, no whisper binary needed
 ```
 
 | file | | covers |
 |---|---:|---|
-| `commands.test.js` | 167 | command parsing, false positives, transcript edits |
-| `wake.test.js` | 26 | the wake phrase: what starts a command, and what is just speech |
+| `commands.test.js` | 217 | command parsing, false positives, transcript edits |
+| `agents.test.js` | 50 | the roster: names, kinds, providers, and who escalates to whom |
+| `assist.test.js` | 36 | assist prompts, and the guards on its replies |
+| `wake.test.js` | 35 | the wake phrase: what starts a command, and what is just speech |
+| `settings-voice.test.js` | 34 | changing a setting by voice, and which ones can be |
+| `spaces.test.js` | 30 | desktop Space markers, matching, and switch targets |
+| `escalate.test.js` | 28 | when a local answer is not good enough, and who is asked next |
+| `whisper-parse.test.js` | 28 | output parsing, artifact filter, FIFO queue |
+| `modules.test.js` | 26 | every module imports, and exports what it claims |
 | `wav.test.js` | 26 | header byte-exactness, clamping, overflow guards |
+| `cli-agent.test.js` | 24 | spawning a frontier CLI against a fake process: timeouts, cancel, exit codes |
 | `glossary-edit.test.js` | 23 | glossary panel edits, word splitting |
-| `whisper-parse.test.js` | 21 | output parsing, artifact filter, FIFO queue |
+| `waiting.test.js` | 22 | the wait indicator's timing, and the once-only spoken nudge |
 | `glossary.test.js` | 21 | prompt budget, whole-word corrections, echo filter |
-| `assist.test.js` | 18 | assist prompts, and the guards on its replies |
-| `overlay.test.js` | 17 | strip geometry, hover-wake dwell, the sleep grace |
-| `vad.test.js` | 16 | segment boundaries, hangover, force-flush, bad options |
-| `band.test.js` | 15 | visualizer math stays finite and in-bounds |
-| `settings-schema.test.js` | 13 | the panel's schema against `config.js`, both directions |
-| `modules.test.js` | 14 | every module imports, and exports what it claims |
+| `vad.test.js` | 21 | segment boundaries, hangover, force-flush, bad options |
+| `cli.test.js` | 21 | the argv handed to `claude` and `codex`, and reading what they print |
 | `presence.test.js` | 19 | when the transcript fades, when it is forgotten, and what un-fades it |
+| `overlay.test.js` | 17 | strip geometry, hover-wake dwell, the sleep grace |
+| `settings-schema.test.js` | 17 | the panel's schema against `config.js`, both directions |
+| `band.test.js` | 15 | visualizer math stays finite and in-bounds |
+| `conversation.test.js` | 14 | the ask prompt, and what counts as an answer worth speaking |
+| `placement.test.js` | 12 | where the strip is allowed to sit on a screen |
+| `saying.test.js` | 12 | the speaking indicator's arithmetic |
 | `models.test.js` | 11 | model discovery against a real directory tree |
-| `assist-models.test.js` | 6 | listing what Ollama has, and what an absent Ollama reads as |
+| `assist-models.test.js` | 8 | listing what Ollama has, and what an absent Ollama reads as |
+| `speech.test.js` | 8 | voice list parsing, and the `say` argv |
 | `engine.integration.test.js` | 4 | the real engine, end to end |
 
 The bulk sits in `commands.test.js` because a command parser's worst failure is silent: a false positive eats dictation the user meant to keep. Over 60 of the cases there are ordinary sentences — "I need to copy that file", "let's undo the last commit", "send that email to Bob" — asserted to parse as *nothing*.
@@ -69,6 +80,22 @@ Things the automated tests cannot cover:
 - [ ] `⌃⌥Space` toggles visibility from another app
 - [ ] Waveform icon appears in the menu bar and adapts to light/dark
 - [ ] × clears the transcript; the tray icon still shows and hides the strip
+
+Escalation, which is almost entirely beyond the unit suite — the pure modules decide *whether* to escalate, but nothing under Node ever spawns a CLI, draws the wait, or speaks the attribution:
+
+- [ ] With `remote` off, "ask Claude about that" is transcribed, not obeyed
+- [ ] Turning `remote` on with no `claude` or `codex` installed says so once, at startup
+- [ ] A question the local model admits defeat on comes back in a frontier model's words, prefixed "Claude said, …"
+- [ ] The bubble wears the answering agent's name and colour, and the spoken line names it once, not twice
+- [ ] The strip does not fade during a 14s codex call, and the transcript is still there when the answer lands
+- [ ] The pending bubble counts seconds up rather than sitting on a static '…'
+- [ ] Past ~10s a spoken nudge says it is still waiting — once, not once a frame
+- [ ] "stop" and esc kill the subprocess: `pgrep -f 'claude -p'` is empty within a second, and nothing is spoken afterwards
+- [ ] Quitting the app mid-call leaves no orphaned `claude` or `codex` process
+- [ ] With `remoteAnnounce` off the escalation still happens and is still on screen, just not narrated
+- [ ] With `remoteWebSearch` on, "what came out this week" answers with something the local model could not know
+- [ ] Turning `remote` off mid-conversation stops the next question leaving the machine
+- [ ] Dictation, cleanup and command guessing are unaffected by any of the above — nothing of them appears in a CLI's transcript
 
 `models.test.js` builds a temporary Application Support tree rather than mocking `fs`, because the failures worth catching are all about what a real directory holds: a CoreML bundle whose `weight.bin` files are each larger than a small ggml model, and an OpenVINO encoder sitting beside its model under nearly its name. Both would list as models, and neither would load.
 

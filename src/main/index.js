@@ -8,7 +8,9 @@ import fs, { existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { createEngine } from './whisper.js'
 import { createAssist, listOllamaModels } from './assist.js'
-import { defaultModel } from '../shared/agents.js'
+import { createCliAgent, listCliAgents } from './cli-agent.js'
+import { defaultModel, isRemote } from '../shared/agents.js'
+import { needsFreshFacts, shouldEscalate, escalationChain } from '../shared/escalate.js'
 import { speak, stopSpeaking, listVoices } from './speech.js'
 import { findModel, downloadModel, listModels, humanSize, MODELS_DIR } from './models.js'
 import * as config from './config.js'
@@ -21,6 +23,11 @@ let win = null
 let tray = null
 let engine = null
 let assist = null
+/* One CLI handle per provider, made on first use and thrown away whenever the
+   settings that shape them change. Per provider rather than per agent because
+   the model is a per-question argument anyway, and because "stop" has to reach
+   every process a provider has running, not just the one agent's. */
+let remotes = new Map()
 let settings = config.load()
 let listening = true
 let commandTimer = null
@@ -279,6 +286,7 @@ async function initEngine () {
     await engine.start()
     send('status', { state: 'ready', message: path.basename(modelPath), mode: engine.mode })
     initAssist()
+    initRemote()
   } catch (err) {
     send('status', { state: 'error', message: err.message })
   }
@@ -288,7 +296,11 @@ async function initEngine () {
    running or the model was never pulled, `check()` comes back false and every
    later call short-circuits, leaving the app exactly as it was. */
 async function initAssist () {
-  const talks = (settings.agents || []).some(a => a.kind === 'chat')
+  /* Only an agent that thinks on this machine is a reason to want Ollama. A
+     roster whose chat agent answers through `claude` needs no local model at
+     all, and warning that one is missing would be telling someone to start a
+     server nothing is going to ask anything. */
+  const talks = (settings.agents || []).some(a => a.kind === 'chat' && !isRemote(a))
   const asked = settings.cleanup || settings.commandFallback || talks
   // Spoken replies will use the model to shorten a line if it happens to be
   // there, but they work without it, so wanting them is not a reason to go
@@ -307,6 +319,53 @@ async function initAssist () {
   if (!ok && asked) {
     send('status', { state: 'error', message: `${model} not available — is Ollama running?` })
   }
+}
+
+/* ------------------------------------------------------------ the CLIs
+
+   The frontier side has no server to be running and no model to have been
+   pulled: it is two command-line tools the user installed for their own
+   reasons and is already signed in to. So the only thing worth checking at
+   startup is whether the binary exists, and the only thing worth saying is
+   that a name on the roster is pointed at one that does not.
+
+   Checked once, like assist.check(), and deliberately not checked for a login:
+   that would be a billed question asked at every launch to learn what the
+   first real question learns for free. */
+async function initRemote () {
+  cancelRemote()
+  remotes = new Map()
+  if (!settings.remote) return
+
+  const wanted = [...new Set((settings.agents || []).filter(isRemote).map(a => a.provider))]
+  const missing = []
+  for (const provider of wanted) {
+    if (!await remoteFor(provider).check()) missing.push(provider)
+  }
+  if (missing.length) {
+    send('status', {
+      state: 'error',
+      message: `${missing.join(' and ')} ${missing.length > 1 ? 'are' : 'is'} not installed — the agents pointed at ${missing.length > 1 ? 'them' : 'it'} cannot answer`
+    })
+  }
+}
+
+function remoteFor (provider) {
+  if (!remotes.has(provider)) {
+    remotes.set(provider, createCliAgent({
+      provider,
+      timeoutMs: settings.remoteTimeoutMs,
+      webSearch: settings.remoteWebSearch
+    }))
+  }
+  return remotes.get(provider)
+}
+
+/* Kill everything in flight. Called by "stop", and on the way out — an
+   unwatched subprocess spending someone's subscription after the app has
+   quit is the worst thing this feature could leave behind. */
+function cancelRemote () {
+  for (const cli of remotes.values()) cli.cancel()
 }
 
 app.whenReady().then(async () => {
@@ -595,6 +654,14 @@ ipcMain.handle('settings:set', (_e, patch) => {
       'assistUrl' in patch || 'speakReplies' in patch) {
     initAssist()
   }
+  /* A changed timeout or a changed switch has to reach the handles themselves,
+     not just the next question — they were built with the old numbers in
+     them. Turning `remote` off goes through here too, and kills anything
+     already running rather than letting one last question out the door. */
+  if ('remote' in patch || 'remoteTimeoutMs' in patch || 'remoteWebSearch' in patch ||
+      'agents' in patch) {
+    initRemote()
+  }
   // Turning replies off mid-sentence should stop the sentence.
   if ('speakReplies' in patch && !settings.speakReplies) stopSpeaking()
   if ('alwaysOnTop' in patch && win) {
@@ -606,31 +673,386 @@ ipcMain.handle('settings:set', (_e, patch) => {
   return settings
 })
 
+/* Dictation, and only the local model.
+ *
+ * This handler and assist:command are the two that see words nobody addressed
+ * to anyone — a room microphone hears the whole room, and what it hears is
+ * tidied and parsed here. Neither of them may ever leave the machine, whatever
+ * `remote` says, and the way that is guaranteed is structural rather than by
+ * a check: they call `assist`, which is a createAssist bound to
+ * settings.assistUrl (127.0.0.1), and there is no path from either of them to
+ * `remotes`, to remoteFor(), or to any argv. There is deliberately no
+ * `provider` in what they accept, so there is nothing for a caller to pass.
+ */
 ipcMain.handle('assist:cleanup', async (_e, text) => {
   if (!assist || !settings.cleanup) return { text, used: false, reason: 'off' }
   return assist.cleanup(text)
 })
+
+/* ------------------------------------------------- asking, and asking better
+
+   A question addressed to a chat agent can be answered three ways: by the
+   small model on this machine, by a frontier CLI the agent hands off to when
+   that model is out of its depth, or by a CLI directly, because the question
+   was about today and nothing local was ever going to know.
+
+   The renderer asks once. Which route the answer took comes back on it as
+   `via` (the agent that actually spoke) and `escalated` (why it was not the
+   one asked), so the bubble can be labelled and the attribution spoken. The
+   deciding is all in shared/escalate.js, which is pure and tested; what is
+   here is the plumbing between that decision and two processes.
+
+   The rule that outranks the rest: an answer already in hand is never thrown
+   away for one that did not arrive. Every remote path below falls back to the
+   local answer, so being offline costs the escalation and nothing else. */
+
+/* How many questions may leave the machine in a day.
+
+   Not a budget — the CLIs bill against a subscription, not per call — but a
+   fuse. The failure this exists for is a loop: an agent escalating to an
+   agent escalating back, or a microphone in a room with a television, quietly
+   spending someone's rate limit while they are out. Fifty is far past a day
+   of asking questions on purpose and nowhere near a day of asking them by
+   accident. */
+const DAILY_REMOTE_CALLS = 50
+
+const CAP_NOTE =
+  `that's ${DAILY_REMOTE_CALLS} questions sent out today, which is the daily limit`
+
+/* Today's count and what is left of it. Kept in settings rather than in a
+   variable so that quitting the app is not a way to reset it. */
+/* Beside settings.json rather than in a log folder of its own: it is a thing
+   about this app's configuration, you turned it on in the panel, and the panel
+   can tell you where to look in one short sentence. */
+const ROUTING_LOG = path.join(config.DIR, 'routing.log')
+
+/* Truncated rather than rotated at half a megabyte — a few thousand questions.
+   Rotation is a filing system for something nobody files: this log is read
+   while chasing one answer that went wrong, and what matters is that the last
+   few are in it and that a flag left on for a month is not a disk you have to
+   go and find. */
+const ROUTING_LOG_MAX = 512 * 1024
+
+/**
+ * One line about how a question was answered, when the flag is on.
+ *
+ * Never throws and never awaits: a debug log that can fail a question, or slow
+ * one down, is worse than no debug log. Anything that goes wrong here — a full
+ * disk, a read-only home directory — leaves the answer exactly as it was.
+ *
+ * @param {string} event  what happened: 'ask', 'remote', 'escalate'
+ * @param {object} detail whatever is worth knowing about it
+ */
+function logRouting (event, detail) {
+  if (!settings.debugRouting) return
+  try {
+    if (fs.existsSync(ROUTING_LOG) && fs.statSync(ROUTING_LOG).size > ROUTING_LOG_MAX) {
+      fs.rmSync(ROUTING_LOG, { force: true })
+    }
+    fs.appendFileSync(ROUTING_LOG,
+      `${JSON.stringify({ at: new Date().toISOString(), event, ...detail })}\n`)
+  } catch {
+    // Nothing to say about it, and nowhere to say it.
+  }
+}
+
+function remoteBudget () {
+  const day = new Date().toISOString().slice(0, 10)
+  const used = (settings.remoteCallsToday || {})[day] || 0
+  return { day, used, left: DAILY_REMOTE_CALLS - used }
+}
+
+function countRemoteCall () {
+  const { day, used } = remoteBudget()
+  /* Counted before the call, not after: a question that timed out still went
+     out, and a cap that only counted the answers would be no cap at all on the
+     failure mode that runs away. Only today's row is kept — yesterday's number
+     answers nothing anyone will ask, and a file that grows a line a day for
+     ever is a leak with a slow fuse. */
+  settings = config.save({ remoteCallsToday: { [day]: used + 1 } })
+}
+
+/* How the picker's "2.7s last answer" line finds a measurement again.
+
+   A local model is keyed by its Ollama tag, as it always has been. A remote
+   one is keyed 'provider:model', because 'claude-sonnet-5' spoken by claude
+   and the same name typed into Advanced are not the same thing and must not
+   share a row. codex names no model — the CLI picks its own — so it is keyed
+   by the provider alone. */
+const statKey = (provider, model) => provider === 'local' || !provider
+  ? model || null
+  : (model ? `${provider}:${model}` : provider)
+
+function noteModelStat (answer, provider = 'local') {
+  if (!answer || !answer.ok || !Number.isFinite(answer.ms)) return
+  const key = statKey(provider, answer.model)
+  if (!key) return
+  /* Kept for the picker. One answer is a small sample and the panel says so
+     by calling it the last one rather than an average — an average over a
+     cold start and five warm ones describes neither.
+
+     The two sides report tokens differently: Ollama gives a count, a CLI gives
+     {input, output}. What the picker shows is how much was said, so the output
+     half is the one that carries over. */
+  const tokens = typeof answer.tokens === 'number'
+    ? answer.tokens
+    : (answer.tokens && answer.tokens.output) || 0
+  settings = config.save({
+    modelStats: {
+      ...settings.modelStats,
+      [key]: { ms: answer.ms, tokens, at: Date.now() }
+    }
+  })
+}
+
+const agentNamed = name => (settings.agents || []).find(a =>
+  a.name.toLowerCase() === String(name || '').trim().toLowerCase()) || null
+
+/* Who was asked.
+ *
+ * The renderer names them. A caller that does not — every caller before this
+ * feature existed — leaves only a model to go on, and a roster with exactly
+ * one chat agent has only one answer to give anyway. With two of them and no
+ * name, there is no chain to follow and the question is answered locally,
+ * which is what it did yesterday. */
+function askingAgent (options = {}) {
+  const named = agentNamed(options.agent)
+  if (named) return named
+  const chat = (settings.agents || []).filter(a => a.kind === 'chat')
+  return chat.length === 1 ? chat[0] : null
+}
+
+async function askLocal (question, history, options = {}) {
+  if (!assist) return { text: '', ok: false, reason: 'the local model is not running' }
+  const answer = await assist.ask(question, history, options)
+  noteModelStat(answer, 'local')
+  return answer
+}
+
+/* One question, out to a CLI. The only function in this file that spawns
+   anything, so it is the only place the cap and the counter have to be. */
+async function askRemote (agent, question, history, { priorAnswer = '', webSearch, canEscalate = false } = {}) {
+  countRemoteCall()
+  const cli = remoteFor(agent.provider)
+  const started = Date.now()
+  const answer = await cli.ask(question, history, {
+    model: agent.model,
+    priorAnswer,
+    /* Whether declining would get the question a better answer. Almost never,
+       once you are already at the frontier: behind it is only the small model
+       on this machine. */
+    canEscalate,
+    // Web search is codex's flag and codex's alone; claude, measured, has no
+    // live access whatever it is asked.
+    webSearch: agent.provider === 'codex' && (webSearch ?? settings.remoteWebSearch)
+  })
+  noteModelStat(answer, agent.provider)
+  logRouting('remote', {
+    agent: agent.name,
+    provider: agent.provider,
+    model: answer.model,
+    ok: answer.ok,
+    reason: answer.reason,
+    ms: answer.ms ?? Date.now() - started,
+    costUsd: answer.costUsd,
+    text: answer.text
+  })
+  return answer
+}
+
+/* Walk the escalation chain until somebody answers.
+ *
+ * A hop onto another *local* agent is allowed and is not a remote call: a
+ * roster where the fast little model hands off to a big one on the same
+ * machine is a sensible thing to want and costs nothing but a second. Only the
+ * remote hops are capped and counted.
+ *
+ * Returns {} when nobody answered, which the caller reads as "keep what you
+ * already had". */
+/**
+ * Down the escalation chain until somebody answers.
+ *
+ * What is deliberately *not* passed on is what the local model already said.
+ * Handing it over asks the frontier model to grade a colleague, and it does:
+ * every answer came back as "that reply was wrong — " followed by the actual
+ * answer, which is a critique of gemma nobody asked to hear read out loud. You
+ * asked a question. The correction is only wanted when you asked for one, so
+ * the prior answer goes only down the manual "ask Claude about this" route.
+ */
+async function walkChain (chain, question, history) {
+  let capped = false
+  for (const target of chain) {
+    let answer
+    if (isRemote(target)) {
+      if (!settings.remote) continue
+      if (remoteBudget().left <= 0) {
+        capped = true
+        continue
+      }
+      answer = await askRemote(target, question, history)
+    } else {
+      answer = await askLocal(question, history,
+        { model: target.model, thinking: target.thinking })
+    }
+    if (answer.ok && answer.text) return { answer, via: target, capped }
+  }
+  return { capped }
+}
+
+/* What comes back when the day's questions are used up. Said rather than
+   swallowed: an escalation that silently did not happen looks exactly like a
+   local model that got it right, which is the one thing it must not look
+   like. The local answer, if there is one, is still the answer. */
+function cappedResult (local, name) {
+  if (local && local.ok) {
+    return { ...local, via: name || null, escalated: null, capped: true, note: CAP_NOTE }
+  }
+  return {
+    text: '',
+    ok: false,
+    reason: CAP_NOTE,
+    via: name || null,
+    escalated: null,
+    capped: true,
+    ms: (local && local.ms) || 0,
+    tokens: null,
+    model: (local && local.model) || null
+  }
+}
 
 /* A question asked of a chat agent. The agent names its own model, so one
    name can be answered by something better than the small model doing the
    cleanup — measured on this machine, gemma4:e2b calls a VAD "video-assisted
    delivery" and llama3 gets it right. */
 ipcMain.handle('assist:ask', async (_e, question, history, options) => {
-  if (!assist) return { text: '', ok: false, reason: 'the local model is not running' }
-  const answer = await assist.ask(question, history, options || {})
-  if (answer.ok && answer.model && Number.isFinite(answer.ms)) {
-    /* Kept for the picker. One answer is a small sample and the panel says so
-       by calling it the last one rather than an average — an average over a
-       cold start and five warm ones describes neither. */
-    settings = config.save({
-      modelStats: {
-        ...settings.modelStats,
-        [answer.model]: { ms: answer.ms, tokens: answer.tokens || 0, at: Date.now() }
+  const opts = options || {}
+  const asked = String(question == null ? '' : question)
+  const agent = askingAgent(opts)
+
+  /* Off is off. Not "off unless", not "off but for this one": with the switch
+     down, nothing below this line runs, and this handler is the one it was
+     before the feature existed. */
+  if (!settings.remote) {
+    if (agent && isRemote(agent)) {
+      return {
+        text: '',
+        ok: false,
+        reason: `${agent.name} answers through ${agent.provider}, and remote answers are off`
       }
-    })
+    }
+    return askLocal(asked, history, opts)
   }
-  return answer
+
+  const chain = agent ? escalationChain(settings.agents, agent) : []
+
+  /* The agent itself is a CLI. There is no local attempt to make first — the
+     name means "ask claude", and asking a two-billion-parameter model on the
+     way would only add half a second and an answer nobody wanted. */
+  if (agent && isRemote(agent)) {
+    /* Logged here as well as on the local path. Without this the log jumps
+       from somebody else's question straight to an orphan `remote` line, and
+       the one thing you went to the log to find out — which question this
+       was — is the thing missing from it. */
+    logRouting('ask', { question: asked, agent: agent.name, direct: true, chain: chain.map(a => a.name) })
+    if (remoteBudget().left <= 0) return cappedResult(null, agent.name)
+    const answer = await askRemote(agent, asked, history)
+    if (answer.ok) return { ...answer, via: agent.name, escalated: null }
+    /* Signed out, not installed, or a network that is not there. Degrade to
+       whatever is on this machine rather than to nothing — and without the
+       agent's model, which names a frontier model Ollama has never heard of.
+
+       `via` is nobody: the answer did not come from the agent whose name is on
+       the bubble, and saying "Claude said" over a sentence gemma wrote is the
+       one thing this feature must never do. */
+    const local = await askLocal(asked, history, { thinking: opts.thinking })
+    return { ...local, via: null, escalated: null, remoteFailed: answer.reason }
+  }
+
+  /* A question with a date on it. Nothing on this machine has a clock or a
+     network, so the local round trip is not a cheaper attempt at the answer —
+     it is half a second spent on a confident wrong one. Straight to the first
+     hop that can search, if there is one and if searching is switched on. */
+  const fresh = settings.remoteWebSearch && needsFreshFacts(asked)
+    ? chain.find(a => a.provider === 'codex')
+    : null
+  if (fresh && remoteBudget().left > 0) {
+    const answer = await askRemote(fresh, asked, history, { webSearch: true })
+    if (answer.ok) return { ...answer, via: fresh.name, escalated: 'fresh' }
+    // It did not answer, so the local model gets its ordinary turn after all.
+  }
+
+  const local = await askLocal(asked, history, { ...opts, canEscalate: chain.length > 0 })
+  const name = agent ? agent.name : null
+  const verdict = shouldEscalate(local)
+  logRouting('ask', {
+    question: asked,
+    agent: name,
+    local: { text: local.text, ok: local.ok, reason: local.reason, ms: local.ms, model: local.model },
+    verdict,
+    chain: chain.map(a => a.name)
+  })
+  if (!verdict.escalate || !chain.length) {
+    return { ...local, via: name, escalated: null }
+  }
+
+  const { answer, via, capped } = await walkChain(chain, asked, history)
+  if (answer) return { ...answer, via: via.name, escalated: verdict.why }
+  if (capped) return cappedResult(local, name)
+  /* Nobody better answered. The local reply — hedge, admission of defeat and
+     all — is what there is, and it is still better than silence. */
+  return { ...local, via: name, escalated: null }
 })
+
+/* Asked for by name, mid-conversation: "Mira, ask Claude about this."
+ *
+ * The same call as an automatic escalation, minus the deciding — you have
+ * decided. It carries the prior answer so the frontier model is checking
+ * something rather than answering into the void, and the thread so far so
+ * "about this" means anything at all.
+ *
+ * @param {string} question   what to ask, or the thread's own last question
+ * @param {string} priorAnswer what was already said, if anything
+ * @param {Array} history      the thread, trimmed on the way into the prompt
+ * @param {{to?: string}} options the agent named out loud */
+ipcMain.handle('assist:escalate', async (_e, question, priorAnswer, history, options) => {
+  const opts = options || {}
+  if (!settings.remote) {
+    return { text: '', ok: false, reason: 'asking a frontier model is switched off' }
+  }
+
+  /* By roster name first, which is what the command parser sends. The bare
+     provider word is accepted as well, for the roster that has a claude agent
+     under some other name and a user who called it Claude anyway. */
+  const named = agentNamed(opts.to)
+  const target = named || (['claude', 'codex'].includes(String(opts.to || '').toLowerCase())
+    ? { name: String(opts.to).toLowerCase(), provider: String(opts.to).toLowerCase(), model: null }
+    : null)
+  if (!target) return { text: '', ok: false, reason: `there is nobody here called ${opts.to || 'that'}` }
+
+  const asked = String(question == null ? '' : question)
+  const prior = String(priorAnswer == null ? '' : priorAnswer)
+
+  /* Named agent, local model: still an escalation as far as the user is
+     concerned — they asked somebody else — it just does not leave the room. */
+  if (!isRemote(target)) {
+    const answer = await askLocal(asked, history, { model: target.model, thinking: target.thinking })
+    return { ...answer, via: target.name, escalated: 'asked' }
+  }
+
+  if (remoteBudget().left <= 0) return cappedResult(null, target.name)
+  const answer = await askRemote(target, asked, history, { priorAnswer: prior })
+  return { ...answer, via: target.name, escalated: 'asked' }
+})
+
+/* Stop. Not "ignore the answer when it comes" — kill the process, because it
+   is spending a subscription on something nobody is going to hear and holding
+   the strip open behind it. The in-flight ask resolves as 'cancelled'. */
+ipcMain.on('assist:escalate:cancel', () => cancelRemote())
+
+/* Which CLIs are on this machine, for the settings panel. Read on every open
+   like the model lists are: `claude` can be installed while transvibe is
+   running, and the point of the list is that it says what is here now. */
+ipcMain.handle('assist:clis', () => listCliAgents())
 
 /** Cut off a spoken reply mid-sentence. */
 ipcMain.on('speak:stop', () => stopSpeaking())
@@ -641,7 +1063,17 @@ ipcMain.on('speak:stop', () => stopSpeaking())
    worth something bigger. One roster, one choice per name. */
 ipcMain.handle('assist:command', async (_e, text, phrases, options) => {
   if (!assist || !settings.commandFallback) return null
-  return assist.command(text, phrases, options || {})
+  /* Local, like cleanup above and for the same reason: an utterance reaches
+     here precisely because nobody recognised it, which means nobody knows what
+     is in it. A model name belonging to a remote agent is dropped rather than
+     forwarded — not because it would go anywhere (it would go to Ollama, which
+     has never heard of claude-sonnet-5) but so the one path dictation takes
+     names only models that live here. */
+  const at = (options && options.model) || null
+  const model = at && (settings.agents || []).some(a => isRemote(a) && a.model === at)
+    ? null
+    : at
+  return assist.command(text, phrases, { ...(options || {}), model })
 })
 
 /* Say what just happened.
@@ -732,6 +1164,12 @@ ipcMain.handle('login-item:set', (_e, value) => {
 })
 
 ipcMain.on('window:hide', () => win && win.hide())
+/* The way back, for someone who said "hide" and then said "come back". The
+   microphone never stopped, so the strip being invisible is the only thing
+   that had to change — and the only thing that changes back. */
+ipcMain.on('window:show', () => showWindow())
+ipcMain.on('models:reveal', () => revealModelFolder())
+ipcMain.on('app:quit', () => app.quit())
 
 /* Said out loud rather than clicked. Routed through the same function the menu
    bar uses, so the window is shown first — "go away" then "open settings"
@@ -767,6 +1205,7 @@ app.on('before-quit', () => { app.isQuitting = true })
 
 app.on('will-quit', () => {
   clearInterval(wakeTimer)
+  cancelRemote()
   globalShortcut.unregisterAll()
   if (tapProc) { tapProc.kill('SIGTERM'); tapProc = null }
   if (engine) engine.stop()

@@ -29,6 +29,13 @@ contextBridge.exposeInMainWorld('transvibe', {
   listVoices: () => ipcRenderer.invoke('voices:list'),
   /** ask a chat agent a question */
   ask: (question, history, options) => ipcRenderer.invoke('assist:ask', question, history, options),
+  /** ask a frontier CLI by name — "Mira, ask Claude about this" */
+  escalate: (question, priorAnswer, history, options) =>
+    ipcRenderer.invoke('assist:escalate', question, priorAnswer, history, options),
+  /** kill an in-flight CLI call: "stop", or escape */
+  cancelEscalation: () => ipcRenderer.send('assist:escalate:cancel'),
+  /** which frontier CLIs are installed here, for the agents panel */
+  listClis: () => ipcRenderer.invoke('assist:clis'),
   /** cut off whatever is being said */
   hush: () => ipcRenderer.send('speak:stop'),
   send: text => ipcRenderer.invoke('send', text),
@@ -41,6 +48,12 @@ contextBridge.exposeInMainWorld('transvibe', {
      'command': the strip may be hidden, and a panel opened onto a hidden
      window is a panel nobody can see. */
   openPanel: name => ipcRenderer.send('panel:open', name),
+  /** bring the strip back after "hide" — it was listening the whole time */
+  showWindow: () => ipcRenderer.send('window:show'),
+  /** open the folder holding the loaded whisper model, in Finder */
+  revealModels: () => ipcRenderer.send('models:reveal'),
+  /** quit, said in full so it is never an accident */
+  quit: () => ipcRenderer.send('app:quit'),
   /** the pointer is over something clickable, not over the strip's empty air */
   setOverTarget: value => ipcRenderer.send('overlay:target', value),
   /** keep the strip awake while a panel or field is in use */

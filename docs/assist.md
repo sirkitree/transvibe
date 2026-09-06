@@ -1,6 +1,6 @@
 # The assist model
 
-A second local model, off by default, that tidies dictated text and rescues unrecognised commands.
+A second local model, off by default, that tidies dictated text, rescues unrecognised commands, and — if you let it — knows when to hand a question to a bigger model.
 
 
 A second, local model — Gemma 4 E2B through [Ollama](https://ollama.com) — does the three things whisper and a rule parser each do badly. The first two are off by default:
@@ -14,7 +14,7 @@ ollama pull gemma4:e2b     # ~7.2 GB, one time
 
 Which model does the work is set per agent, in Settings › Agents.
 
-Still no cloud: Ollama serves on `127.0.0.1`, and the audio never reaches it at all — only text does. If Ollama is not running or the model was never pulled, the strip says so once and everything carries on exactly as before.
+Still no cloud, unless you go and ask for one: Ollama serves on `127.0.0.1`, and the audio never reaches it at all — only text does. The single path off this machine is [escalation](#when-the-local-model-does-not-know), which is off until you turn it on and says so out loud when it runs. If Ollama is not running or the model was never pulled, the strip says so once and everything carries on exactly as before.
 
 **`cleanup`** rewrites a settled utterance with the filler words and false starts taken out. "Um, so I was thinking we should uh ship the thing on Friday" becomes "So I was thinking we should ship the thing on Friday". It runs after whisper's text is already on screen, so it costs nothing you wait for; the tidier version swaps in a few hundred milliseconds later, or never.
 
@@ -27,6 +27,36 @@ Still no cloud: Ollama serves on `127.0.0.1`, and the audio never reaches it at 
 Measured on an M-series Mac, warm: cleanup 170–350ms, command fallback 180–510ms, both after the fact. A conversational answer runs 300ms–1s depending on the model.
 
 Cleanup can make a subtle word change that the guards below do not catch, so read the result before sending it somewhere that matters.
+
+## When the local model does not know
+
+A 2-billion-parameter model answering out loud in half a second is the right trade for "delete that" and the wrong one for "what changed in the Electron 44 release". It gets things wrong, and — usefully — it often says so first. Escalation takes that admission seriously: when the local model cannot answer, the question goes to a frontier model instead, and the answer comes back spoken with its source named. It is off until you turn it on: `remote` is `false` in a fresh settings file, and even then nothing escalates unless an agent has been given somewhere to escalate to.
+
+It reaches that model by spawning the CLI you already have. `claude -p` and `codex exec`, run as your own logged-in user, so the call bills against the subscription you are already paying for rather than a metered API key — which also means there is no key, anywhere, to store, leak or rotate. Nothing is configured but the agent's provider and, if you want, a model name; the CLIs bring their own auth, from the keychain or the OAuth token they already hold.
+
+**Four things send a question outward, in that order of how much they can be trusted.**
+
+The first is a sentinel we ask for. `ASK_PROMPT` already tells the model to admit uncertainty; it now also says that if it cannot answer from what it knows, it should reply with exactly `PASS` and nothing else. Asking beats guessing, and by some distance: a model that is about to be wrong is the only thing in the system that knows it, and one word costs nothing to check for. It is the same move `buildCommandMessage` makes when it offers the parser "or the word none" — give the model a cheap, unambiguous way to decline and it will usually take it, instead of producing something fluent to fill the silence.
+
+Hedge detection is the backstop for when it does not. "I'm not sure", "I don't have access to", "as of my training data" — but only counted in the first sentence *and* the first dozen words, or anywhere in an answer under twenty-five. The scoping is the whole trick. "The capital is Paris, though I'm not sure about the population" is a good answer with a caveat on the end, and throwing it away to ask a frontier model would be slower, costlier and no more correct; the same words leading the answer mean the model has nothing. Words that only look like hedges are ruled out the same way — "the latest you can arrive", "you pass it as the second argument" — because the price of a false positive is eight to fourteen seconds of silence, and the price of a miss is only the answer you would have got anyway.
+
+Hard failure is the third: `ok: false`, a timeout, Ollama not running. If nothing came back there is nothing to lose by asking elsewhere, and the panel is told which of the two it was, so "the machine needs starting" does not read as "the model had nothing".
+
+The fourth does not wait for the local model at all. A question about the latest release, today's news, who won, what something costs — a model with no clock and no network cannot answer it, and asking anyway spends a second to be told so. `needsFreshFacts` routes those straight to a codex agent with web search on. It is deliberately a narrow rule: "latest" counts only in front of a noun it can name (version, release, price, score, standings), so "what's the latest on that bug" is not a freshness question and takes the ordinary route. The rule misses real cases on purpose. A miss costs one local attempt; a wrong hit costs the whole remote roundtrip.
+
+**And you can just ask.** Mid-conversation, "Mira, ask Claude about this" re-puts the thread's question to the frontier model and says the answer, and it works whether the local one hedged or answered confidently and you simply did not believe it. "check with Codex", "run that past Claude", "get a second opinion from Claude" are the same command. Either way the answer is spoken as "**Claude said**, …" — anything that did not come from this machine says where it came from, every time, whether you asked for it or it escalated on its own.
+
+**The waiting matters more than it sounds.** A remote answer takes seconds, and for all of them the app is silent: nothing is transcribed, nothing is spoken, the strip has nothing to show. Left alone the transcript would fade at six seconds and be forgotten at twenty — under the question you are still waiting on — so a call in flight holds the strip up for as long as it runs. There is a counter and a breathing dot, and past ten seconds it *says* "still waiting on Codex" out loud. That announcement is the part that earns its place: you asked out loud precisely so you could keep looking at the window you were working in, and an indicator on a strip you are not looking at is not an indicator at all.
+
+Measured on an M-series Mac: `claude -p` answers in **2.7s** with the flags it is given here, and **8.4s** without them, because untrimmed it loads `CLAUDE.md`, plugins, MCP servers and hooks before it will answer a sentence. `codex exec` is **8.7s**, or **14.1s** with web search. A local answer, for comparison, is 300ms–1s. So escalation is between three and forty times the wait, which is why it is a fallback and not the default path, and why the first thing to get right was the deciding.
+
+`--bare` looks like exactly the flag for that trimming, and it is a trap: it forces API-key authentication and never reads the OAuth token or the keychain, so it either fails outright or quietly bills an API account. The point of going through the CLI was the subscription; `--bare` is the one flag that throws it away. `--restricted --strict-mcp-config --disable-slash-commands` get the same 2.7s with the login intact.
+
+The other measured finding is why the freshness case goes to codex rather than claude: `claude -p` in this configuration has **no live web access** — zero web searches across the runs we watched. It is a very good model recalling what it read. Codex genuinely searches, and its answers come back full of markdown links, which is why `unformat` reduces a link to its text before anything is spoken.
+
+**The boundaries, which are not negotiable.** The CLI is spawned with an argv *array*, never a shell string — the input is a sentence transcribed from an open microphone, and nothing in a room's worth of speech may ever become a flag or reach a shell. It runs in an empty temp directory, never your repo, so there is no `CLAUDE.md`, no git history and no project context to pick up. No permission bypass is passed, `--dangerously-skip-permissions` least of all; the CLI is answering a question, not doing work. Captured output is capped and the call is on a leash — timeout, then `SIGTERM`, then `SIGKILL` — and "stop" or esc kills it, discarding an answer already sitting on stdout rather than speaking something you cancelled. There is a cap of fifty remote calls a day, and hitting it says so rather than silently doing nothing.
+
+And the two jobs that touch your own words never go anywhere. `cleanup` and `commandFallback` are wired to the local model with no provider argument to pass; there is no setting, no agent field and no code path that could route them outward. Only a sentence deliberately addressed to a named chat agent, plus that thread's own history, is ever sent off the machine.
 
 ## How it is kept on a leash
 

@@ -17,6 +17,17 @@
  * an answer says who it came from three ways: the words, the voice speaking
  * them, and the colour of the ribbon while they are spoken.
  *
+ * A chat agent also says where it thinks. `provider` is 'local' for the Ollama
+ * model on this machine, or the name of a CLI already signed in on this Mac —
+ * 'claude', 'codex' — that gets spawned with the question and bills against a
+ * subscription rather than an API key. `escalateTo` is the name of another
+ * agent to hand a question to when this one cannot answer it, which is how a
+ * small local model that admits it does not know stops being a dead end.
+ *
+ * Those two together are the only path by which anything said in this room
+ * leaves the machine, and they are per-agent for that reason: it has to be
+ * visible which name is the one that goes out.
+ *
  * Pure — no DOM, no Electron, no I/O. Both sides need it: the main process to
  * migrate the file, the renderer to route an utterance.
  */
@@ -27,6 +38,31 @@ export const KINDS = ['commands', 'chat', 'external']
    the one the app used to hold as a single global setting. There is no global
    any more — a model belongs to whoever is thinking with it. */
 export const DEFAULT_MODEL = 'gemma4:e2b'
+
+/* Where an agent thinks. 'local' is Ollama on this machine and is what every
+   agent has been until now; the other two are command-line tools already
+   signed in on this Mac, spawned with the question so the answer comes out of
+   a subscription the user is already paying for. */
+export const PROVIDERS = ['local', 'claude', 'codex']
+
+/* The model each provider gets when nobody has said otherwise.
+
+   Null means two different things here, and both are right. For 'local' it is
+   "the default in Advanced" — the app has one and the agent has not overridden
+   it. For 'codex' there is nothing to override: the codex CLI picks its own
+   model from its own config, and naming one here would only be a way to get it
+   wrong. */
+export const DEFAULT_MODELS = {
+  local: DEFAULT_MODEL,
+  claude: 'claude-sonnet-5',
+  codex: null
+}
+
+/** Whether answering as this agent means leaving the machine. */
+export function isRemote (agent) {
+  const provider = agent && typeof agent === 'object' ? agent.provider : null
+  return provider === 'claude' || provider === 'codex'
+}
 
 /* Hues around the wheel, far enough apart to be told apart at a glance, and
    assigned in order to agents that have not been given one. Warm first, and
@@ -66,9 +102,14 @@ export function normalizeAgent (raw, index = 0) {
   if (!name) return null
 
   const kind = KINDS.includes(source.kind) ? source.kind : 'commands'
+  /* Same defensive shape as `kind`, and for a stronger reason: a provider this
+     version does not know about must not be treated as "some remote thing" and
+     handed a sentence. Anything unrecognised is local. */
+  const provider = PROVIDERS.includes(source.provider) ? source.provider : 'local'
   return {
     name,
     kind,
+    provider,
     // Null means "whatever the app is set to" rather than a value of its own.
     voice: text(source.voice) || null,
     // null and '' both mean "inherit", and Number() turns both into a very
@@ -79,8 +120,19 @@ export function normalizeAgent (raw, index = 0) {
        that runs commands hands it the misses — working out what an unrecognised
        command meant, and shortening a confirmation into something worth
        hearing. Both are that agent's thinking, so both are its model to
-       choose. Null means the default in Advanced. */
-    model: text(source.model) || null,
+       choose. Null means the default in Advanced.
+
+       A remote provider falls back to its own default instead, because
+       `claude --model gemma4:e2b` is not a thing that runs — and a local agent
+       keeps falling back to null rather than to DEFAULT_MODELS.local, because
+       null there means "whatever Advanced says", which is not the same as
+       pinning the name Advanced happens to hold today. */
+    model: text(source.model) || (provider === 'local' ? null : DEFAULT_MODELS[provider]),
+    /* The agent to hand the question to when this one cannot answer it — by
+       name, so it survives being reordered in the panel, and normalised the
+       same way `name` is so the two can be compared. normalizeRoster is what
+       makes sure the name still points at somebody. */
+    escalateTo: text(source.escalateTo) || null,
     /* Whether that model is allowed to think before it answers.
    
        Only a chat agent uses it. The other three jobs a model does here —
@@ -104,6 +156,12 @@ export function normalizeAgent (raw, index = 0) {
  * Duplicates by name are dropped rather than merged: two agents answering to
  * one name is a question with no right answer, and the first one wins for the
  * same reason the first one is listed.
+ *
+ * An escalateTo naming nobody on the roster is dropped here, and so is one
+ * naming its own agent. A dangling reference is worse than a lost setting: it
+ * costs nothing until the moment the local model gives up, and then it fails
+ * in the one place it was there to cover. Losing it at least leaves the panel
+ * showing the truth.
  */
 export function normalizeRoster (list) {
   const seen = new Set()
@@ -115,6 +173,11 @@ export function normalizeRoster (list) {
     if (seen.has(key)) continue
     seen.add(key)
     out.push(agent)
+  }
+  for (const agent of out) {
+    if (!agent.escalateTo) continue
+    const target = agent.escalateTo.toLowerCase()
+    if (target === agent.name.toLowerCase() || !seen.has(target)) agent.escalateTo = null
   }
   return out
 }
@@ -148,8 +211,13 @@ export function migrateRoster (settings) {
  */
 export function migrateModels (roster, legacyModel) {
   const fallback = text(legacyModel) || DEFAULT_MODEL
-  return normalizeRoster(roster).map((agent, i) =>
-    normalizeAgent({ ...agent, model: agent.model || fallback }, i))
+  return normalizeRoster(roster).map((agent, i) => normalizeAgent({
+    ...agent,
+    // Only the local ones: the setting being carried forward was an Ollama
+    // model name, and a codex agent with no model has not forgotten one, it
+    // has left the choice to the CLI.
+    model: isRemote(agent) ? agent.model : (agent.model || fallback)
+  }, i))
 }
 
 /**
@@ -208,10 +276,16 @@ export function addAgent (roster, raw) {
     return { ok: false, agents, error: `${name} is already on the list` }
   }
   // A new name starts out thinking with whatever the rest of them think with,
-  // rather than with nothing and a dropdown you have to notice.
-  const agent = normalizeAgent(
-    { model: defaultModel(agents), ...raw, name }, agents.length)
-  return { ok: true, agents: [...agents, agent] }
+  // rather than with nothing and a dropdown you have to notice — unless it was
+  // asked for on a provider of its own, where the rest of them are thinking
+  // with a model that provider has never heard of.
+  const seed = PROVIDERS.includes(raw && raw.provider) && raw.provider !== 'local'
+    ? {}
+    : { model: defaultModel(agents) }
+  const agent = normalizeAgent({ ...seed, ...raw, name }, agents.length)
+  // Back through normalizeRoster so an escalateTo that came in naming nobody
+  // does not get onto the list in the first place.
+  return { ok: true, agents: normalizeRoster([...agents, agent]) }
 }
 
 /**
@@ -220,6 +294,11 @@ export function addAgent (roster, raw) {
  * A rename is a change like any other, except that it can collide — and a
  * roster with two agents answering to one name is a question with no right
  * answer, so it is refused rather than resolved.
+ *
+ * It is also the one change that can reach outside the record being changed:
+ * anyone escalating to the old name is rewritten to the new one. Left alone
+ * the rename would take the fallback away without saying so, and the only
+ * place that shows up is a question that quietly stops being answered.
  */
 export function updateAgent (roster, name, patch) {
   const agents = normalizeRoster(roster)
@@ -233,9 +312,19 @@ export function updateAgent (roster, name, patch) {
     return { ok: false, agents, error: `${renamed} is already on the list` }
   }
 
-  const out = agents.slice()
-  out[index] = normalizeAgent(next, index)
-  return { ok: true, agents: out }
+  /* Changing where an agent thinks changes what a model name means, so a model
+     the patch did not mention is dropped rather than carried across: an Ollama
+     tag left behind on a claude agent is a flag its CLI will refuse. */
+  if (next.provider !== agents[index].provider && !(patch && 'model' in patch)) {
+    next.model = null
+  }
+
+  const was = agents[index].name
+  const out = agents.map((agent, i) => {
+    if (i === index) return normalizeAgent(next, i)
+    return same(agent.escalateTo, was) ? { ...agent, escalateTo: renamed } : agent
+  })
+  return { ok: true, agents: normalizeRoster(out) }
 }
 
 /**
@@ -244,6 +333,10 @@ export function updateAgent (roster, name, patch) {
  * The last agent that runs commands is kept: removing it would leave the
  * spoken route with nothing to answer to and no way back except the keyboard,
  * which is not a state anyone means to be in. Rename it instead.
+ *
+ * Anyone who was escalating to the one that goes is left escalating to nobody,
+ * which is the honest answer: the agent it was handing questions to is gone,
+ * and a name still sitting in that field would only promise otherwise.
  */
 export function removeAgent (roster, name) {
   const agents = normalizeRoster(roster)
@@ -254,5 +347,8 @@ export function removeAgent (roster, name) {
   if (victim.kind === 'commands' && !out.some(a => a.kind === 'commands')) {
     return { ok: false, agents, error: 'the last agent that runs commands stays — rename it instead' }
   }
-  return { ok: true, agents: out }
+  return {
+    ok: true,
+    agents: out.map(a => (same(a.escalateTo, victim.name) ? { ...a, escalateTo: null } : a))
+  }
 }

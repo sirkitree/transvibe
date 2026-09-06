@@ -3,7 +3,10 @@ import path from 'node:path'
 import os from 'node:os'
 import { migrateRoster, migrateModels } from '../shared/agents.js'
 
-const DIR = path.join(os.homedir(), 'Library', 'Application Support', 'transvibe')
+/** Where everything this app remembers lives. Exported because it is not
+    only settings.json in there — the routing log sits beside it, and one
+    module should answer "where" rather than two agreeing by accident. */
+export const DIR = path.join(os.homedir(), 'Library', 'Application Support', 'transvibe')
 const FILE = path.join(DIR, 'settings.json')
 
 export const DEFAULTS = {
@@ -115,6 +118,40 @@ export const DEFAULTS = {
   commandFallback: false,
   assistUrl: 'http://127.0.0.1:11434',
 
+  /* Escalating a question to a frontier model.
+
+     This is the one thing in the app that sends text off this machine, which
+     is why it is a single switch and why it is off. With it on, a question you
+     addressed to a chat agent — that sentence and that thread's own history,
+     nothing else — can be handed to a CLI already signed in here (`claude`,
+     `codex`), spawned with the question, billed against a subscription rather
+     than an API key. Dictation never goes: tidying text and guessing at a
+     command stay on the local model whatever this says, because a room
+     microphone hears things nobody addressed to anyone.
+
+     `remoteAnnounce` makes the escalation audible — the answer arrives as
+     "Claude said, ..." rather than in the agent's own voice as if it had known
+     all along. Knowing which answers left the machine is worth the two words.
+
+     `remoteTimeoutMs` is generous on purpose: measured, a trimmed `claude -p`
+     returns in 2.7s and `codex exec` with web search in 14.1s, so 30s is the
+     point at which something has actually gone wrong rather than the point at
+     which it is slow.
+
+     `remoteWebSearch` is off for the same reason the rest is: it is codex's
+     flag, it roughly doubles the wait, and it widens what a question can reach
+     out and touch. */
+  remote: false,
+  remoteAnnounce: true,
+  remoteTimeoutMs: 30000,
+  remoteWebSearch: false,
+
+  /* How many questions went out today, per day. Observed rather than chosen,
+     like modelStats above: it is what the daily cap counts against, and a cap
+     that reset every time the app restarted would not be a cap. Written by the
+     app, not by you. */
+  remoteCallsToday: {},
+
   /* How sure the recogniser has to have been that it was hearing speech.
      Whisper reports an average log probability per utterance, and the gap is
      wide: measured on this app's own server, real speech comes back at -0.01
@@ -126,7 +163,23 @@ export const DEFAULTS = {
   /* Drop an utterance that is nothing but glossary words — almost always the
      initial prompt echoing back over noise. Turn it off if you genuinely need
      to dictate a single glossary term on its own. */
-  dropGlossaryEcho: true
+  dropGlossaryEcho: true,
+
+  /* A record of how each question was answered, written to routing.log beside
+     this file.
+
+     Off, and worth having at all because the interesting failures are not
+     reproducible from the outside. "It went to Claude and it should not have"
+     and "it should have gone to Claude and did not" look identical on the
+     strip: an answer, in a voice. Which rule fired, what the local model
+     actually said, and how long each leg took are the only things that settle
+     it — and an app launched from the Dock has nowhere to print them, since
+     its stdout goes to a terminal nobody opened.
+
+     A line per question, JSON, appended, and capped so a flag left on does not
+     quietly fill the disk. Questions and answers are in it, which is the point
+     and also the reason it is off unless you turn it on. */
+  debugRouting: false
 }
 
 /* Anyone already running this app has a wake phrase they are used to saying,
@@ -141,6 +194,11 @@ function migrate (saved) {
   // A model belongs to whoever thinks with it. What used to be one setting for
   // all of them becomes each of theirs, and then stops being a setting.
   settings.agents = migrateModels(settings.agents, saved && saved.assistModel)
+  /* A file written before agents knew about providers describes agents that
+     think on this machine, which is exactly what normalizeAgent fills in for
+     one that does not say: provider 'local', escalating to nobody. So the
+     migration is that nothing is asked of anyone — the fields appear, already
+     saying what was already true. */
   delete settings.wakeWord
   delete settings.assistModel
   return settings

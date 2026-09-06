@@ -215,14 +215,15 @@ export function createAssist ({
      *   model and whether it is allowed to reason before answering
      * @returns {Promise<{text: string, ok: boolean, reason?: string}>}
      */
-    async ask (question, history = [], { model: at = null, thinking = false } = {}) {
+    async ask (question, history = [], { model: at = null, thinking = false, canEscalate = true } = {}) {
       if (!String(question || '').trim()) return { text: '', ok: false, reason: 'nothing asked' }
       if (available === false && !at) {
         return { text: '', ok: false, reason: 'the local model is not running' }
       }
       const started = Date.now()
       try {
-        const reply = await chat(buildAskMessages(question, history), 20000, at || model, thinking)
+        const reply = await chat(buildAskMessages(question, history, { canEscalate }),
+          20000, at || model, thinking)
         /* How long it took and how much it said, reported alongside the
            answer. The caller keeps it: this is the only honest source for
            "which of these models is worth waiting for", and it costs nothing

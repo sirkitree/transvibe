@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   normalizeAgent, normalizeRoster, migrateRoster, speechFor, commandAgent,
   addAgent, updateAgent, removeAgent, nextHue, defaultModel, migrateModels,
-  DEFAULT_MODEL, HUES, KINDS
+  isRemote, DEFAULT_MODEL, DEFAULT_MODELS, HUES, KINDS, PROVIDERS
 } from '../src/shared/agents.js'
 import { DEFAULTS } from '../src/main/config.js'
 
@@ -227,5 +227,141 @@ describe('thinking', () => {
   it('falls back to the kind when the file says something that is not a boolean', () => {
     expect(normalizeAgent({ name: 'mira', kind: 'chat', thinking: 'yes' }).thinking).toBe(true)
     expect(normalizeAgent({ name: 'a', kind: 'commands', thinking: null }).thinking).toBe(false)
+  })
+})
+
+describe('where an agent thinks', () => {
+  it('thinks on this machine unless the file says otherwise', () => {
+    expect(normalizeAgent({ name: 'mira' }).provider).toBe('local')
+    for (const provider of PROVIDERS) {
+      expect(normalizeAgent({ name: 'x', provider }).provider).toBe(provider)
+    }
+  })
+
+  it('reads a provider it does not recognise as local, not as some remote thing', () => {
+    // The failure mode worth avoiding is a name in a file spawning something.
+    expect(normalizeAgent({ name: 'x', provider: 'openai' }).provider).toBe('local')
+    expect(normalizeAgent({ name: 'x', provider: 42 }).provider).toBe('local')
+    expect(isRemote(normalizeAgent({ name: 'x', provider: 'openai' }))).toBe(false)
+  })
+
+  it('says plainly which agents leave the machine', () => {
+    expect(isRemote(normalizeAgent({ name: 'x', provider: 'claude' }))).toBe(true)
+    expect(isRemote(normalizeAgent({ name: 'x', provider: 'codex' }))).toBe(true)
+    expect(isRemote(normalizeAgent({ name: 'x' }))).toBe(false)
+    expect(isRemote(null)).toBe(false)
+  })
+
+  it('gives each provider its own default model', () => {
+    expect(normalizeAgent({ name: 'x', provider: 'claude' }).model)
+      .toBe(DEFAULT_MODELS.claude)
+    // Nothing to name: the codex CLI picks from its own config.
+    expect(normalizeAgent({ name: 'x', provider: 'codex' }).model).toBe(null)
+    // Local still means "the default in Advanced" rather than a pinned name.
+    expect(normalizeAgent({ name: 'x', provider: 'local' }).model).toBe(null)
+    expect(DEFAULT_MODELS.local).toBe(DEFAULT_MODEL)
+  })
+
+  it('drops the Ollama model when an agent is pointed at a provider', () => {
+    // `claude --model gemma4:e2b` is not a thing that runs.
+    const roster = normalizeRoster([{ name: 'ada', kind: 'chat', model: 'gemma4:e2b' }])
+    expect(updateAgent(roster, 'ada', { provider: 'claude' }).agents[0].model)
+      .toBe(DEFAULT_MODELS.claude)
+    expect(updateAgent(roster, 'ada', { provider: 'codex' }).agents[0].model).toBe(null)
+  })
+
+  it('keeps a model the same edit asked for', () => {
+    const roster = normalizeRoster([{ name: 'ada', kind: 'chat', model: 'gemma4:e2b' }])
+    const r = updateAgent(roster, 'ada', { provider: 'claude', model: 'claude-opus-5' })
+    expect(r.agents[0].model).toBe('claude-opus-5')
+  })
+
+  it('does not seed a remote agent with the model the local ones use', () => {
+    const roster = normalizeRoster([{ name: 'mira', model: 'gemma4:e2b' }])
+    expect(addAgent(roster, { name: 'sonnet', kind: 'chat', provider: 'claude' })
+      .agents.at(-1).model).toBe(DEFAULT_MODELS.claude)
+    expect(addAgent(roster, { name: 'ada', kind: 'chat' }).agents.at(-1).model)
+      .toBe('gemma4:e2b')
+  })
+
+  it('leaves a remote agent out of the old single-model migration', () => {
+    const before = normalizeRoster([
+      { name: 'mira' },
+      { name: 'sonnet', kind: 'chat', provider: 'claude' },
+      { name: 'ada', kind: 'chat', provider: 'codex' }
+    ])
+    expect(migrateModels(before, 'gemma4:e2b').map(a => a.model))
+      .toEqual(['gemma4:e2b', DEFAULT_MODELS.claude, null])
+  })
+})
+
+describe('escalating to another agent', () => {
+  const roster = normalizeRoster([
+    { name: 'mira', kind: 'chat', escalateTo: 'sonnet' },
+    { name: 'sonnet', kind: 'chat', provider: 'claude' }
+  ])
+
+  it('is nobody unless a name was given', () => {
+    expect(normalizeAgent({ name: 'mira' }).escalateTo).toBe(null)
+    expect(normalizeAgent({ name: 'mira', escalateTo: '  ' }).escalateTo).toBe(null)
+    expect(roster[0].escalateTo).toBe('sonnet')
+  })
+
+  it('drops a name that is on nobody’s roster', () => {
+    // A dangling reference costs nothing until the local model gives up, and
+    // then it fails in the one place it existed to cover.
+    expect(normalizeRoster([{ name: 'mira', escalateTo: 'nobody' }])[0].escalateTo)
+      .toBe(null)
+  })
+
+  it('drops an agent escalating to itself', () => {
+    expect(normalizeRoster([{ name: 'mira', escalateTo: 'MIRA' }])[0].escalateTo)
+      .toBe(null)
+  })
+
+  it('follows a rename, so the fallback does not silently break', () => {
+    const r = updateAgent(roster, 'sonnet', { name: 'claude' })
+    expect(r.ok).toBe(true)
+    expect(r.agents[0].escalateTo).toBe('claude')
+  })
+
+  it('is cleared for everyone pointing at an agent that has been removed', () => {
+    const r = removeAgent(roster, 'sonnet')
+    expect(r.ok).toBe(true)
+    expect(r.agents.map(a => a.name)).toEqual(['mira'])
+    expect(r.agents[0].escalateTo).toBe(null)
+  })
+
+  it('survives an edit that has nothing to do with it', () => {
+    expect(updateAgent(roster, 'mira', { voice: 'Karen' }).agents[0].escalateTo)
+      .toBe('sonnet')
+  })
+
+  it('is not added by naming somebody who is not there', () => {
+    expect(updateAgent(roster, 'mira', { escalateTo: 'nobody' }).agents[0].escalateTo)
+      .toBe(null)
+    expect(addAgent(roster, { name: 'ada', escalateTo: 'nobody' }).agents.at(-1).escalateTo)
+      .toBe(null)
+  })
+})
+
+describe('a settings file written before any of this', () => {
+  it('describes agents that think here, escalating to nobody', () => {
+    // Nothing is asked of anyone: the fields appear already saying what was
+    // already true.
+    const roster = migrateRoster({ agents: [{ name: 'hey claude', kind: 'commands' }] })
+    expect(roster[0]).toMatchObject({ provider: 'local', escalateTo: null })
+    expect(migrateRoster({ wakeWord: 'hey mira' })[0])
+      .toMatchObject({ provider: 'local', escalateTo: null })
+  })
+
+  it('leaves the shipped defaults local', () => {
+    for (const agent of migrateRoster(DEFAULTS)) {
+      expect(isRemote(agent)).toBe(false)
+    }
+  })
+
+  it('sends nothing off the machine until the switch is thrown', () => {
+    expect(DEFAULTS.remote).toBe(false)
   })
 })

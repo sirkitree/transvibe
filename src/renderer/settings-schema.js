@@ -45,8 +45,10 @@ export const PANEL_KEYS = ['agents']
     having been dragged there; a row offering to type it in would be a worse
     way to do the same thing. How long each model took to answer is the same
     kind of thing — observed, not chosen, and shown where it is useful, which
-    is next to the model rather than in a row of its own. */
-export const REMEMBERED_KEYS = ['panelPosition', 'modelStats']
+    is next to the model rather than in a row of its own. So is the tally of
+    how many questions went out to a frontier model today: it is counted, not
+    set, and the number you would want to change is the switch above it. */
+export const REMEMBERED_KEYS = ['panelPosition', 'modelStats', 'remoteCallsToday']
 
 export const SECTIONS = [
   {
@@ -140,6 +142,44 @@ export const SECTIONS = [
         // the voice's own: roughly what macOS speaks at, so the first nudge
         // is a nudge rather than a lurch down to 40 words a minute.
         type: 'range', min: 0, max: 400, step: 10, unit: ' wpm', zero: 'the voice’s own', base: 180
+      },
+    ]
+  },
+  {
+    title: 'Reaching out',
+    note: 'What happens when the local model does not know. Off, every answer is thought up on this Mac by a small model that sometimes says so. On, a question a chat agent could not answer can be handed to `claude` or `codex` — the CLIs you are already signed in to, so it bills against that subscription rather than an API key.',
+    fields: [
+      {
+        key: 'remote',
+        label: 'Ask a frontier model when the local one cannot answer',
+        // The one row in this panel where the honest help text is a privacy
+        // note, so it says the whole shape of it: what goes, what never does,
+        // and where it ends up. Nobody should have to read config.js to find
+        // out that this is the switch.
+        help: 'This is the only setting that sends anything off this machine. What goes is the sentence you addressed to a chat agent and that conversation’s own history — nothing else, and only when the local model gave up or said it was unsure. Dictation never goes: tidying text and guessing at a command stay local whatever this says, because a room microphone hears things nobody meant to send anywhere.',
+        spoken: ['reaching out', 'the frontier model', 'escalation', 'asking a frontier model'],
+        type: 'toggle'
+      },
+      {
+        key: 'remoteAnnounce',
+        label: 'Say which model answered',
+        help: 'An escalated answer arrives as “Claude said, …” rather than in the agent’s own voice as if it had known all along. Two words for knowing which answers left the machine.',
+        spoken: ['announcing', 'saying who answered', 'the attribution'],
+        type: 'toggle'
+      },
+      {
+        key: 'remoteWebSearch',
+        label: 'Let codex search the web',
+        help: 'Only codex can; claude reaches nothing live. It roughly doubles the wait — 8.7s becomes 14.1s, measured — and it is what makes a question about today answerable at all, which is why a question about the latest anything skips the local model entirely when this is on.',
+        spoken: ['web search', 'searching the web', 'looking things up'],
+        type: 'toggle'
+      },
+      {
+        key: 'remoteTimeoutMs',
+        label: 'Give up on a frontier model after',
+        help: 'Measured, a trimmed claude answers in 2.7s and codex with web search in 14.1s, so the default is the point at which something has gone wrong rather than the point at which it is slow. The local answer, if there was one, is what you get instead.',
+        spoken: ['the remote timeout', 'how long to wait for a frontier model'],
+        type: 'range', min: 5000, max: 120000, step: 5000, unit: 'ms'
       },
     ]
   },
@@ -300,6 +340,13 @@ export const SECTIONS = [
         type: 'toggle'
       },
       { key: 'assistUrl', label: 'Ollama at', type: 'text', placeholder: 'http://127.0.0.1:11434' },
+      {
+        key: 'debugRouting',
+        label: 'Write a log of how each question was answered',
+        help: 'For working out why an answer came from where it did. A line per question in routing.log, next to settings.json — the question, what the local model said, which rule sent it on, and how long each leg took. It holds what you asked and what you were told, so leave it off unless you are chasing something.',
+        spoken: ['the routing log', 'the debug log'],
+        type: 'toggle'
+      },
       {
         key: 'launchAtLogin',
         label: 'Launch transvibe at login',

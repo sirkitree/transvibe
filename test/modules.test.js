@@ -10,6 +10,7 @@ const MODULES = [
   '../src/main/wav.js',
   '../src/main/whisper-parse.js',
   '../src/main/speech.js',
+  '../src/main/cli-agent.js',
   '../src/main/models.js',
   '../src/main/spaces.js',
   '../src/shared/glossary.js',
@@ -17,6 +18,8 @@ const MODULES = [
   '../src/shared/agents.js',
   '../src/shared/spaces.js',
   '../src/shared/conversation.js',
+  '../src/shared/escalate.js',
+  '../src/shared/cli.js',
   '../src/renderer/glossary-edit.js',
   '../src/renderer/presence.js',
   '../src/renderer/placement.js',
@@ -25,7 +28,8 @@ const MODULES = [
   '../src/renderer/commands.js',
   '../src/renderer/wake.js',
   '../src/renderer/settings-voice.js',
-  '../src/renderer/saying.js'
+  '../src/renderer/saying.js',
+  '../src/renderer/waiting.js'
 ]
 
 describe('modules load', () => {

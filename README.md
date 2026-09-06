@@ -8,6 +8,7 @@ Local voice-to-text for macOS. A click-through strip across the top of the scree
 - Hold right ⌥ — or just say "hey Claude" — to speak an editing command instead of dictating
 - Name your own agents: each has its own wake name, its own voice, and its own colour on the strip
 - One of them can talk back — a local model, answered out loud, never mixed into your transcript
+- When that model does not know, it can hand the question to your own `claude` or `codex` — off until you turn it on, and it says whose answer you are hearing
 - Ignores music and background noise rather than transcribing it, while the visualizer still reacts to it
 - "Switch to Slack" goes there; name your desktop Spaces and "switch to SDSU" lands on one
 - Commands chain: "open settings and change the voice to Karen"
@@ -24,7 +25,9 @@ Local voice-to-text for macOS. A click-through strip across the top of the scree
 <!-- demo video goes here: drag the .mp4 into a GitHub comment box, paste the
      user-attachments URL on the next line. Script: docs/demo.md -->
 
-**No cloud service.** Audio never leaves the machine — there is no network call anywhere in the transcription path. The only outbound request the app can ever make is a one-time model download from Hugging Face, and only if it cannot find a Whisper model already on disk. The optional assist model runs locally too, through Ollama on `127.0.0.1`, and is only ever sent text.
+**Local by default.** Audio never leaves the machine under any setting — there is no network call anywhere in the transcription path, and nothing you can turn on puts one there. Dictated text does not leave either: the filler-word cleanup and the command parser's fallback are wired to the local model and take no setting that could point them somewhere else. The assist model runs through Ollama on `127.0.0.1`, and is only ever sent text. The only outbound request the app makes on its own is a one-time model download from Hugging Face, and only if it cannot find a Whisper model already on disk.
+
+The one thing that can reach out is off until you turn it on. An agent that talks back can be allowed to hand a question its small local model cannot answer to your own `claude` or `codex` — the CLIs already installed and signed in on this Mac, so it bills against your subscription and there is no API key to keep anywhere. When that happens the question, and that thread's own turns, are what goes out; nothing else does. `remote` is `false` in a fresh settings file, no agent escalates unless you name where it should go, and the answer comes back spoken as "Claude said…" so a remote answer is never quietly passed off as a local one. [The details are in the assist doc](docs/assist.md#when-the-local-model-does-not-know).
 
 ## Requirements
 
@@ -98,17 +101,17 @@ Settings are a panel on the strip, tabbed down the left, saved and applied as yo
 | | |
 |---|---|
 | [Using transvibe](docs/using.md) | The strip, every control, command mode, the glossary, sending text |
-| [The assist model](docs/assist.md) | Optional local LLM: filler-word cleanup, smarter command mode |
+| [The assist model](docs/assist.md) | Optional local LLM: filler-word cleanup, smarter command mode, and when it may ask a bigger one |
 | [Settings](docs/settings.md) | The settings panel, and every key behind it |
 | [Architecture](docs/architecture.md) | The pipeline, interim results, the overlay, project layout |
-| [Testing](docs/testing.md) | What the 417 tests cover, and the manual checklist |
+| [Testing](docs/testing.md) | What the 790 tests cover, and the manual checklist |
 | [Performance](docs/performance.md) | Where the visualizer's cost went |
 | [Demo video](docs/demo.md) | The script for the video at the top of this page |
 
 ## Develop
 
 ```sh
-npm test                      # 417
+npm test                      # 790
 npm run test:unit             # pure modules only, no whisper binary needed
 npm run dev                   # CDP on 9333
 ./script/install-launcher.sh  # -> ~/Applications/Transvibe.app, running this tree
