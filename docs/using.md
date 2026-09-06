@@ -46,6 +46,8 @@ The controls only exist while the strip is awake. They sit in a row directly und
 
 By default everything you say is transcribed. **Hold the right ⌥ key** and the strip swings amber — speak one editing command, release, and it drops straight back to transcribing. (**⌃⌥C** does the same thing without the hold, for when the key is awkward.) If you say nothing it disarms itself after 6 seconds.
 
+The name of whoever is listening appears on the ribbon while it is armed, in that agent's colour — the same indicator an open conversation uses. Amber says something is listening; the name says what, which is the question you actually have. The key names nobody, so it reaches whoever runs commands, however many names the roster has.
+
     "open settings"                "close the panel"
     "capitalize that"              "delete the last three words"
     "uppercase that"               "delete that" / "scratch that"

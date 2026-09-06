@@ -375,6 +375,26 @@ function inConversation () {
   return !!state.talkingTo && state.listeningUntil > Date.now()
 }
 
+/* Whoever the next thing said will go to, or null when that is nobody.
+ *
+ * Three ways to be listening to someone and one indicator for all of them: an
+ * open conversation, a name heard at the front of the sentence you are still
+ * saying, and the key — which names nobody, so it addresses whoever runs
+ * commands. The key is the case this was added for. The strip swings amber
+ * either way, and amber says "something is listening" without saying what,
+ * which is the question you actually have. */
+function addressed () {
+  if (inConversation()) return state.talkingTo
+  /* A name still being said beats the roster's answer: "hey Trinity" in the
+     middle of a thread with Mira is addressed to Trinity. */
+  if (state.liveWake && state.agent) return state.agent
+  if (!state.commandMode) return null
+  /* The key names nobody, so it reaches whoever runs commands — and never
+     `state.agent`, which is whoever was addressed last and may well be the
+     chat agent you finished talking to a minute ago. */
+  return commandAgent((state.settings && state.settings.agents) || [])
+}
+
 /* On or off, on the ribbon rather than in the stage: this has to be readable
    whether or not the transcript has faded, so it is redrawn on its own —
    from the idle tick as well as from render() — rather than only when
@@ -382,12 +402,12 @@ function inConversation () {
    an event, it is a clock, and nothing else changing means nothing else
    would ever notice it happened. */
 function renderConvoIndicator () {
-  const active = inConversation()
-  convoIndicatorEl.hidden = !active
-  if (!active) return
-  convoIndicatorLabelEl.textContent = state.talkingTo.name
+  const who = addressed()
+  convoIndicatorEl.hidden = !who
+  if (!who) return
+  convoIndicatorLabelEl.textContent = who.name
   const dot = convoIndicatorEl.querySelector('.dot')
-  const color = `hsl(${Math.round(state.talkingTo.hue * 360)} 90% 65%)`
+  const color = `hsl(${Math.round(who.hue * 360)} 90% 65%)`
   convoIndicatorEl.style.color = color
   dot.style.background = color
   dot.style.boxShadow = `0 0 8px ${color}`
