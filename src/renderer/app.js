@@ -7,7 +7,7 @@ import {
 } from './commands.js'
 import { matchAgent } from './wake.js'
 import { parseSettingCommand, applySettingCommand, settingPhrases } from './settings-voice.js'
-import { FIELDS } from './settings-schema.js'
+import { FIELDS, resolveChoice } from './settings-schema.js'
 import {
   speechFor, commandAgent, defaultModel, addAgent, updateAgent, removeAgent,
   nextHue, isRemote, KINDS, PROVIDERS, DEFAULT_MODELS
@@ -1020,6 +1020,18 @@ async function runSettingCommand (cmd, { collect = null } = {}) {
     return runAgentVoiceCommand(cmd, field, announce)
   }
 
+  /* A select whose choices the schema already knows: "change the visualizer
+     to the orb". No machine to ask, so it is answered from the schema. */
+  if (cmd.resolve === 'choices') {
+    const picked = resolveChoice(field, cmd.value)
+    if (!picked) {
+      hint(`no ${field.label.toLowerCase()} called "${cmd.value}"`)
+      announce(`there is no ${field.label.toLowerCase()} called ${cmd.value}`)
+      return true
+    }
+    cmd = { ...cmd, value: picked }
+  }
+
   /* A select's values belong to the machine, not the schema: "make the voice
      Karen" is only a command if this Mac has a Karen. */
   if (cmd.resolve === 'voices') {
@@ -1198,7 +1210,10 @@ async function whileDeaf (speaking) {
   // Both halves of the same moment: the microphone goes off and the app's own
   // ribbon comes on, for exactly as long as the speakers are busy — wearing
   // the colour of whoever is doing the talking.
-  if (state.sayingViz) {
+  /* In orb mode the inner ring says this instead, off `state.deaf` — so the
+     strip's canvas is not left drawing at 30fps into something CSS is
+     hiding. One place the app expresses itself, not two. */
+  if (state.sayingViz && state.settings.layout !== 'orb') {
     if (state.agent) state.sayingViz.setHue(state.agent.hue)
     state.sayingViz.start()
   }
@@ -1989,6 +2004,9 @@ function closeOpenPanel () {
    beside it names the file that choice actually landed on, which is otherwise
    invisible. */
 async function fieldOptions (field) {
+  // A select whose choices are the schema's own — two layouts, and neither of
+  // them is going to appear or vanish while the app is running.
+  if (field.options === 'choices') return { options: field.choices }
   if (field.options === 'ollama') return assistModelOptions()
   if (field.options === 'voices') return voiceOptions()
   return speechModelOptions()
@@ -2083,6 +2101,7 @@ function applyLiveSetting (key, { preview = true } = {}) {
   if (key === 'remoteTimeoutMs') state.waiting = null
   if (preview && (key === 'speakVoice' || key === 'speakRate')) previewVoice()
   if (key.startsWith('viz')) rebuildVisualizer()
+  if (key === 'layout') applyLayout()
 }
 
 function rebuildVisualizer () {
@@ -2097,6 +2116,112 @@ function rebuildVisualizer () {
     quietFps: state.settings.vizQuietFps
   })
   state.viz.start()
+  applyLayout()
+}
+
+/* ------------------------------------------------------------------ the orb
+
+   The orb is a second window in the corner of the screen, and it is deaf: the
+   microphone, the analyser and the VAD are all here, and there is no reason to
+   have two of any of them. So it gets a signal instead — a handful of numbers,
+   one way, at the visualizer's own frame rate.
+
+   Lossy on purpose. A dropped message is a dropped frame of animation, which
+   is the whole of what the orb does with it. */
+
+const ORB_BANDS = [
+  [0, 0.06],      // bass: where a voice's body is
+  [0.06, 0.2],    // mid: where the words are
+  [0.2, 0.45]     // treble: sibilance and everything bright
+]
+
+/* The reference sketch read three band energies and nothing else, so three is
+   what crosses. Only the lower half of the FFT is looked at at all: the top of
+   a 2048-bin spectrum is near-silent whatever the room is doing, and averaging
+   it in only drags every number toward zero. */
+function bandEnergies (fft) {
+  const out = [0, 0, 0]
+  const len = fft.length
+  if (!len) return out
+  for (let b = 0; b < 3; b++) {
+    const from = Math.floor(len * ORB_BANDS[b][0])
+    const to = Math.max(from + 1, Math.floor(len * ORB_BANDS[b][1]))
+    let sum = 0
+    for (let i = from; i < to; i++) sum += fft[i]
+    // The raw mean is a small number even for loud speech; the drive is the
+    // same idea as the ribbon's levelGain and roughly the same size.
+    out[b] = Math.min(1, (sum / ((to - from) * 255)) * 4.5)
+  }
+  return out
+}
+
+let orbFft = null
+let orbRaf = null
+let orbLast = 0
+
+function startOrbFeed () {
+  if (orbRaf || !state.capture) return
+  const analyser = state.capture.analyser
+  orbFft = new Uint8Array(analyser.frequencyBinCount)
+
+  const tick = now => {
+    orbRaf = requestAnimationFrame(tick)
+    /* Paced like the ribbon, and for the same reason: a silent room does not
+       need thirty messages a second, and the orb's own frame budget would
+       throw most of them away anyway. Speaking is the VAD's answer, not the
+       level's — the drive below multiplies an empty room past any threshold.
+       The app talking counts as busy too: the inner ring is animating even
+       though the microphone is deaf for exactly that window. */
+    const speaking = state.capture.vad.state !== 'idle' || state.deaf > 0
+    const rate = speaking
+      ? (state.settings.vizFps || 30)
+      : (state.settings.vizQuietFps || 8)
+    if (now - orbLast < 1000 / Math.max(1, rate)) return
+    orbLast = now
+
+    analyser.getByteFrequencyData(orbFft)
+    const [bass, mid, treble] = bandEnergies(orbFft)
+    window.transvibe.orbSignal({
+      bass,
+      mid,
+      treble,
+      level: (bass + mid + treble) / 3,
+      /* Active means the VAD hears something, not that the level is high:
+         the drive above multiplies a quiet room past any threshold, which is
+         the same reason the ribbon does not pace itself off its own level. */
+      active: speaking,
+      command: state.commandMode || state.liveWake,
+      hue: state.agent ? state.agent.hue : undefined,
+      /* The inner orb's envelope. `saying-viz` draws the strip's version of
+         this; in the orb it is a smaller ring turning the other way, and all
+         it needs from here is whether there is a sentence in progress. */
+      saying: state.deaf > 0 ? 1 : 0,
+      sayHue: state.agent ? state.agent.hue : undefined
+    })
+  }
+  orbRaf = requestAnimationFrame(tick)
+}
+
+function stopOrbFeed () {
+  if (orbRaf) cancelAnimationFrame(orbRaf)
+  orbRaf = null
+}
+
+/**
+ * Which visualizer is running.
+ *
+ * The orb carries everything the strip's two canvases carried — the room, the
+ * command-mode amber, whose voice is answering, and the app's own speech — so
+ * both of them go away rather than one of them staying behind to say the same
+ * thing in a second place. Nothing else about the strip moves: the transcript,
+ * the bubbles and the buttons stay exactly where they were.
+ */
+function applyLayout () {
+  const orb = state.settings.layout === 'orb'
+  document.body.classList.toggle('orb-layout', orb)
+  if (state.viz) state.viz.setHidden(orb)
+  if (orb) startOrbFeed()
+  else stopOrbFeed()
 }
 
 /* --------------------------------------------------------------- dragging

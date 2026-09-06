@@ -94,6 +94,34 @@ export const DEFAULTS = {
   vizFps: 30,
   vizQuietFps: 8,
 
+  /* Which visualizer is running, and the second window's shape.
+
+     'strip' is the ribbon along the top and the small counter-facing one that
+     draws while the app talks. 'orb' replaces both with a round mandala in a
+     square window in the lower-left corner — a different place on the screen
+     from the strip, so it has to be a second window — and the app's own voice
+     becomes a counter-turning miniature inside it rather than a second widget
+     somewhere else.
+
+     `orbSeeds` and `orbSteps` are the cost dials, the way vizLinesPerFamily
+     and vizPoints are for the ribbon. Each seed is drawn twice, once under the
+     point reflection, so the stroke count is twice the seed count. */
+  layout: 'strip',
+  orbSize: 300,
+  orbMargin: 24,
+  orbSeeds: 120,
+  orbSteps: 14,
+  orbSayScale: 0.4,
+  /* How far the room opens the figure, and how fast it closes again once the
+     room goes quiet. The zoom is the headline of the sketch this came from:
+     the whole mandala breathes outward when you speak.
+
+     Well below the reference's 3, because the reference had a whole screen to
+     grow into and this has a 300pt square. The figure is sized so that the
+     top of this range still fits inside the window. */
+  orbZoomGain: 0.5,
+  orbZoomDecay: 0.05,
+
   autoCopy: false,
   alwaysOnTop: true,
   modelPath: null,

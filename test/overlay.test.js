@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { stripBounds, contains, nextWake, STRIP_HEIGHT } from '../src/main/overlay.js'
+import { stripBounds, orbBounds, contains, nextWake, STRIP_HEIGHT, ORB_SIZE } from '../src/main/overlay.js'
 
 const display = { workArea: { x: 0, y: 25, width: 1512, height: 920 } }
 
@@ -29,6 +29,61 @@ describe('stripBounds', () => {
   it('returns something usable for a garbage display', () => {
     expect(stripBounds(null).height).toBe(STRIP_HEIGHT)
     expect(stripBounds({ workArea: { x: 0, y: 0 } }).width).toBe(1280)
+  })
+})
+
+describe('orbBounds', () => {
+  it('sits in the lower-left of the work area, inset by the margin', () => {
+    // 25 + 920 - 300 - 24
+    expect(orbBounds(display)).toEqual({ x: 24, y: 621, width: 300, height: 300 })
+  })
+
+  it('follows a display that is not at the origin', () => {
+    const right = { workArea: { x: 1512, y: 0, width: 1920, height: 1080 } }
+    expect(orbBounds(right, { size: 200, margin: 40 }))
+      .toEqual({ x: 1552, y: 840, width: 200, height: 200 })
+  })
+
+  it('rises with the Dock, because the work area already excludes it', () => {
+    const docked = { workArea: { x: 0, y: 25, width: 1512, height: 830 } }
+    const free = { workArea: { x: 0, y: 25, width: 1512, height: 920 } }
+    expect(free.workArea.height - docked.workArea.height)
+      .toBe(orbBounds(free).y - orbBounds(docked).y)
+  })
+
+  it('shrinks to fit a display too small for the size asked for', () => {
+    const small = { workArea: { x: 0, y: 0, width: 800, height: 200 } }
+    const rect = orbBounds(small, { size: 300, margin: 24 })
+    expect(rect.width).toBe(152)
+    expect(rect.height).toBe(152)
+    expect(rect.y).toBe(24)
+  })
+
+  it('stays square, and never smaller than something worth drawing', () => {
+    const tiny = { workArea: { x: 0, y: 0, width: 100, height: 100 } }
+    const rect = orbBounds(tiny, { size: 300 })
+    expect(rect.width).toBe(rect.height)
+    expect(rect.width).toBe(120)
+  })
+
+  it('has a floor, so a silly size still leaves something to see', () => {
+    expect(orbBounds(display, { size: 4 }).width).toBe(120)
+  })
+
+  it('takes a zero margin literally', () => {
+    expect(orbBounds(display, { size: 200, margin: 0 })).toEqual({
+      x: 0, y: 745, width: 200, height: 200
+    })
+  })
+
+  it('falls back to display bounds when there is no work area', () => {
+    expect(orbBounds({ bounds: { x: 0, y: 0, width: 1000, height: 700 } }).y).toBe(376)
+  })
+
+  it('returns something usable for a garbage display', () => {
+    expect(orbBounds(null).width).toBe(ORB_SIZE)
+    expect(orbBounds({ workArea: { x: 0, y: 0 } }).height).toBe(ORB_SIZE)
+    expect(orbBounds(display, { size: NaN, margin: NaN }).width).toBe(ORB_SIZE)
   })
 })
 

@@ -1,6 +1,15 @@
 # Plan: the orb — a round visualizer in the lower-left corner
 
-Status: planned, not started. Written 2026-09-06. Nothing in this file has been built.
+Status: **built**, 2026-09-06. Kept as the record of why it is shaped the way it is; where the code diverged from the plan, that is noted below.
+
+## Where it came out differently
+
+- **No `orb-saying.js`.** The inner orb is a second layer inside `orb-viz.js`, against the same `orb.js`, drawn to the same canvas. It shares the one blur blit that way, and the two rings composite as one object instead of as two stacked ones. A separate module would have been a second canvas and a second blur.
+- **The zoom is far smaller than the reference's.** `orbZoomGain` defaults to 0.5, not 3. The reference had a whole screen to grow into; this has a 300pt square, and a mandala clipped against the edge of its own window reads as broken rather than as loud.
+- **`orbSaySeeds` / `orbSaySteps` were not needed.** The inner ring derives both from the outer's. `orbSayScale` is the one dial it has.
+- **The spoken form is "change the visualizer to the orb", not "switch to the orb".** "Switch to X" already means a desktop Space, and a second meaning for it would be a coin toss on every "switch to". It goes through the settings schema instead, which needed one new thing: `resolveChoice`, for a select whose options the schema already knows rather than the machine.
+- **It is not cheaper than the ribbon.** The plan guessed it might be, since a small square composites fewer pixels than a full-width strip. Measured, it is about two and a half times the cost when active and indistinguishable when idle. The numbers are in `docs/performance.md`.
+- **The noise scale turned out to be the whole look.** Not something the plan anticipated: below about 10, neighbouring seeds get near-identical turn fields and the ring combs into solid sheets; past about 30 they stop agreeing at all and it tangles. 22 is where they read as filaments.
 
 Reference: <https://jeradbitner.com/websim-projects/dynamic-p5-js-visualization-with-enhanced-sound-reactive-zoom.html> — a p5.js sketch of Jerad's. Source read and summarised below, because the page is a websim export and may not stay up.
 

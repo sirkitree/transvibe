@@ -10,7 +10,12 @@
 
 export const STRIP_HEIGHT = 200
 export const PANEL_HEIGHT = 560
+export const ORB_SIZE = 300
+export const ORB_MARGIN = 24
 const MIN_HEIGHT = 90
+// Below this the mandala is a smudge; a display too small for the requested
+// orb gets a smaller one rather than one hanging off the edge.
+const MIN_ORB = 120
 
 const finite = v => typeof v === 'number' && Number.isFinite(v)
 
@@ -35,6 +40,38 @@ export function stripBounds (display, { height = STRIP_HEIGHT } = {}) {
     width: Math.round(area.width),
     // A short display must never get a strip taller than itself.
     height: Math.round(Math.min(Math.max(height, MIN_HEIGHT), area.height))
+  }
+}
+
+/**
+ * The orb's square, in the lower-left corner of a display.
+ *
+ * Anchored to the work area, which already excludes the Dock — so an orb in
+ * the bottom-left sits above it with no special case, and follows it when the
+ * Dock is hidden or moved to another edge.
+ *
+ * @param {{workArea?: {x,y,width,height}, bounds?: object}} display
+ * @param {{size?: number, margin?: number}} [opts]
+ * @returns {{x:number, y:number, width:number, height:number}}
+ */
+export function orbBounds (display, { size = ORB_SIZE, margin = ORB_MARGIN } = {}) {
+  const area = (display && display.workArea) || (display && display.bounds) || null
+  const inset = Math.max(0, finite(margin) ? margin : ORB_MARGIN)
+  const want = Math.max(MIN_ORB, finite(size) ? size : ORB_SIZE)
+  if (!area || !finite(area.x) || !finite(area.y) || !finite(area.width) || !finite(area.height)) {
+    return { x: inset, y: inset, width: want, height: want }
+  }
+  // Never wider or taller than the room it has, margins included.
+  const side = Math.round(Math.max(
+    MIN_ORB,
+    Math.min(want, area.width - inset * 2, area.height - inset * 2)
+  ))
+  return {
+    x: Math.round(area.x + inset),
+    // Bottom-left: the far edge of the work area, less the orb and its margin.
+    y: Math.round(area.y + area.height - side - inset),
+    width: side,
+    height: side
   }
 }
 

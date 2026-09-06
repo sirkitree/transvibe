@@ -321,6 +321,76 @@ export const SECTIONS = [
         spoken: ['the point count', 'points per line'],
         type: 'range', min: 60, max: 400, step: 20
       },
+      {
+        group: 'The orb',
+        key: 'layout',
+        label: 'Visualizer',
+        help: 'The ribbon runs along the top of the strip. The orb is a round one in its own small window in the lower-left corner of the screen, and it carries everything the ribbon does — command mode, whose voice is answering — including the app’s own speech, which becomes a smaller ring turning the other way inside it.',
+        spoken: ['the layout', 'the visualizer'],
+        type: 'select',
+        // The one select whose choices are the schema's own. A voice, or a
+        // whisper model, is whatever this Mac happens to have; there are two
+        // visualizers and there will be two of them tomorrow.
+        options: 'choices',
+        choices: [
+          { value: 'strip', label: 'Ribbon on the strip' },
+          { value: 'orb', label: 'Orb in the corner' }
+        ]
+      },
+      {
+        group: 'The orb',
+        key: 'orbSize',
+        label: 'Orb size',
+        help: 'Its window is a square this many points on a side, and shrinks to fit a display too small for it.',
+        spoken: ['the orb size', 'how big the orb is'],
+        type: 'range', min: 120, max: 600, step: 20, unit: 'px'
+      },
+      {
+        group: 'The orb',
+        key: 'orbMargin',
+        label: 'Distance from the corner',
+        spoken: ['the orb margin', 'the orb inset'],
+        type: 'range', min: 0, max: 120, step: 4, unit: 'px'
+      },
+      {
+        group: 'The orb',
+        key: 'orbSeeds',
+        label: 'Filaments',
+        help: 'Each one is drawn twice — once mirrored through the centre — so this is half the stroke count. The dial to turn down first if the orb costs more than the ribbon did.',
+        spoken: ['the filament count', 'the filaments'],
+        type: 'range', min: 24, max: 240, step: 8
+      },
+      {
+        group: 'The orb',
+        key: 'orbSteps',
+        label: 'Filament length',
+        help: 'How far a filament walks away from the ring. Length varies around the ring anyway; this is the longest one.',
+        spoken: ['the filament length'],
+        type: 'range', min: 4, max: 40, step: 2
+      },
+      {
+        group: 'The orb',
+        key: 'orbSayScale',
+        label: 'Inner ring size',
+        help: 'The app’s own voice, as a fraction of the orb it sits inside.',
+        spoken: ['the inner ring', 'the inner ring size'],
+        type: 'range', min: 0.15, max: 0.7, step: 0.05, decimals: 2
+      },
+      {
+        group: 'The orb',
+        key: 'orbZoomGain',
+        label: 'How far sound opens it',
+        spoken: ['the zoom', 'the orb zoom'],
+        help: 'The whole figure breathes outward when the room does. All the way left holds it still; far right will push the longest filaments past the edge of its window.',
+        type: 'range', min: 0, max: 3, step: 0.1, decimals: 1, zero: 'still'
+      },
+      {
+        group: 'The orb',
+        key: 'orbZoomDecay',
+        label: 'How fast it closes again',
+        spoken: ['the zoom decay', 'how fast the orb closes'],
+        type: 'range', min: 0.01, max: 0.4, step: 0.01, decimals: 2
+      }
     ]
   },
   {
@@ -393,6 +463,31 @@ export const editableKeys = () => FIELDS.map(f => f.key)
  * Numbers arrive as strings; a cleared text field means "unset" for the two
  * settings that are meaningfully null (no forced target app, no pinned model).
  */
+/**
+ * A spoken value against a select's own choices: "change the visualizer to
+ * orb", "make the visualizer the ribbon".
+ *
+ * The other selects resolve against the machine — the voices installed, the
+ * models on disk — and the caller does that. This one is answerable from the
+ * schema, so it is answered here and tested without a Mac in the room.
+ *
+ * @returns {string|undefined} the value to save, or undefined if nothing matched
+ */
+export function resolveChoice (field, heard) {
+  if (!field || !Array.isArray(field.choices)) return undefined
+  const want = String(heard ?? '').trim().toLowerCase().replace(/^(?:the|a|an) +/, '')
+  if (!want) return undefined
+  const exact = field.choices.find(c => String(c.value).toLowerCase() === want)
+  if (exact) return exact.value
+  // "the orb" against "Orb in the corner": the label is a sentence and what
+  // was said is the word in it that means something.
+  const named = field.choices.find(c => {
+    const label = String(c.label).toLowerCase()
+    return label === want || label.split(/\s+/).includes(want)
+  })
+  return named ? named.value : undefined
+}
+
 export function coerce (field, raw) {
   if (field.type === 'toggle') return !!raw
   if (field.type === 'range') {

@@ -62,6 +62,15 @@ contextBridge.exposeInMainWorld('transvibe', {
   setHeight: px => ipcRenderer.send('overlay:height', px),
   /** a panel needs more room than the strip normally has */
   setPanelOpen: open => ipcRenderer.send('overlay:panel', open),
+  /* The orb window's whole diet: about seven numbers a frame, one way, from
+     the strip's renderer — which owns the microphone and is the only thing
+     that knows what the room is doing. Lossy on purpose. `send`, not `invoke`:
+     nothing is waiting for an answer, and a frame of animation is not worth a
+     round trip. */
+  orbSignal: signal => ipcRenderer.send('orb:signal', signal),
+  onOrbSignal: fn => ipcRenderer.on('orb:signal', (_e, signal) => fn(signal)),
+  /** the orb rebuilds when its cost dials change */
+  onOrbSettings: fn => ipcRenderer.on('orb:settings', (_e, settings) => fn(settings)),
   onSpaces: fn => ipcRenderer.on('spaces', (_e, list) => fn(list)),
   onAwake: fn => ipcRenderer.on('awake', (_e, value) => fn(value)),
   setListening: value => ipcRenderer.send('listening', value),

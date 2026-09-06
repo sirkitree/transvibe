@@ -57,6 +57,15 @@ html, body {
    listening, faint enough to ignore. */
 body.quiet #viz { opacity: 0.24; }
 
+/* The orb has taken over. Both strip canvases go — the room and the app's own
+   voice — because the orb carries both, and two places saying the same thing
+   are two places that can disagree. `display: none` rather than transparency,
+   so nothing is left compositing a full-width canvas nobody can see. Nothing
+   else about the strip moves: the transcript, the bubbles and the buttons stay
+   exactly where they were, with the ribbon's band left empty above them. */
+body.orb-layout #viz,
+body.orb-layout #say-viz { display: none; }
+
 /* Whether a chat agent is still expecting a follow-up without its name.
    Sits on the ribbon rather than in .stage on purpose: .stage fades out on
    its own idle timer, and this has to stay legible right up until the

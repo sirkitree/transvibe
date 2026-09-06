@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { DEFAULTS } from '../src/main/config.js'
 import {
   SECTIONS, FIELDS, GLOSSARY_KEYS, PANEL_KEYS, REMEMBERED_KEYS, EXTERNAL_KEYS,
-  coerce, formatValue
+  coerce, formatValue, resolveChoice
 } from '../src/renderer/settings-schema.js'
 
 const fileKeys = FIELDS.filter(f => !f.external).map(f => f.key)
@@ -116,5 +116,34 @@ describe('formatValue', () => {
 
   it('says a toggle as on or off', () => {
     expect(formatValue({ type: 'toggle' }, true)).toBe('on')
+  })
+})
+
+describe('resolveChoice', () => {
+  const layout = FIELDS.find(f => f.key === 'layout')
+
+  it('takes the value itself', () => {
+    expect(resolveChoice(layout, 'orb')).toBe('orb')
+    expect(resolveChoice(layout, 'strip')).toBe('strip')
+  })
+
+  it('takes a word out of the label, which is how it would be said', () => {
+    // "change the visualizer to the orb"
+    expect(resolveChoice(layout, 'the orb')).toBe('orb')
+    expect(resolveChoice(layout, 'Ribbon')).toBe('strip')
+    expect(resolveChoice(layout, 'the corner')).toBe('orb')
+  })
+
+  it('is undefined rather than a wrong guess', () => {
+    expect(resolveChoice(layout, 'the blob')).toBeUndefined()
+    expect(resolveChoice(layout, '')).toBeUndefined()
+    expect(resolveChoice(layout, null)).toBeUndefined()
+    expect(resolveChoice({ type: 'select' }, 'orb')).toBeUndefined()
+    expect(resolveChoice(null, 'orb')).toBeUndefined()
+  })
+
+  it('does not match a label as a whole phrase by accident', () => {
+    // a partial word is not a choice: "or" must not land on "orb"
+    expect(resolveChoice(layout, 'or')).toBeUndefined()
   })
 })

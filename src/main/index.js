@@ -14,12 +14,13 @@ import { needsFreshFacts, shouldEscalate, escalationChain } from '../shared/esca
 import { speak, stopSpeaking, listVoices } from './speech.js'
 import { findModel, downloadModel, listModels, humanSize, MODELS_DIR } from './models.js'
 import * as config from './config.js'
-import { stripBounds, contains, nextWake } from './overlay.js'
+import { stripBounds, orbBounds, contains, nextWake } from './overlay.js'
 import { listSpaces, listSwitchTargets, dockClickScript } from './spaces.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 let win = null
+let orbWin = null
 let tray = null
 let engine = null
 let assist = null
@@ -75,6 +76,9 @@ function applyStripBounds () {
   win.setBounds(stripRect())
 }
 
+/* The renderer draws the orb; it is told everything it needs on one channel. */
+ipcMain.on('orb:signal', (_e, signal) => sendOrb('orb:signal', signal))
+
 function setAwake (value) {
   if (!win || win.isDestroyed()) return
   wake = { ...wake, awake: value }
@@ -106,6 +110,84 @@ function pollPointer () {
 function startPointerWatch () {
   clearInterval(wakeTimer)
   wakeTimer = setInterval(pollPointer, POLL_MS)
+}
+
+/* ------------------------------------------------------------------ the orb
+
+   A second window, because the orb lives in the lower-left corner of the
+   screen and the strip is a full-width band at the top: one window cannot be
+   both without covering everything in between.
+
+   It is a dumb renderer. It has no microphone, no VAD and no idea whether the
+   app is listening — all of that stays in the strip's renderer, which is the
+   single source of truth for it, and what crosses to here is about seven
+   numbers a frame. So the orb can be created and destroyed at will, and if it
+   never opens, nothing else notices.
+
+   And it is click-through for its whole life. There is nothing on it to click,
+   which deletes a class of problem the strip had to solve: no hover machine,
+   no dwell, no dead corners. If it ever gains a target, `overlay.js` will need
+   a radial hit test beside `contains()` — a round thing in a square window has
+   four corners that would otherwise swallow the pointer. */
+
+function orbRect () {
+  const display = win && !win.isDestroyed()
+    ? screen.getDisplayMatching(win.getBounds())
+    : screen.getPrimaryDisplay()
+  return orbBounds(display, { size: settings.orbSize, margin: settings.orbMargin })
+}
+
+function createOrbWindow () {
+  if (orbWin && !orbWin.isDestroyed()) return orbWin
+  orbWin = new BrowserWindow({
+    ...orbRect(),
+    frame: false,
+    transparent: true,
+    backgroundColor: '#00000000',
+    hasShadow: false,
+    roundedCorners: false,
+    resizable: false,
+    movable: false,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    focusable: false,     // it can never be typed into, so it never takes focus
+    alwaysOnTop: settings.alwaysOnTop,
+    skipTaskbar: true,
+    webPreferences: {
+      preload: path.join(__dirname, '..', 'preload', 'index.cjs'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false
+    }
+  })
+  if (settings.alwaysOnTop) orbWin.setAlwaysOnTop(true, 'screen-saver')
+  orbWin.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+  orbWin.setIgnoreMouseEvents(true)
+  orbWin.loadFile(path.join(__dirname, '..', 'renderer', 'orb.html'))
+  orbWin.on('closed', () => { orbWin = null })
+  return orbWin
+}
+
+function destroyOrbWindow () {
+  if (orbWin && !orbWin.isDestroyed()) orbWin.destroy()
+  orbWin = null
+}
+
+/* The orb follows the strip: same display, shown and hidden with it, and gone
+   entirely when the layout is back on the ribbon. Called after anything that
+   could change any of those. */
+function syncOrb () {
+  const wanted = settings.layout === 'orb' &&
+    win && !win.isDestroyed() && win.isVisible()
+  if (!wanted) return destroyOrbWindow()
+  const orb = createOrbWindow()
+  orb.setBounds(orbRect())
+  if (!orb.isVisible()) orb.showInactive()
+}
+
+function sendOrb (channel, payload) {
+  if (orbWin && !orbWin.isDestroyed()) orbWin.webContents.send(channel, payload)
 }
 
 function createWindow () {
@@ -148,12 +230,20 @@ function createWindow () {
       refreshTray()
     }
   })
-  win.on('show', () => { applyStripBounds(); refreshTray() })
+  win.on('show', () => { applyStripBounds(); syncOrb(); refreshTray() })
   win.on('hide', () => {
     wake = { awake: false, insideSince: null, outsideSince: null }
     setAwake(false)
+    // ⌃⌥Space hides the app, and the orb is part of the app.
+    syncOrb()
     refreshTray()
   })
+  // The strip can be dragged onto another display; the orb goes with it.
+  win.on('moved', syncOrb)
+
+  // And it exists from the start if that is the layout, rather than waiting
+  // for the first hide-and-show to bring it into being.
+  syncOrb()
 }
 
 /* ------------------------------------------------------------------- menu bar */
@@ -668,6 +758,18 @@ ipcMain.handle('settings:set', (_e, patch) => {
     win.setAlwaysOnTop(settings.alwaysOnTop, 'screen-saver')
   }
   if ('stripHeight' in patch || 'panelHeight' in patch) applyStripBounds()
+  /* The orb is created and destroyed live, because creating a small window is
+     cheap and a visual setting you have to relaunch to see is one you tune
+     badly. Its cost dials go through to the renderer, which rebuilds. */
+  if ('layout' in patch || 'orbSize' in patch || 'orbMargin' in patch) syncOrb()
+  if ('orbSeeds' in patch || 'orbSteps' in patch || 'orbSayScale' in patch ||
+      'orbZoomGain' in patch || 'orbZoomDecay' in patch ||
+      'vizFps' in patch || 'vizQuietFps' in patch) {
+    sendOrb('orb:settings', settings)
+  }
+  if ('alwaysOnTop' in patch && orbWin && !orbWin.isDestroyed()) {
+    orbWin.setAlwaysOnTop(settings.alwaysOnTop, 'screen-saver')
+  }
   // A new folder means a new set of names the parser will answer to.
   if ('spacesDir' in patch) spaceNames().then(list => send('spaces', list))
   return settings
@@ -1205,6 +1307,7 @@ app.on('before-quit', () => { app.isQuitting = true })
 
 app.on('will-quit', () => {
   clearInterval(wakeTimer)
+  destroyOrbWindow()
   cancelRemote()
   globalShortcut.unregisterAll()
   if (tapProc) { tapProc.kill('SIGTERM'); tapProc = null }

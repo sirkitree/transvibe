@@ -1,33 +1,34 @@
 # Tests
 
 ```sh
-npm test          # 790
+npm test          # 843
 npm run test:unit # pure modules only, no whisper binary needed
 ```
 
 | file | | covers |
 |---|---:|---|
-| `commands.test.js` | 217 | command parsing, false positives, transcript edits |
+| `commands.test.js` | 224 | command parsing, false positives, transcript edits |
 | `agents.test.js` | 50 | the roster: names, kinds, providers, and who escalates to whom |
+| `orb.test.js` | 39 | the seed ring, the walk, the mirror, and the zoom envelope |
 | `assist.test.js` | 36 | assist prompts, and the guards on its replies |
 | `wake.test.js` | 35 | the wake phrase: what starts a command, and what is just speech |
 | `settings-voice.test.js` | 34 | changing a setting by voice, and which ones can be |
 | `spaces.test.js` | 30 | desktop Space markers, matching, and switch targets |
 | `escalate.test.js` | 28 | when a local answer is not good enough, and who is asked next |
 | `whisper-parse.test.js` | 28 | output parsing, artifact filter, FIFO queue |
-| `modules.test.js` | 26 | every module imports, and exports what it claims |
+| `modules.test.js` | 27 | every module imports, and exports what it claims |
+| `overlay.test.js` | 26 | strip and orb geometry, hover-wake dwell, the sleep grace |
 | `wav.test.js` | 26 | header byte-exactness, clamping, overflow guards |
 | `cli-agent.test.js` | 24 | spawning a frontier CLI against a fake process: timeouts, cancel, exit codes |
 | `glossary-edit.test.js` | 23 | glossary panel edits, word splitting |
 | `waiting.test.js` | 22 | the wait indicator's timing, and the once-only spoken nudge |
-| `glossary.test.js` | 21 | prompt budget, whole-word corrections, echo filter |
-| `vad.test.js` | 21 | segment boundaries, hangover, force-flush, bad options |
 | `cli.test.js` | 21 | the argv handed to `claude` and `codex`, and reading what they print |
+| `glossary.test.js` | 21 | prompt budget, whole-word corrections, echo filter |
+| `settings-schema.test.js` | 21 | the panel's schema against `config.js`, both directions |
+| `vad.test.js` | 21 | segment boundaries, hangover, force-flush, bad options |
 | `presence.test.js` | 19 | when the transcript fades, when it is forgotten, and what un-fades it |
-| `overlay.test.js` | 17 | strip geometry, hover-wake dwell, the sleep grace |
-| `settings-schema.test.js` | 17 | the panel's schema against `config.js`, both directions |
-| `band.test.js` | 15 | visualizer math stays finite and in-bounds |
-| `conversation.test.js` | 14 | the ask prompt, and what counts as an answer worth speaking |
+| `conversation.test.js` | 18 | the ask prompt, and what counts as an answer worth speaking |
+| `band.test.js` | 15 | the ribbon's math stays finite and in-bounds |
 | `placement.test.js` | 12 | where the strip is allowed to sit on a screen |
 | `saying.test.js` | 12 | the speaking indicator's arithmetic |
 | `models.test.js` | 11 | model discovery against a real directory tree |
@@ -54,6 +55,14 @@ Things the automated tests cannot cover:
 - [ ] Microphone permission prompt appears on first launch
 - [ ] Visualizer sits flat and still when the room is quiet
 - [ ] Visualizer reacts immediately and colorfully to speech
+- [ ] Switching the visualizer to the orb puts a round one in the lower-left corner and empties the ribbon's band, without moving the transcript or the buttons
+- [ ] The orb is click-through everywhere, corners included — clicking it reaches whatever is behind
+- [ ] The orb breathes outward when you speak and settles when the room goes quiet
+- [ ] Holding right ⌥ washes the orb amber, the way it turns the strip amber
+- [ ] A spoken answer draws a smaller ring turning the other way inside the orb, and it goes when the sentence ends
+- [ ] ⌃⌥Space hides the orb along with the strip, and brings both back
+- [ ] The orb sits above the Dock, and moves with the strip to another display
+- [ ] Switching back to the ribbon removes the orb's window and puts both strip canvases back
 - [ ] Text appears while you are still talking, highlighted in blue
 - [ ] Blue interim text is replaced by the final when you stop
 - [ ] Transcript appends within ~1s of finishing a sentence
