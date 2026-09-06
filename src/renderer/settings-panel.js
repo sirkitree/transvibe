@@ -1,4 +1,4 @@
-import { SECTIONS, coerce, formatValue } from './settings-schema.js'
+import { SECTIONS, coerce, formatValue, fieldApplies } from './settings-schema.js'
 
 /**
  * Builds the settings panel from the schema and saves each change as it is
@@ -27,6 +27,9 @@ export function createSettingsPanel ({
 
   const inputs = new Map()   // key -> the element showing it
   const customPanes = new Map()
+  /* Sub-headings, with the fields under each, so a heading whose whole group
+     is hidden goes with it rather than sitting over nothing. */
+  const groups = []
   let built = false
 
   /* Range labels read as what they are — 350ms, 0.020, 24 — not as raw floats.
@@ -78,6 +81,9 @@ export function createSettingsPanel ({
       else {
         await save({ [field.key]: next })
         applyLive(field.key)
+        // Choosing the orb takes the ribbon's dials off the page and puts the
+        // orb's there, in the same gesture that changed it.
+        applyVisibility()
       }
       // Showing it again rather than trusting the click: an external setting
       // can refuse (macOS declining a login item), and then the tick has to go
@@ -98,7 +104,7 @@ export function createSettingsPanel ({
       input.addEventListener('keydown', e => { if (e.key === 'Enter') input.blur() })
     }
 
-    inputs.set(field.key, { field, input, value })
+    inputs.set(field.key, { field, input, value, wrap })
     return wrap
   }
 
@@ -186,6 +192,19 @@ export function createSettingsPanel ({
 
   let tabs = null
 
+  /* Which rows belong on screen at all, given what the settings say. Run on
+     every open and after every change, because a change is exactly what can
+     make a row stop applying. */
+  function applyVisibility () {
+    const settings = getSettings()
+    for (const { field, wrap } of inputs.values()) {
+      wrap.hidden = !fieldApplies(field, settings)
+    }
+    for (const { heading, fields } of groups) {
+      heading.hidden = fields.length > 0 && fields.every(f => !fieldApplies(f, settings))
+    }
+  }
+
   function build () {
     const content = el('div', 'set-sections')
     const panes = []
@@ -210,9 +229,16 @@ export function createSettingsPanel ({
       /* Sub-headings inside a long pane. Six settings read as a list; ten read
          as a wall, and the two at the bottom never get found. */
       let group = null
+      let entry = null
       for (const field of section.fields) {
-        if (field.group && field.group !== group) pane.append(el('h4', 'set-group', field.group))
+        if (field.group && field.group !== group) {
+          const heading = el('h4', 'set-group', field.group)
+          entry = { heading, fields: [] }
+          groups.push(entry)
+          pane.append(heading)
+        }
         group = field.group || group
+        if (entry && field.group === group) entry.fields.push(field)
         pane.append(row(field))
       }
 
@@ -246,6 +272,7 @@ export function createSettingsPanel ({
       if (!built) build()
       // Not awaited: the panel is already on screen, and the one external
       // field filling in a tick later is better than the whole panel waiting.
+      applyVisibility()
       for (const { field } of inputs.values()) show(field)
       for (const { pane, render } of customPanes.values()) render(pane)
     }

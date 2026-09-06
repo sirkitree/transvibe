@@ -838,6 +838,11 @@ body.awake .bar {
 }
 .set-group:first-child { border-top: 0; margin-top: 4px; }
 
+/* A group whose settings all belong to the visualizer that is not running.
+   The heading goes with its rows: a sub-heading over nothing reads as a
+   section that failed to load. */
+.set-row[hidden], .set-group[hidden] { display: none; }
+
 .set-custom { margin-bottom: 6px; }
 
 /* ------------------------------------------------------------------ agents

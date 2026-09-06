@@ -63,6 +63,14 @@ The window is frameless and transparent, sized to the work area's full width, `a
 
 **Fading** is a small state machine in `src/renderer/presence.js`, pure and clock-injected. Anything that counts as interest resets the clock: speech, an interim update, the pointer arriving, a panel being open.
 
+**The orb is a second window.** It sits in the lower-left corner of the screen and the strip is a band across the top, so one window cannot be both without covering everything between them. It is created and destroyed as `layout` changes, follows the strip to whatever display it is on, and hides with it.
+
+**It wakes on a circle, not a rectangle.** A round thing in a square window has four corners with nothing drawn in them, and testing the window would have the orb swallowing the pointer in exactly the part of the screen other things live in. `withinCircle` in `overlay.js` is the hit test, inset a little so the region does not reach past the figure.
+
+The wake is split further than the strip's, because there are two different questions. The pointer being on the orb only *reveals* its two controls — the window stays click-through for that, so moving past the orb never costs you a click on what is behind it. It stops being click-through only while the pointer is on one of the buttons, which the renderer reports the same way the strip reports `overTarget`. And there is no dwell either way: a small round thing in a corner is not something you sweep across on the way somewhere, so holding still on it would only feel slow.
+
+It is also deaf. The microphone, the `AnalyserNode` and the VAD stay in the strip's renderer, which is the only thing that knows what the room is doing and whether the app is listening, speaking or armed; what crosses to the orb is about seven numbers a frame on one channel, one way. Deliberately lossy — a dropped message is a dropped frame of animation and nothing else — and paced off the VAD, so a silent room sends eight a second rather than thirty.
+
 Panels are near-opaque rather than glass. `backdrop-filter` is dead weight on a transparent window with no vibrancy material — there is no backdrop for it to sample — so a translucent panel is really just showing whatever is behind it straight through the text, and a panel is something you opened in order to read.
 
 ## Command parsing
@@ -92,21 +100,24 @@ The glow comes from drawing the band to an offscreen canvas and blitting it twic
 ## Project layout
 
 ```
-src/main/       index.js      window, tray, shortcuts, IPC, send
+src/main/       index.js      windows, tray, shortcuts, IPC, send
                 whisper.js    engine lifecycle + serialised inference queue
                 whisper-parse.js  output parsing, artifact filter, queue
                 wav.js        Float32 → 16-bit PCM WAV
                 models.js     find or download a ggml model
                 spaces.js     the markers, and the apps that are running
-                overlay.js    strip geometry + hover-wake rule (pure)
+                overlay.js    strip and orb geometry + hover-wake rule (pure)
                 config.js     settings persistence
                 assist.js     optional local LLM pass (Ollama)
+                cli-agent.js  spawning `claude` or `codex`, and surviving it
                 speech.js     saying a confirmation out loud via `say`
 src/shared/     agents.js     who you can talk to, and what a name means (pure)
                 spaces.js     which Space or app a spoken name meant (pure)
                 conversation.js  prompts and guards for talking to one (pure)
                 glossary.js   vocabulary prompt + corrections (pure)
                 assist.js     assist prompts + reply guards (pure)
+                escalate.js   when a local answer is not good enough (pure)
+                cli.js        argv for a frontier CLI, and reading it back (pure)
 src/renderer/   app.js        transcript UI, command dispatch, help panel
                 settings-schema.js  what settings.json holds (pure)
                 settings-voice.js   changing a setting by saying so (pure)
@@ -118,8 +129,12 @@ src/renderer/   app.js        transcript UI, command dispatch, help panel
                 commands.js   voice-command parser + applier (pure)
                 wake.js       is an utterance addressed to one of them (pure)
                 glossary-edit.js  glossary panel edit rules (pure)
-                band.js       visualizer math (pure)
-                visualizer.js canvas rendering
+                band.js       the ribbon's math (pure)
+                visualizer.js the ribbon, on a canvas
+                orb.js        the orb's math: ring, walk, mirror, zoom (pure)
+                orb-viz.js    the orb, on a canvas — both its rings
+                orb-window.js the orb window's whole renderer
+                waiting.js    when a slow answer is worth saying something about (pure)
                 saying.js     a synthetic spectrum for the app's own voice (pure)
                 saying-viz.js the same ribbon, small, warm, drawn while it talks
                 pcm-worklet.js

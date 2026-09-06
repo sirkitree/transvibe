@@ -193,6 +193,10 @@ export function createOrbViz (canvas, {
     if (hidden) return
     if (now - lastDraw < (active || saying > 0.01 ? ACTIVE_MS : QUIET_MS)) return
 
+    // Same guard as the ribbon's: a hidden or not-yet-laid-out canvas is 0x0,
+    // and the blit at the end of this throws on a zero-sized source.
+    if (!canvas.clientWidth || !canvas.clientHeight) return
+
     const dt = last ? Math.min((now - last) / 1000, 0.1) : 0.033
     last = now
     lastDraw = now

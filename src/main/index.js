@@ -14,13 +14,16 @@ import { needsFreshFacts, shouldEscalate, escalationChain } from '../shared/esca
 import { speak, stopSpeaking, listVoices } from './speech.js'
 import { findModel, downloadModel, listModels, humanSize, MODELS_DIR } from './models.js'
 import * as config from './config.js'
-import { stripBounds, orbBounds, contains, nextWake } from './overlay.js'
+import { stripBounds, orbBounds, contains, withinCircle, nextWake } from './overlay.js'
 import { listSpaces, listSwitchTargets, dockClickScript } from './spaces.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 let win = null
 let orbWin = null
+let orbHover = false        // the pointer is on the orb, so its controls show
+let orbOverTarget = false   // renderer: the pointer is on one of those controls
+let orbClickable = false
 let tray = null
 let engine = null
 let assist = null
@@ -78,6 +81,9 @@ function applyStripBounds () {
 
 /* The renderer draws the orb; it is told everything it needs on one channel. */
 ipcMain.on('orb:signal', (_e, signal) => sendOrb('orb:signal', signal))
+/* And says when the pointer is on one of its two buttons, which is the only
+   time the orb is allowed to stop being click-through. */
+ipcMain.on('orb:target', (_e, value) => { orbOverTarget = !!value })
 
 function setAwake (value) {
   if (!win || win.isDestroyed()) return
@@ -109,7 +115,38 @@ function pollPointer () {
 
 function startPointerWatch () {
   clearInterval(wakeTimer)
-  wakeTimer = setInterval(pollPointer, POLL_MS)
+  wakeTimer = setInterval(() => { pollPointer(); pollOrb() }, POLL_MS)
+}
+
+/* The orb's version of the strip's wake, and simpler for two reasons: there is
+   no dwell — a small round thing in a corner is not something you sweep across
+   on the way somewhere, so making you hold still on it would only feel slow —
+   and the pointer being on it is not the same question as the pointer being on
+   something clickable.
+
+   Hovering only *shows* the controls. The window stays click-through for that,
+   so the orb does not start eating clicks merely because you moved past it.
+   It stops being click-through only while the pointer is actually on one of
+   the two buttons, which the renderer says. Same division as the strip's, for
+   the same reason. */
+function pollOrb () {
+  if (!orbWin || orbWin.isDestroyed()) return
+  const point = screen.getCursorScreenPoint()
+  // The circle, not the square: the four corners of the window have nothing
+  // drawn in them and belong to whatever is behind.
+  const inside = withinCircle(orbWin.getBounds(), point, { inset: 8 })
+
+  if (inside !== orbHover) {
+    orbHover = inside
+    sendOrb('orb:hover', inside)
+    if (!inside) orbOverTarget = false
+  }
+
+  const clickable = inside && orbOverTarget
+  if (clickable !== orbClickable) {
+    orbClickable = clickable
+    orbWin.setIgnoreMouseEvents(!clickable, { forward: true })
+  }
 }
 
 /* ------------------------------------------------------------------ the orb
@@ -124,11 +161,15 @@ function startPointerWatch () {
    numbers a frame. So the orb can be created and destroyed at will, and if it
    never opens, nothing else notices.
 
-   And it is click-through for its whole life. There is nothing on it to click,
-   which deletes a class of problem the strip had to solve: no hover machine,
-   no dwell, no dead corners. If it ever gains a target, `overlay.js` will need
-   a radial hit test beside `contains()` — a round thing in a square window has
-   four corners that would otherwise swallow the pointer. */
+   It is click-through everywhere except two buttons. Resting the pointer on it
+   shows them and nothing more — the window is still a ghost for that, so
+   hovering the orb never costs you a click on whatever is behind it — and it
+   takes the mouse only while the pointer is actually on one of them. That is
+   the strip's `overTarget` split, applied to a much smaller target.
+
+   And the region is a circle, not the window. A round thing in a square window
+   has four corners with nothing drawn in them, and they sit in the part of the
+   screen other things live in. `withinCircle` is the test. */
 
 function orbRect () {
   const display = win && !win.isDestroyed()
@@ -163,8 +204,13 @@ function createOrbWindow () {
   })
   if (settings.alwaysOnTop) orbWin.setAlwaysOnTop(true, 'screen-saver')
   orbWin.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
-  orbWin.setIgnoreMouseEvents(true)
+  // `forward` keeps mouse-move events coming while it is a ghost, which is
+  // what lets the renderer notice the pointer arriving on a button.
+  orbWin.setIgnoreMouseEvents(true, { forward: true })
   orbWin.loadFile(path.join(__dirname, '..', 'renderer', 'orb.html'))
+  // Whether the microphone is on is drawn on the orb's mute button, so it has
+  // to arrive once at the start as well as on every change.
+  orbWin.webContents.once('did-finish-load', () => sendOrb('listening', listening))
   orbWin.on('closed', () => { orbWin = null })
   return orbWin
 }
@@ -172,6 +218,9 @@ function createOrbWindow () {
 function destroyOrbWindow () {
   if (orbWin && !orbWin.isDestroyed()) orbWin.destroy()
   orbWin = null
+  orbHover = false
+  orbOverTarget = false
+  orbClickable = false
 }
 
 /* The orb follows the strip: same display, shown and hidden with it, and gone
@@ -273,11 +322,7 @@ function refreshTray () {
       label: 'Listening',
       type: 'checkbox',
       checked: listening,
-      click: () => {
-        listening = !listening
-        send('listening', listening)
-        refreshTray()
-      }
+      click: () => setListening(!listening)
     },
     { label: 'Speak a command', accelerator: 'Control+Alt+C', click: () => armCommandMode() },
     { label: 'Send to frontmost app', accelerator: 'Control+Alt+Enter', click: () => send('command', 'send') },
@@ -1298,10 +1343,18 @@ ipcMain.on('overlay:height', (_e, px) => {
   contentHeight = next
   applyStripBounds()
 })
-ipcMain.on('listening', (_e, value) => {
+/* Either window can turn the microphone off — the strip's own button, or the
+   orb's — and both of them draw whether it is on, so the answer goes to both.
+   `onListening` on each side only mirrors state, so an echo to whichever one
+   asked costs nothing and means there is one path rather than two. */
+function setListening (value) {
   listening = !!value
+  send('listening', listening)
+  sendOrb('listening', listening)
   refreshTray()
-})
+}
+
+ipcMain.on('listening', (_e, value) => setListening(value))
 
 app.on('before-quit', () => { app.isQuitting = true })
 

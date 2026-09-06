@@ -4,13 +4,17 @@ The gear on the strip, or **Settings…** in the menu bar (⌘,). Tabs down the 
 
 Two exceptions say so on the row: the speech model and the language are baked into a running whisper server and take effect on restart.
 
-Six tabs, grouped by what you are trying to change rather than by which part of the app does it: **Listening** (what it hears and what it throws away), **Agents** (who you talk to and how they answer), **Transcription** (what turns sound into text), **Sending**, **Visuals** (the strip and the ribbon), and **Advanced** (the plumbing). A long tab carries sub-headings rather than becoming a wall of sliders.
+Six tabs, grouped by what you are trying to change rather than by which part of the app does it: **Listening** (what it hears and what it throws away), **Agents** (who you talk to and how they answer), **Transcription** (what turns sound into text), **Sending**, **Visuals** (the strip, and which visualizer is running), and **Advanced** (the plumbing). A long tab carries sub-headings rather than becoming a wall of sliders.
 
 `vocabulary` and `corrections` are not in it: they have the glossary panel, which is a better editor for them than a text field, and the Transcription tab links there. `agents` is edited in the Agents tab, but as a list of records — a name, a kind, a voice and a model per row — rather than as fields. One setting in the panel is not in the file: **Launch at login** is macOS's, kept in its Login Items list.
 
 ![The settings panel, Listening tab: the tab list down the left, sliders on the right, each with its value and a line saying what it does](images/settings.png)
 
 ![The Transcription tab: a dropdown of the whisper models found on this machine, the language, and the glossary-echo toggle](images/settings-transcription.png)
+
+The Visuals tab shows the dials of the visualizer that is actually running, and not the other one's. Which one is running is the first thing on it, under **The visualizer**, with the two frame rates — those pace whichever it is. Under that comes a second heading naming the one you picked, **The ribbon** or **The orb**, and only ever the one. Eight sliders where half of them do nothing you can see is worse than four, because you have to work out which half.
+
+![The Visuals tab with the orb selected: a Which one dropdown reading “Orb in the corner”, the two frame rates, then the orb’s own dials — size, distance from the corner, filaments, filament length, inner ring size, and the two zoom settings](images/settings-visuals.png)
 
 Most of it is reachable by voice too — "hey Claude, turn off spoken replies", "set the fade to ten seconds", "what's the threshold". Everything in the table below is, except `agents`, `language`, `sendTarget`, `spacesDir`, `modelPath` and `assistUrl`: those are free text or paths, and a misheard wake phrase would take the voice commands with it. [Using transvibe](using.md#settings-by-voice) has the grammar.
 
@@ -54,3 +58,17 @@ Behind it is `~/Library/Application Support/transvibe/settings.json`, written on
 | `vizPoints` | `220` | samples per polyline |
 | `vizFps` | `30` | frame rate while speech is detected |
 | `vizQuietFps` | `8` | frame rate in a silent room |
+| `layout` | `'strip'` | which visualizer runs: `'strip'` for the ribbon, `'orb'` for the round one |
+| `orbSize` | `300` | the orb window's side, in points; shrinks to fit a small display |
+| `orbMargin` | `24` | its inset from the corner of the work area |
+| `orbSeeds` | `120` | filaments; each is drawn twice, so this is half the stroke count |
+| `orbSteps` | `14` | the longest filament's length, in steps away from the ring |
+| `orbSayScale` | `0.4` | the inner ring — the app's own voice — as a fraction of the orb |
+| `orbZoomGain` | `0.5` | how far a loud room opens the figure; `0` holds it still |
+| `orbZoomDecay` | `0.05` | how fast it closes again once the room is quiet |
+| `remote` | `false` | let an agent hand a question its local model cannot answer to a frontier CLI |
+| `remoteAnnounce` | `true` | say "Claude said, …" so a remote answer is never passed off as local |
+| `remoteTimeoutMs` | `30000` | how long a CLI may take before it is given up on |
+| `remoteWebSearch` | `false` | let codex search the web; roughly doubles the wait |
+| `remoteCallsToday` | `{}` | written by the app: how many questions went out, per day |
+| `debugRouting` | `false` | append a line per question to `routing.log`, questions and answers included |

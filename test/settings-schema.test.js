@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { DEFAULTS } from '../src/main/config.js'
 import {
   SECTIONS, FIELDS, GLOSSARY_KEYS, PANEL_KEYS, REMEMBERED_KEYS, EXTERNAL_KEYS,
-  coerce, formatValue, resolveChoice
+  coerce, formatValue, resolveChoice, fieldApplies
 } from '../src/renderer/settings-schema.js'
 
 const fileKeys = FIELDS.filter(f => !f.external).map(f => f.key)
@@ -145,5 +145,47 @@ describe('resolveChoice', () => {
   it('does not match a label as a whole phrase by accident', () => {
     // a partial word is not a choice: "or" must not land on "orb"
     expect(resolveChoice(layout, 'or')).toBeUndefined()
+  })
+})
+
+describe('fieldApplies', () => {
+  const ribbon = FIELDS.find(f => f.key === 'vizPoints')
+  const orb = FIELDS.find(f => f.key === 'orbSeeds')
+  const layout = FIELDS.find(f => f.key === 'layout')
+  const always = FIELDS.find(f => f.key === 'threshold')
+
+  it('shows only the running visualizer\'s dials', () => {
+    expect(fieldApplies(ribbon, { layout: 'strip' })).toBe(true)
+    expect(fieldApplies(orb, { layout: 'strip' })).toBe(false)
+    expect(fieldApplies(ribbon, { layout: 'orb' })).toBe(false)
+    expect(fieldApplies(orb, { layout: 'orb' })).toBe(true)
+  })
+
+  it('always shows the switch between them, and everything unconditional', () => {
+    for (const settings of [{ layout: 'strip' }, { layout: 'orb' }]) {
+      expect(fieldApplies(layout, settings)).toBe(true)
+      expect(fieldApplies(always, settings)).toBe(true)
+    }
+  })
+
+  it('is true for a field that asks for nothing, whatever it is given', () => {
+    expect(fieldApplies({}, {})).toBe(true)
+    expect(fieldApplies(null, null)).toBe(true)
+    expect(fieldApplies(always, null)).toBe(true)
+  })
+
+  it('hides rather than shows when the setting is missing entirely', () => {
+    // A file with no `layout` at all is one config.js will have filled in by
+    // the time the panel reads it; showing both sets would be the wrong guess.
+    expect(fieldApplies(ribbon, {})).toBe(false)
+    expect(fieldApplies(orb, {})).toBe(false)
+  })
+
+  it('leaves every conditional field reachable by voice', () => {
+    // Only the panel hides them. The schema still has them, so the voice path
+    // and the config test both still see them.
+    const hidden = FIELDS.filter(f => f.showWhen)
+    expect(hidden.length).toBeGreaterThan(0)
+    expect(hidden.every(f => f.spoken && f.spoken.length)).toBe(true)
   })
 })

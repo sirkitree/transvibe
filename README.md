@@ -14,7 +14,7 @@ Local voice-to-text for macOS. A click-through strip across the top of the scree
 - Commands chain: "open settings and change the voice to Karen"
 - Settings change by voice too — "turn off spoken replies", "set the fade to ten seconds", "what's the threshold"
 - A second, smaller ribbon appears in the middle while it is talking back — the same visualizer, turned around
-- Or swap the ribbon for the orb: a round one in its own window in the corner of the screen, with the app's own voice as a smaller ring turning inside it
+- Or swap the ribbon for the orb: a round one in its own window in the corner of the screen, with the app's own voice as a smaller ring turning inside it, and mute and close on it when you hover
 - It **says what it did** after a command — you are looking at the app you are dictating into, not at the strip
 - ⌃⌥↩ pastes the transcript straight into whatever app is in front
 - Optionally, a second local model tidies the fillers out and makes command mode understand phrasings the rules never learned
@@ -22,6 +22,8 @@ Local voice-to-text for macOS. A click-through strip across the top of the scree
 - Lives in the menu bar
 
 ![The strip reacting to a spoken sentence: the ribbon flat and dim in silence, alive as the words come, and settling again as the finished transcript appears](docs/images/visualizer.gif)
+
+![The orb: the other visualizer, a ring of glowing filaments in its own window in the corner of the screen, with the app's own voice as a smaller ring turning inside it](docs/images/orb.png)
 
 <!-- demo video goes here: drag the .mp4 into a GitHub comment box, paste the
      user-attachments URL on the next line. Script: docs/demo.md -->
@@ -105,14 +107,14 @@ Settings are a panel on the strip, tabbed down the left, saved and applied as yo
 | [The assist model](docs/assist.md) | Optional local LLM: filler-word cleanup, smarter command mode, and when it may ask a bigger one |
 | [Settings](docs/settings.md) | The settings panel, and every key behind it |
 | [Architecture](docs/architecture.md) | The pipeline, interim results, the overlay, project layout |
-| [Testing](docs/testing.md) | What the 843 tests cover, and the manual checklist |
+| [Testing](docs/testing.md) | What the 854 tests cover, and the manual checklist |
 | [Performance](docs/performance.md) | Where the visualizer's cost went, and what the orb costs |
 | [Demo video](docs/demo.md) | The script for the video at the top of this page |
 
 ## Develop
 
 ```sh
-npm test                      # 843
+npm test                      # 854
 npm run test:unit             # pure modules only, no whisper binary needed
 npm run dev                   # CDP on 9333
 ./script/install-launcher.sh  # -> ~/Applications/Transvibe.app, running this tree

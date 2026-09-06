@@ -1,7 +1,7 @@
 # Tests
 
 ```sh
-npm test          # 843
+npm test          # 854
 npm run test:unit # pure modules only, no whisper binary needed
 ```
 
@@ -13,18 +13,18 @@ npm run test:unit # pure modules only, no whisper binary needed
 | `assist.test.js` | 36 | assist prompts, and the guards on its replies |
 | `wake.test.js` | 35 | the wake phrase: what starts a command, and what is just speech |
 | `settings-voice.test.js` | 34 | changing a setting by voice, and which ones can be |
+| `overlay.test.js` | 32 | strip and orb geometry, the orb's circle, hover-wake dwell, the sleep grace |
 | `spaces.test.js` | 30 | desktop Space markers, matching, and switch targets |
 | `escalate.test.js` | 28 | when a local answer is not good enough, and who is asked next |
 | `whisper-parse.test.js` | 28 | output parsing, artifact filter, FIFO queue |
 | `modules.test.js` | 27 | every module imports, and exports what it claims |
-| `overlay.test.js` | 26 | strip and orb geometry, hover-wake dwell, the sleep grace |
+| `settings-schema.test.js` | 26 | the panel's schema against `config.js`, both directions, and which rows apply |
 | `wav.test.js` | 26 | header byte-exactness, clamping, overflow guards |
 | `cli-agent.test.js` | 24 | spawning a frontier CLI against a fake process: timeouts, cancel, exit codes |
 | `glossary-edit.test.js` | 23 | glossary panel edits, word splitting |
 | `waiting.test.js` | 22 | the wait indicator's timing, and the once-only spoken nudge |
 | `cli.test.js` | 21 | the argv handed to `claude` and `codex`, and reading what they print |
 | `glossary.test.js` | 21 | prompt budget, whole-word corrections, echo filter |
-| `settings-schema.test.js` | 21 | the panel's schema against `config.js`, both directions |
 | `vad.test.js` | 21 | segment boundaries, hangover, force-flush, bad options |
 | `presence.test.js` | 19 | when the transcript fades, when it is forgotten, and what un-fades it |
 | `conversation.test.js` | 18 | the ask prompt, and what counts as an answer worth speaking |
@@ -56,7 +56,11 @@ Things the automated tests cannot cover:
 - [ ] Visualizer sits flat and still when the room is quiet
 - [ ] Visualizer reacts immediately and colorfully to speech
 - [ ] Switching the visualizer to the orb puts a round one in the lower-left corner and empties the ribbon's band, without moving the transcript or the buttons
-- [ ] The orb is click-through everywhere, corners included — clicking it reaches whatever is behind
+- [ ] Resting the pointer on the orb fades in the mute and close buttons; leaving takes them away
+- [ ] Hovering the orb without touching a button still clicks through to whatever is behind
+- [ ] The orb's corners click through even while the buttons are showing
+- [ ] Mute on the orb turns the strip's microphone off, and the strip's own control turns it back on
+- [ ] The orb's close button hides transvibe; ⌃⌥Space brings both windows back
 - [ ] The orb breathes outward when you speak and settles when the room goes quiet
 - [ ] Holding right ⌥ washes the orb amber, the way it turns the strip amber
 - [ ] A spoken answer draws a smaller ring turning the other way inside the orb, and it goes when the sentence ends

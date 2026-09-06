@@ -248,7 +248,7 @@ export const SECTIONS = [
   },
   {
     title: 'Visuals',
-    note: 'The strip has no window: it hangs off the top of the screen and every click lands in whatever is behind it, until the pointer rests on it.',
+    note: 'The strip has no window: it hangs off the top of the screen and every click lands in whatever is behind it, until the pointer rests on it. Below that, the visualizer — which one is running, and then the dials belonging to whichever it is.',
     fields: [
       {
         key: 'alwaysOnTop',
@@ -293,38 +293,9 @@ export const SECTIONS = [
         type: 'range', min: 320, max: 900, step: 20, unit: 'px'
       },
       {
-        group: 'The ribbon',
-        key: 'vizFps',
-        label: 'Frames per second',
-        spoken: ['the frame rate', 'frames per second'],
-        type: 'range', min: 10, max: 60, step: 5
-      },
-      {
-        group: 'The ribbon',
-        key: 'vizQuietFps',
-        label: 'Frames per second when quiet',
-        help: 'A silent room does not need a smooth animation.',
-        spoken: ['the quiet frame rate'],
-        type: 'range', min: 1, max: 30, step: 1
-      },
-      {
-        group: 'The ribbon',
-        key: 'vizLinesPerFamily',
-        label: 'Lines per hue family',
-        spoken: ['the line count', 'lines per family'],
-        type: 'range', min: 4, max: 40, step: 2
-      },
-      {
-        group: 'The ribbon',
-        key: 'vizPoints',
-        label: 'Points per line',
-        spoken: ['the point count', 'points per line'],
-        type: 'range', min: 60, max: 400, step: 20
-      },
-      {
-        group: 'The orb',
+        group: 'The visualizer',
         key: 'layout',
-        label: 'Visualizer',
+        label: 'Which one',
         help: 'The ribbon runs along the top of the strip. The orb is a round one in its own small window in the lower-left corner of the screen, and it carries everything the ribbon does — command mode, whose voice is answering — including the app’s own speech, which becomes a smaller ring turning the other way inside it.',
         spoken: ['the layout', 'the visualizer'],
         type: 'select',
@@ -337,16 +308,57 @@ export const SECTIONS = [
           { value: 'orb', label: 'Orb in the corner' }
         ]
       },
+      /* With the chooser, not under either of the headings below it: these
+         two pace whichever one is running, the orb's signal from the strip
+         included. The panel has one level of heading, so the hierarchy is
+         carried by what each says and by which of them are on screen —
+         "the visualizer" owns the choice and what is true of both, and the
+         heading under it names the one you actually picked. */
+      {
+        group: 'The visualizer',
+        key: 'vizFps',
+        label: 'Frames per second',
+        help: 'Whichever visualizer is running. The single biggest thing either of them costs.',
+        spoken: ['the frame rate', 'frames per second'],
+        type: 'range', min: 10, max: 60, step: 5
+      },
+      {
+        group: 'The visualizer',
+        key: 'vizQuietFps',
+        label: 'Frames per second when quiet',
+        help: 'A silent room does not need a smooth animation.',
+        spoken: ['the quiet frame rate'],
+        type: 'range', min: 1, max: 30, step: 1
+      },
+      {
+        group: 'The ribbon',
+        showWhen: { layout: 'strip' },
+        key: 'vizLinesPerFamily',
+        label: 'Lines per hue family',
+        spoken: ['the line count', 'lines per family'],
+        type: 'range', min: 4, max: 40, step: 2
+      },
+      {
+        group: 'The ribbon',
+        showWhen: { layout: 'strip' },
+        key: 'vizPoints',
+        label: 'Points per line',
+        spoken: ['the point count', 'points per line'],
+        type: 'range', min: 60, max: 400, step: 20
+      },
       {
         group: 'The orb',
+        showWhen: { layout: 'orb' },
         key: 'orbSize',
-        label: 'Orb size',
+        // Under "The orb", "Orb size" is the word twice.
+        label: 'Size',
         help: 'Its window is a square this many points on a side, and shrinks to fit a display too small for it.',
         spoken: ['the orb size', 'how big the orb is'],
         type: 'range', min: 120, max: 600, step: 20, unit: 'px'
       },
       {
         group: 'The orb',
+        showWhen: { layout: 'orb' },
         key: 'orbMargin',
         label: 'Distance from the corner',
         spoken: ['the orb margin', 'the orb inset'],
@@ -354,6 +366,7 @@ export const SECTIONS = [
       },
       {
         group: 'The orb',
+        showWhen: { layout: 'orb' },
         key: 'orbSeeds',
         label: 'Filaments',
         help: 'Each one is drawn twice — once mirrored through the centre — so this is half the stroke count. The dial to turn down first if the orb costs more than the ribbon did.',
@@ -362,6 +375,7 @@ export const SECTIONS = [
       },
       {
         group: 'The orb',
+        showWhen: { layout: 'orb' },
         key: 'orbSteps',
         label: 'Filament length',
         help: 'How far a filament walks away from the ring. Length varies around the ring anyway; this is the longest one.',
@@ -370,6 +384,7 @@ export const SECTIONS = [
       },
       {
         group: 'The orb',
+        showWhen: { layout: 'orb' },
         key: 'orbSayScale',
         label: 'Inner ring size',
         help: 'The app’s own voice, as a fraction of the orb it sits inside.',
@@ -378,6 +393,7 @@ export const SECTIONS = [
       },
       {
         group: 'The orb',
+        showWhen: { layout: 'orb' },
         key: 'orbZoomGain',
         label: 'How far sound opens it',
         spoken: ['the zoom', 'the orb zoom'],
@@ -386,6 +402,7 @@ export const SECTIONS = [
       },
       {
         group: 'The orb',
+        showWhen: { layout: 'orb' },
         key: 'orbZoomDecay',
         label: 'How fast it closes again',
         spoken: ['the zoom decay', 'how fast the orb closes'],
@@ -463,6 +480,27 @@ export const editableKeys = () => FIELDS.map(f => f.key)
  * Numbers arrive as strings; a cleared text field means "unset" for the two
  * settings that are meaningfully null (no forced target app, no pinned model).
  */
+/**
+ * Whether a field is worth showing, given what the settings currently say.
+ *
+ * The two visualizers have four dials each and only one of them is running.
+ * Showing both sets means eight sliders, half of which do nothing you can see
+ * — and a slider that does nothing when you drag it is worse than one that is
+ * not there, because you have to work out which it was.
+ *
+ * Only the panel hides them. They stay in the file, stay reachable by voice,
+ * and are still checked against `config.js` by the schema test: this is about
+ * what is on screen, not about what exists.
+ */
+export function fieldApplies (field, settings) {
+  const when = field && field.showWhen
+  if (!when) return true
+  const current = settings && typeof settings === 'object' ? settings : {}
+  return Object.entries(when).every(([key, want]) => (
+    Array.isArray(want) ? want.includes(current[key]) : current[key] === want
+  ))
+}
+
 /**
  * A spoken value against a select's own choices: "change the visualizer to
  * orb", "make the visualizer the ribbon".

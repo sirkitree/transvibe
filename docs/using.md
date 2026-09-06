@@ -12,6 +12,24 @@ The ribbon along the top edge is the audio itself — three families of lines ov
 
 ![The visualizer at full travel, mid-sentence, with an interim transcript under it](images/visualizer.png)
 
+### Or the orb
+
+**Settings › Visuals › The visualizer** swaps the ribbon for a round one in its own small window in the lower-left corner of the screen. Nothing else moves: the transcript, the bubbles and the buttons stay exactly where they are, and the band the ribbon used is simply empty.
+
+It is a ring of filaments, each trailing off a slowly turning circle and each drawn twice — once reflected through the centre, which is what makes it read as a mandala rather than as a spiral. The whole figure breathes outward when the room does and settles when it goes quiet. Like the ribbon it reacts to music and to people talking in the next room, because it is fed from the microphone rather than from the transcript.
+
+![The orb: a ring of glowing filaments with a smaller amber ring turning inside it](images/orb.png)
+
+It says everything the ribbon says. Command mode washes it amber. Whoever is answering colours it. And the app's own voice, which on the strip is a second small ribbon, is here the smaller ring turning the other way inside it — the same picture at a smaller radius, so there is one thing on screen that the app speaks through rather than two.
+
+![The orb in command mode, with an amber wash behind the ring](images/orb-command.png)
+
+**Rest the pointer on it** and two controls fade in, in the hole in the middle: mute, which stops the microphone, and a close button, which hides transvibe the same way ⌃⌥Space does — it is still listening, it is just not on the screen. Muting shows as a red microphone until you press it again, from either the orb or the strip.
+
+![The orb with the pointer on it: a mute button and a close button in the hole in the middle of the ring](images/orb-controls.png)
+
+It is click-through everywhere else, corners included — hovering it costs you nothing, and only the two buttons themselves ever take a click. There is no dwell: unlike the strip, which you sweep across on the way to the menu bar, the orb sits in a corner nothing else is trying to reach.
+
 **Rest the pointer on it and it wakes**: the words become clickable and the buttons appear. Move away and it is a ghost again. Waking takes a deliberate dwell, so sweeping up to the menu bar never steals a click, and only the text, the buttons and the panels count — a click in the empty air between them reaches the app underneath even while the pointer is on the strip.
 
 **The text fades.** Six seconds after the last thing you said, the transcript fades out. It is still there to send with ⌃⌥↩, but it is now stale: the next thing you say starts a fresh transcript rather than appending to something you can no longer see. Speaking, or reaching for the strip, brings it back. `esc` clears it outright.
@@ -152,7 +170,7 @@ It runs on [Ollama](assist.md), on this machine, like the rest of the model work
 
 A command you gave with your voice gets an answer in the same key: **"deleted the last three words"**, "copied", "not found". The point is the same one the wake phrase is making — while you are dictating you are looking at the app the words are going into, and a confirmation you have to look up at the strip to read is one you will not read.
 
-A small amber ribbon appears in the middle of the strip while it talks — the same visualizer as the one along the top, in miniature and turned around. That one is the room, measured through the microphone; this one is the app, and it cannot be measured at all: `say` plays to the speakers and the microphone is deaf for exactly that window, so the ribbon is drawn from a synthesised spectrum instead. It is honest about the one thing it claims, which is *when*.
+A small amber ribbon appears in the middle of the strip while it talks — the same visualizer as the one along the top, in miniature and turned around. (With [the orb](#or-the-orb) running it is the smaller ring inside it instead, turning the other way, which is the same idea in the shape the orb is already in.) The one along the top is the room, measured through the microphone; this one is the app, and it cannot be measured at all: `say` plays to the speakers and the microphone is deaf for exactly that window, so it is drawn from a synthesised spectrum instead. It is honest about the one thing it claims, which is *when*.
 
 The microphone stops listening for exactly as long as the reply takes, plus a fraction for the room's echo, so the app never transcribes itself. (Echo cancellation is on and is not enough on its own — the speakers are a foot from the mic, and an app that hears the wake phrase in its own confirmation is an app that talks to itself.) Nothing is lost while it is deaf: what you say next opens a fresh utterance.
 

@@ -71,6 +71,12 @@ contextBridge.exposeInMainWorld('transvibe', {
   onOrbSignal: fn => ipcRenderer.on('orb:signal', (_e, signal) => fn(signal)),
   /** the orb rebuilds when its cost dials change */
   onOrbSettings: fn => ipcRenderer.on('orb:settings', (_e, settings) => fn(settings)),
+  /* The orb's controls. The pointer being on the orb shows them; the pointer
+     being on one of them is what makes the window stop being click-through,
+     which is the strip's `setOverTarget` split, in a window that is otherwise
+     a ghost for its whole life. */
+  onOrbHover: fn => ipcRenderer.on('orb:hover', (_e, value) => fn(value)),
+  setOrbTarget: value => ipcRenderer.send('orb:target', value),
   onSpaces: fn => ipcRenderer.on('spaces', (_e, list) => fn(list)),
   onAwake: fn => ipcRenderer.on('awake', (_e, value) => fn(value)),
   setListening: value => ipcRenderer.send('listening', value),

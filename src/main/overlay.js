@@ -75,6 +75,32 @@ export function orbBounds (display, { size = ORB_SIZE, margin = ORB_MARGIN } = {
   }
 }
 
+/**
+ * Whether a screen point falls inside the circle inscribed in a rectangle.
+ *
+ * The orb is round in a square window, and the difference is four corners.
+ * Testing the square would mean the orb quietly swallowing the pointer in
+ * places where there is visibly nothing — which for a window sitting in the
+ * corner of the screen is exactly where other things live.
+ *
+ * `inset` shrinks the circle: the drawn figure does not reach the edge of its
+ * window, and a hover region larger than the thing you are hovering feels
+ * like a mis-click waiting to happen.
+ *
+ * @param {{x,y,width,height}} rect
+ * @param {{x,y}} point
+ * @param {{inset?: number}} [opts]
+ */
+export function withinCircle (rect, point, { inset = 0 } = {}) {
+  if (!rect || !point || !finite(point.x) || !finite(point.y)) return false
+  if (!finite(rect.width) || !finite(rect.height)) return false
+  const r = Math.min(rect.width, rect.height) / 2 - Math.max(0, finite(inset) ? inset : 0)
+  if (r <= 0) return false
+  const dx = point.x - (rect.x + rect.width / 2)
+  const dy = point.y - (rect.y + rect.height / 2)
+  return dx * dx + dy * dy <= r * r
+}
+
 /** @returns {boolean} whether a screen point falls inside a rectangle. */
 export function contains (rect, point) {
   if (!rect || !point || !finite(point.x) || !finite(point.y)) return false

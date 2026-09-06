@@ -6,23 +6,91 @@
         content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'">
   <title>transvibe orb</title>
   <style>
-    /* Nothing here has a background. The window is transparent and permanently
-       click-through, so the only thing on screen is what the canvas paints. */
+    /* Nothing here has a background. The window is transparent and a ghost to
+       the mouse except on the two buttons, so the only thing on screen is what
+       the canvas paints. */
     html, body {
       margin: 0;
       height: 100%;
       background: transparent;
       overflow: hidden;
-      /* Belt and braces: the window is click-through from the main process,
-         and nothing in here is a drag or selection target either. */
       user-select: none;
       -webkit-user-select: none;
+      font: 500 11px -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+      color: rgba(255, 255, 255, 0.92);
     }
     canvas { display: block; width: 100%; height: 100%; }
+
+    /* The controls sit in the hole in the middle of the mandala. That hole is
+       already there and already empty, which is the whole reason to put them
+       in it rather than under the orb: no new shape appears, and the hit
+       region stays the one circle the main process is testing. */
+    #controls {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%) scale(0.94);
+      display: flex;
+      gap: 6px;
+      padding: 5px;
+      border-radius: 999px;
+      background: rgba(14, 16, 22, 0.72);
+      box-shadow: 0 4px 18px rgba(0, 0, 0, 0.45);
+      opacity: 0;
+      /* A ghost until it is shown: `visibility` rather than `display` so the
+         fade has something to animate. */
+      visibility: hidden;
+      transition: opacity 140ms ease, transform 140ms ease, visibility 140ms;
+    }
+    body.hover #controls {
+      opacity: 1;
+      visibility: visible;
+      transform: translate(-50%, -50%) scale(1);
+    }
+
+    #controls button {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 26px;
+      height: 26px;
+      padding: 0;
+      display: grid;
+      place-items: center;
+      border: 0;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.08);
+      color: inherit;
+      cursor: default;
+      transition: background 120ms ease, color 120ms ease;
+    }
+    #controls button:hover { background: rgba(255, 255, 255, 0.18); }
+    /* Muted is a state, not a hover: it has to read at a glance from across
+       the room, which is the only reason anyone looks at the orb. */
+    #controls button.on {
+      background: hsl(8 80% 56% / 0.9);
+      color: #fff;
+    }
+    #controls svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
   </style>
 </head>
 <body>
   <canvas id="orb"></canvas>
+
+  <div id="controls">
+    <button id="mute" type="button" title="Stop listening" aria-label="Stop listening">
+      <svg viewBox="0 0 16 16" aria-hidden="true">
+        <rect x="6" y="1.5" width="4" height="8" rx="2"></rect>
+        <path d="M3.5 7.5a4.5 4.5 0 0 0 9 0M8 12v2.5"></path>
+        <path id="mute-slash" d="M2.5 2.5l11 11" style="display:none"></path>
+      </svg>
+    </button>
+    <button id="hide" type="button" title="Hide transvibe (⌃⌥Space)" aria-label="Hide transvibe">
+      <svg viewBox="0 0 16 16" aria-hidden="true">
+        <path d="M4 4l8 8M12 4l-8 8"></path>
+      </svg>
+    </button>
+  </div>
+
   <script type="module" src="orb-window.js"></script>
 </body>
 </html>

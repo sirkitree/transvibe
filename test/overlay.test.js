@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { stripBounds, orbBounds, contains, nextWake, STRIP_HEIGHT, ORB_SIZE } from '../src/main/overlay.js'
+import { stripBounds, orbBounds, contains, withinCircle, nextWake, STRIP_HEIGHT, ORB_SIZE } from '../src/main/overlay.js'
 
 const display = { workArea: { x: 0, y: 25, width: 1512, height: 920 } }
 
@@ -84,6 +84,51 @@ describe('orbBounds', () => {
     expect(orbBounds(null).width).toBe(ORB_SIZE)
     expect(orbBounds({ workArea: { x: 0, y: 0 } }).height).toBe(ORB_SIZE)
     expect(orbBounds(display, { size: NaN, margin: NaN }).width).toBe(ORB_SIZE)
+  })
+})
+
+describe('withinCircle', () => {
+  const rect = { x: 100, y: 200, width: 300, height: 300 }
+
+  it('takes the middle and the four cardinal edges', () => {
+    expect(withinCircle(rect, { x: 250, y: 350 })).toBe(true)
+    expect(withinCircle(rect, { x: 100, y: 350 })).toBe(true)
+    expect(withinCircle(rect, { x: 400, y: 350 })).toBe(true)
+    expect(withinCircle(rect, { x: 250, y: 200 })).toBe(true)
+    expect(withinCircle(rect, { x: 250, y: 500 })).toBe(true)
+  })
+
+  it('rejects the corners, which is the whole reason it exists', () => {
+    // Just inside the window and well outside the orb. Testing the square
+    // would have the orb swallowing the pointer where nothing is drawn.
+    for (const p of [{ x: 105, y: 205 }, { x: 395, y: 205 }, { x: 105, y: 495 }, { x: 395, y: 495 }]) {
+      expect(contains(rect, p)).toBe(true)
+      expect(withinCircle(rect, p)).toBe(false)
+    }
+  })
+
+  it('shrinks by the inset', () => {
+    const edge = { x: 250, y: 202 }
+    expect(withinCircle(rect, edge)).toBe(true)
+    expect(withinCircle(rect, edge, { inset: 8 })).toBe(false)
+  })
+
+  it('uses the shorter side, so an off-square window still gets a circle', () => {
+    const wide = { x: 0, y: 0, width: 400, height: 200 }
+    expect(withinCircle(wide, { x: 200, y: 5 })).toBe(true)
+    expect(withinCircle(wide, { x: 20, y: 100 })).toBe(false)
+  })
+
+  it('is false rather than throwing on nonsense', () => {
+    expect(withinCircle(null, { x: 1, y: 1 })).toBe(false)
+    expect(withinCircle(rect, null)).toBe(false)
+    expect(withinCircle(rect, { x: NaN, y: 1 })).toBe(false)
+    expect(withinCircle({ x: 0, y: 0 }, { x: 0, y: 0 })).toBe(false)
+  })
+
+  it('is empty when the inset eats the whole circle', () => {
+    expect(withinCircle(rect, { x: 250, y: 350 }, { inset: 150 })).toBe(false)
+    expect(withinCircle(rect, { x: 250, y: 350 }, { inset: 999 })).toBe(false)
   })
 })
 

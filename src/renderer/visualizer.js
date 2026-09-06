@@ -115,6 +115,12 @@ export function createVisualizer (canvas, {
        level-based test never idled and a silent room still painted at 30fps. */
     if (now - lastDraw < (active ? ACTIVE_MS : QUIET_MS)) return
 
+    /* A canvas with no size is a canvas that is `display: none` — the other
+       layout is running. The class comes off before the ResizeObserver has
+       resized anything back, so there is a frame in between where the
+       offscreen buffer is still 0x0 and `drawImage` throws on it. */
+    if (!canvas.clientWidth || !canvas.clientHeight) return
+
     const dt = last ? Math.min((now - last) / 1000, 0.1) : 0.016
     last = now
     lastDraw = now
