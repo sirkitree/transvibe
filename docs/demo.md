@@ -85,6 +85,16 @@ Keep it under 10 MB if you can. GitHub renders an uploaded `.mp4` as a player: d
 
 A GIF is the fallback if the video will not play inline, but it will be several times the size for the same length and the text will be softer. Prefer the video.
 
+## The orb's GIF
+
+`docs/images/orb.gif` is not screen-recorded. The orb window is transparent and click-through, so a screen recording of it is a recording of whatever happened to be behind it, and waiting for a real room to be quiet, then loud, then have the app answer, is a long wait for seven seconds of footage.
+
+It is captured over the debug port instead, with `npm run dev` running and `layout` set to `orb`: the strip's renderer has its `AnalyserNode` swapped for a synthetic one on a timeline — quiet, someone talking, the app answering, quiet — and the orb window is screenshotted through CDP while it draws. The signal still travels the app's own path, so what is recorded is the real renderer reading a fake room, not a picture of one.
+
+Two things that are easy to get wrong. Drive the *analyser*, not the orb: the strip posts the orb a signal every frame, so anything writing to `window.__orb.setSignal` directly is overwritten a few times a second and the inner ring never appears. And raise `vizQuietFps` for the recording, or a silent room is captured at eight frames a second.
+
+`ffmpeg -framerate <measured> -i f%04d.png -vf "crop=...,scale=...,fps=14,split[a][b];[a]palettegen=stats_mode=diff[p];[b][p]paletteuse=diff_mode=rectangle" -loop 0` assembles it. `stats_mode=diff` and `diff_mode=rectangle` matter here: nearly every pixel is unchanged black, and telling the encoder so is the difference between 860 KB and several megabytes.
+
 ## Do not record this
 
 **Spoken self-corrections.** "Ship it Friday, no wait, Thursday" *sometimes* comes back corrected and sometimes keeps both halves. It is a great party trick when it lands and a dead demo when it does not.

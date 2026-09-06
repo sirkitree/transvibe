@@ -14,11 +14,11 @@ The ribbon along the top edge is the audio itself — three families of lines ov
 
 ### Or the orb
 
-**Settings › Visuals › The visualizer** swaps the ribbon for a round one in its own small window in the lower-left corner of the screen. Nothing else moves: the transcript, the bubbles and the buttons stay exactly where they are, and the band the ribbon used is simply empty.
+There are two visualizers and you pick one. The ribbon is what runs unless you say otherwise; **Settings › Visuals › The visualizer** swaps it for a round one in its own small window in the lower-left corner of the screen. It is a visual choice and nothing more — the same microphone, the same signals, drawn somewhere else. Nothing about the strip moves either: the transcript, the bubbles and the buttons stay exactly where they are, and the band the ribbon used is simply empty.
 
 It is a ring of filaments, each trailing off a slowly turning circle and each drawn twice — once reflected through the centre, which is what makes it read as a mandala rather than as a spiral. The whole figure breathes outward when the room does and settles when it goes quiet. Like the ribbon it reacts to music and to people talking in the next room, because it is fed from the microphone rather than from the transcript.
 
-![The orb: a ring of glowing filaments with a smaller amber ring turning inside it](images/orb.png)
+![The orb: dim and small in a silent room, opening as someone speaks, settling again, then a smaller ring turning the other way inside it while the app answers](images/orb.gif)
 
 It says everything the ribbon says. Command mode washes it amber. Whoever is answering colours it. And the app's own voice, which on the strip is a second small ribbon, is here the smaller ring turning the other way inside it — the same picture at a smaller radius, so there is one thing on screen that the app speaks through rather than two.
 

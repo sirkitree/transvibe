@@ -23,7 +23,9 @@ Local voice-to-text for macOS. A click-through strip across the top of the scree
 
 ![The strip reacting to a spoken sentence: the ribbon flat and dim in silence, alive as the words come, and settling again as the finished transcript appears](docs/images/visualizer.gif)
 
-![The orb: the other visualizer, a ring of glowing filaments in its own window in the corner of the screen, with the app's own voice as a smaller ring turning inside it](docs/images/orb.png)
+**The orb is the other option for the same thing.** The ribbon above is what you get out of the box; Settings › Visuals swaps it for a round one in its own window in the corner of the screen. It says everything the ribbon says — it breathes open when the room does, washes amber in command mode, and draws the app's own voice as a smaller ring turning the other way inside it.
+
+![The orb: a ring of glowing filaments, dim in a silent room, opening as someone speaks, then a smaller ring turning the other way inside it while the app answers](docs/images/orb.gif)
 
 <!-- demo video goes here: drag the .mp4 into a GitHub comment box, paste the
      user-attachments URL on the next line. Script: docs/demo.md -->
