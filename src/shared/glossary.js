@@ -70,6 +70,24 @@ function toPattern (phrase) {
 }
 
 /**
+ * The spellings one rule catches.
+ *
+ * A comma separates alternatives: `"Mirror, Myra, Meera": "Mira"` is three
+ * spellings of the same name, not one phrase nobody will ever say. Writing it
+ * that way is what people do unprompted when editing the settings file by
+ * hand, and read literally it is a rule that can never match — a fix that sits
+ * in the glossary looking like it works. So it means what it looks like it
+ * means. A phrase with a comma genuinely in it is not a thing Whisper emits as
+ * a single term, so nothing is lost.
+ *
+ * @param {string} from one correction's left-hand side
+ * @returns {string[]}
+ */
+export function heardSpellings (from) {
+  return String(from == null ? '' : from).split(',').map(squash).filter(Boolean)
+}
+
+/**
  * Rewrite known mistranscriptions.
  *
  * @param {string} text
@@ -82,7 +100,8 @@ export function applyCorrections (text, corrections) {
   const pairs = Array.isArray(corrections) ? corrections : Object.entries(corrections || {})
   // Longest source first, so 'claude code' wins over 'claude' when both are listed.
   const ordered = pairs
-    .map(([from, to]) => [squash(from), String(to == null ? '' : to)])
+    .flatMap(([from, to]) =>
+      heardSpellings(from).map(one => [one, String(to == null ? '' : to)]))
     .filter(([from]) => from)
     .sort((a, b) => b[0].length - a[0].length)
   for (const [from, to] of ordered) {
@@ -105,12 +124,25 @@ function stripPunctuation (text) {
 
 /**
  * @param {string} text a finished transcript
- * @param {{vocabulary?: string[], corrections?: object}} glossary
+ * @param {{vocabulary?: string[], corrections?: object, names?: string[]}} glossary
+ *   `names` are the agents' wake names, which are exempt: see below.
  * @returns {boolean} the whole utterance is glossary terms and nothing else
  */
-export function isGlossaryEcho (text, { vocabulary = [], corrections = {} } = {}) {
+export function isGlossaryEcho (text, { vocabulary = [], corrections = {}, names = [] } = {}) {
   const body = stripPunctuation(text)
   if (!body) return false
+
+  /* An agent's name, said on its own, is the one utterance that is *supposed*
+     to be nothing but a term: "hey mira" arms her and waits for the sentence
+     after it. Somebody who has also put that name in the glossary — which is
+     the obvious thing to do, so the model spells it right — would otherwise
+     have made their own wake word unsayable, and in the most confusing way
+     available: it stops working precisely when the model gets good enough to
+     transcribe it exactly. Addressed is not echoed. */
+  const addressed = (Array.isArray(names) ? names : [])
+    .map(stripPunctuation)
+    .filter(Boolean)
+  if (addressed.includes(body)) return false
 
   // What the model was primed with, plus what corrections rewrite things into
   // — an echo can arrive by either road.

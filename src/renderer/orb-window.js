@@ -48,6 +48,7 @@ window.transvibe.getSettings().then(build).catch(err => {
 const controls = document.getElementById('controls')
 const muteButton = document.getElementById('mute')
 const muteSlash = document.getElementById('mute-slash')
+const moveButton = document.getElementById('move')
 const hideButton = document.getElementById('hide')
 
 let listening = true
@@ -69,6 +70,50 @@ muteButton.onclick = () => {
   drawListening()
   window.transvibe.setListening(listening)
 }
+
+/* --------------------------------------------------------------- moving it
+
+   The lower-left corner is where the orb starts, not where it has to live —
+   what sits in that corner of your screen is not what sits in mine. The handle
+   is a button rather than the orb itself for the same reason the other two
+   are: the window takes the mouse only while the pointer is on a control, and
+   a circle you could grab anywhere would be a circle that eats every click
+   that lands on it.
+
+   Only the grab and the release are reported. Where the orb goes in between is
+   the main process's business — it follows the cursor on the screen, which is
+   the one coordinate system that is not moving while the window is. */
+
+let moving = false
+
+const endMove = () => {
+  if (!moving) return
+  moving = false
+  document.body.classList.remove('moving')
+  window.transvibe.setOrbDrag('end')
+}
+
+moveButton.addEventListener('pointerdown', e => {
+  if (e.button !== 0) return
+  e.preventDefault()
+  moving = true
+  document.body.classList.add('moving')
+  window.transvibe.setOrbDrag('start')
+})
+
+/* On the window rather than the button: the pointer can be let go anywhere,
+   and a drag that ends off the handle still has to end. */
+window.addEventListener('pointerup', endMove)
+window.addEventListener('pointercancel', endMove)
+// A window that lost the mouse mid-drag would otherwise still think it is held.
+window.addEventListener('blur', endMove)
+
+// Somewhere regrettable is easy to reach and should be easy to leave: the same
+// double-click that re-centres a dragged panel on the strip.
+moveButton.addEventListener('dblclick', () => {
+  endMove()
+  window.transvibe.orbHome()
+})
 
 // The same thing ⌃⌥Space does, and the same thing it undoes: the app is still
 // listening and still there, it is just not on the screen.

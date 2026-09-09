@@ -1,4 +1,4 @@
-# transvibe
+# trans(cr/v)ibe
 
 Local voice-to-text for macOS. A click-through strip across the top of the screen that listens continuously, transcribes on-device with [whisper.cpp](https://github.com/ggml-org/whisper.cpp), and draws a colorful "electric" audio visualizer hanging off the top edge.
 
@@ -14,7 +14,7 @@ Local voice-to-text for macOS. A click-through strip across the top of the scree
 - Commands chain: "open settings and change the voice to Karen"
 - Settings change by voice too — "turn off spoken replies", "set the fade to ten seconds", "what's the threshold"
 - A second, smaller ribbon appears in the middle while it is talking back — the same visualizer, turned around
-- Or swap the ribbon for the orb: a round one in its own window in the corner of the screen, with the app's own voice as a smaller ring turning inside it, and mute and close on it when you hover
+- Or swap the ribbon for the orb: a round one in its own window in the corner of the screen, with the app's own voice as a smaller ring turning inside it, and mute, a drag handle and close on it when you hover
 - It **says what it did** after a command — you are looking at the app you are dictating into, not at the strip
 - ⌃⌥↩ pastes the transcript straight into whatever app is in front
 - Optionally, a second local model tidies the fillers out and makes command mode understand phrasings the rules never learned

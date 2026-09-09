@@ -99,13 +99,15 @@
 
         <h3>Fix what it writes</h3>
         <p class="note">Applied after the fact, whole-word and ignoring case —
-          the backstop for words it still gets wrong.</p>
+          the backstop for words it still gets wrong. Several spellings of the
+          same mistake go in at once, separated by commas; ✎ puts a fix back in
+          the form to change it.</p>
         <div class="rules" id="rule-rows"></div>
         <form class="gl-add pair" id="rule-form">
-          <input id="rule-from" type="text" placeholder="heard" autocomplete="off" spellcheck="false">
+          <input id="rule-from" type="text" placeholder="heard, or heard, misheard" autocomplete="off" spellcheck="false">
           <span class="arrow">→</span>
           <input id="rule-to" type="text" placeholder="written" autocomplete="off" spellcheck="false">
-          <button type="submit">add</button>
+          <button type="submit" id="rule-submit">add</button>
         </form>
       </div>
       <div class="panel-foot" id="glossary-note">Changes apply to the next thing you say.</div>

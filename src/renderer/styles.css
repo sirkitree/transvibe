@@ -718,7 +718,7 @@ body.awake .bar {
 
 .rule {
   display: grid;
-  grid-template-columns: 1fr auto 1fr auto;
+  grid-template-columns: 1fr auto 1fr auto auto;
   align-items: center;
   gap: 8px;
   padding: 3px 0;
@@ -726,6 +726,11 @@ body.awake .bar {
   border-bottom: 1px solid hsl(var(--accent) 60% 65% / 0.12);
 }
 .rule .heard { color: var(--text-dim); }
+/* The row currently loaded into the form below, so it is obvious which one a
+   save is about to overwrite. */
+.rule.editing { background: hsl(var(--accent) 60% 50% / 0.14); }
+.rule.editing .heard { color: var(--text); }
+.gl-add.editing input { border-color: hsl(var(--accent) 55% 60% / 0.7); }
 .rule .arrow, .gl-add .arrow, .fixer-form .arrow { color: hsl(var(--accent) 50% 68% / 0.8); }
 
 .gl-add {

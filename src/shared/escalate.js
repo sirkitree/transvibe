@@ -193,6 +193,66 @@ export function shouldEscalate (answer = {}) {
 }
 
 /* ------------------------------------------------------------------ *
+ * was it worth it
+ * ------------------------------------------------------------------ */
+
+/* Words that survive the length filter below without saying anything about
+   what an answer is about. Short on purpose: four letters already removes
+   "the", "is" and "a", and every word added here is one that two disagreeing
+   answers are allowed to have in common. */
+const EMPTY_WORDS = new Set([
+  'about', 'after', 'also', 'been', 'before', 'being', 'both', 'from', 'have',
+  'here', 'into', 'just', 'like', 'more', 'most', 'much', 'only', 'other',
+  'over', 'same', 'some', 'such', 'than', 'that', 'their', 'them', 'then',
+  'there', 'these', 'they', 'this', 'those', 'through', 'very', 'were',
+  'what', 'when', 'where', 'which', 'while', 'with', 'would', 'your'
+])
+
+/* What an answer is about, with everything two answers to the same question
+   would share anyway taken out. */
+const contentWords = text => new Set(
+  squash(text).toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/)
+    .filter(word => word.length >= 4 && !EMPTY_WORDS.has(word)))
+
+/* How much of the shorter answer has to appear in the longer one. Half is
+   coarse, and deliberately so: this is asked about two answers to the same
+   question, where the failure it looks for is a different answer and not a
+   differently worded one. */
+const AGREEMENT = 0.5
+
+/**
+ * Did the better model say the same thing as the smaller one?
+ *
+ * Never user-facing and never part of a decision — by the time this can be
+ * asked, the answer has already been chosen and spoken. What it measures is
+ * whether an escalation *bought* anything, which is how a rule above earns
+ * its place or gets narrowed: a rule that fires often and then hears the same
+ * answer back is spending eight seconds to confirm something the local model
+ * already had right.
+ *
+ * Containment rather than Jaccard, because the two answers are not the same
+ * length and are not meant to be. "Paris" and "The capital of France is
+ * Paris" agree; a measure that divides by the union calls them different and
+ * would make every terse local answer look like a miss.
+ *
+ * Three-valued on purpose. "Yes", "about ten" and "it depends" carry no
+ * content words at all, and a guess about those would put noise into the only
+ * numbers there are. Undecidable is a real answer here, and the counters skip
+ * it rather than rounding it to one side.
+ *
+ * @returns {boolean|null} null when there is not enough in either to compare
+ */
+export function answersAgree (a, b) {
+  const one = contentWords(a)
+  const two = contentWords(b)
+  if (!one.size || !two.size) return null
+
+  let shared = 0
+  for (const word of one) if (two.has(word)) shared += 1
+  return shared / Math.min(one.size, two.size) >= AGREEMENT
+}
+
+/* ------------------------------------------------------------------ *
  * asking the bigger model
  * ------------------------------------------------------------------ */
 

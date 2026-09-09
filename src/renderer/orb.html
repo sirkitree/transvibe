@@ -64,6 +64,12 @@
       transition: background 120ms ease, color 120ms ease;
     }
     #controls button:hover { background: rgba(255, 255, 255, 0.18); }
+    /* The one button that is held rather than pressed, and says so. */
+    #move { cursor: grab; }
+    body.moving #move { cursor: grabbing; background: rgba(255, 255, 255, 0.24); }
+    /* Mid-drag the controls stay put and stay visible: hover is not being
+       polled while the window is following the pointer. */
+    body.moving #controls { opacity: 1; visibility: visible; }
     /* Muted is a state, not a hover: it has to read at a glance from across
        the room, which is the only reason anyone looks at the orb. */
     #controls button.on {
@@ -82,6 +88,15 @@
         <rect x="6" y="1.5" width="4" height="8" rx="2"></rect>
         <path d="M3.5 7.5a4.5 4.5 0 0 0 9 0M8 12v2.5"></path>
         <path id="mute-slash" d="M2.5 2.5l11 11" style="display:none"></path>
+      </svg>
+    </button>
+    <!-- The handle. Dragging the orb by the orb would mean the window taking
+         the mouse everywhere on it, which is the click-through HUD giving up
+         what it is for; a button is a target you have already decided to
+         touch. Double-click puts it back in its corner. -->
+    <button id="move" type="button" title="Drag to move (double-click for the corner)" aria-label="Move the orb">
+      <svg viewBox="0 0 16 16" aria-hidden="true">
+        <path d="M8 2v12M2 8h12M8 2L6 4M8 2l2 2M8 14l-2-2M8 14l2-2M2 8l2-2M2 8l2 2M14 8l-2-2M14 8l-2 2"></path>
       </svg>
     </button>
     <button id="hide" type="button" title="Hide transvibe (⌃⌥Space)" aria-label="Hide transvibe">

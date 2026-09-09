@@ -38,7 +38,8 @@ function freePort () {
  */
 export function createEngine ({
   modelPath, threads = 6, language = 'en',
-  vocabulary = [], corrections = {}, dropGlossaryEcho = true, confidenceFloor = 0
+  vocabulary = [], corrections = {}, dropGlossaryEcho = true, confidenceFloor = 0,
+  names = []
 }) {
   const serverBin = which('whisper-server')
   const cliBin = which('whisper-cli')
@@ -49,6 +50,8 @@ export function createEngine ({
   let prompt = buildPrompt(vocabulary)
   let fixups = corrections
   let terms = vocabulary
+  // The agents' wake names, which the echo rule has to leave alone.
+  let addressed = names
   let dropEcho = dropGlossaryEcho
   let floor = confidenceFloor
   let proc = null
@@ -151,12 +154,18 @@ export function createEngine ({
        is the one that knows: this is the same text it produced, thrown away
        on its own numbers. */
     if (!isConfident(parsed.confidence, floor)) {
-      return { ...parsed, text: '', dropped: 'not speech' }
+      /* With the number in it, because the floor is a setting and the only way
+         to tune it is to see what it just rejected. A drop at -0.52 against a
+         floor of -0.5 is a floor set slightly too high; one at -1.4 is the
+         rule doing its job. */
+      const score = Number.isFinite(parsed.confidence) ? ` (${parsed.confidence.toFixed(2)})` : ''
+      return { ...parsed, text: '', dropped: `not speech${score}` }
     }
     const text = applyCorrections(cleanTranscript(parsed.text), fixups)
     // An utterance that is nothing but glossary words is the prompt coming
     // back, not something that was said.
-    const echo = dropEcho && isGlossaryEcho(text, { vocabulary: terms, corrections: fixups })
+    const echo = dropEcho &&
+      isGlossaryEcho(text, { vocabulary: terms, corrections: fixups, names: addressed })
     return { ...parsed, text: echo ? '' : text }
   })
 
@@ -170,9 +179,10 @@ export function createEngine ({
     transcribe: (samples, opts = {}) => queue.push({ samples, opts }),
     get pending () { return queue.size },
     /** Swap the glossary in place; takes effect on the next utterance. */
-    setGlossary ({ vocabulary, corrections, dropGlossaryEcho, confidenceFloor } = {}) {
+    setGlossary ({ vocabulary, corrections, dropGlossaryEcho, confidenceFloor, names } = {}) {
       if (dropGlossaryEcho !== undefined) dropEcho = !!dropGlossaryEcho
       if (confidenceFloor !== undefined) floor = Number(confidenceFloor) || 0
+      if (names !== undefined) addressed = Array.isArray(names) ? names : []
       if (vocabulary !== undefined) { prompt = buildPrompt(vocabulary); terms = vocabulary }
       if (corrections !== undefined) fixups = corrections || {}
     },

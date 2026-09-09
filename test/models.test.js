@@ -2,7 +2,22 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { modelName, humanSize, listModels } from '../src/main/models.js'
+import { modelName, humanSize, listModels, DOWNLOADABLE } from '../src/main/models.js'
+
+describe('DOWNLOADABLE', () => {
+  it('offers a model worth upgrading to, not just the small ones', () => {
+    expect(DOWNLOADABLE).toContain('large-v3-turbo')
+    expect(DOWNLOADABLE).toContain('large-v3-turbo-q5_0')
+  })
+
+  it('names each one the way the file on disk will be read back', () => {
+    // The name in this list and the name the settings panel shows for the
+    // downloaded file have to be the same string, or the model reads as two.
+    for (const name of DOWNLOADABLE) {
+      expect(modelName(`ggml-${name}.bin`)).toBe(name)
+    }
+  })
+})
 
 describe('modelName', () => {
   it('strips the ggml prefix and the extension', () => {

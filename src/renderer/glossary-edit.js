@@ -58,25 +58,45 @@ export function removeTerm (terms, term) {
 
 /**
  * @param {Record<string,string>} corrections
- * @param {string} from what Whisper hears
+ * @param {string} from what Whisper hears — several spellings if it has commas
  * @param {string} to what it should have written
+ * @param {{replacing?: string}} [opts] the entry being edited, which is
+ *   removed even when the new left-hand side is spelled differently
  */
-export function addCorrection (corrections, from, to) {
+export function addCorrection (corrections, from, to, { replacing = '' } = {}) {
   const base = { ...(corrections || {}) }
-  const heard = squash(from)
+  /* One rule per spelling rather than one comma-joined key. The recogniser
+     reads both — a comma means "or" on either road — but a rule you can see,
+     remove and edit on its own is worth more in a list than a tidier file. */
+  const heard = parseTermInput(from)
   const write = squash(to)
-  if (!heard || !write) {
+  if (!heard.length || !write) {
     return { ok: false, corrections: base, error: 'both sides are required' }
   }
-  if (key(heard) === key(write)) {
+  const same = heard.filter(one => key(one) === key(write))
+  if (same.length) {
     return { ok: false, corrections: base, error: 'those are the same word' }
   }
-  // Case-insensitive at match time, so two keys differing only in case would be
-  // one rule with an arbitrary winner. Replace the old spelling instead.
-  const clash = Object.keys(base).find(k => key(k) === key(heard))
-  if (clash !== undefined) delete base[clash]
-  base[heard] = write
-  return { ok: true, corrections: base, replaced: clash !== undefined }
+
+  // Editing an existing fix: the row being edited goes, whatever it was called,
+  // so renaming its left-hand side moves the rule instead of cloning it.
+  const edited = squash(replacing)
+  if (edited) {
+    for (const k of Object.keys(base)) if (key(k) === key(edited)) delete base[k]
+  }
+
+  const replaced = []
+  for (const one of heard) {
+    /* Case-insensitive at match time, so two keys differing only in case would
+       be one rule with an arbitrary winner. Replace the old spelling instead. */
+    const clash = Object.keys(base).find(k => key(k) === key(one))
+    if (clash !== undefined) {
+      delete base[clash]
+      replaced.push(clash)
+    }
+    base[one] = write
+  }
+  return { ok: true, corrections: base, added: heard, replaced, edited: !!edited }
 }
 
 export function removeCorrection (corrections, from) {

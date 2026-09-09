@@ -77,6 +77,13 @@ contextBridge.exposeInMainWorld('transvibe', {
      a ghost for its whole life. */
   onOrbHover: fn => ipcRenderer.on('orb:hover', (_e, value) => fn(value)),
   setOrbTarget: value => ipcRenderer.send('orb:target', value),
+  /* Dragging the orb somewhere else. The renderer reports only the grab and
+     the release; where the window goes in between is worked out in the main
+     process, from the cursor, because the window is moving under the pointer
+     the whole time. */
+  setOrbDrag: phase => ipcRenderer.send('orb:drag', phase),
+  /** put the orb back in its corner */
+  orbHome: () => ipcRenderer.send('orb:home'),
   onSpaces: fn => ipcRenderer.on('spaces', (_e, list) => fn(list)),
   onAwake: fn => ipcRenderer.on('awake', (_e, value) => fn(value)),
   setListening: value => ipcRenderer.send('listening', value),

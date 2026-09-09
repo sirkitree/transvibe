@@ -70,6 +70,45 @@ describe('orbBounds', () => {
     expect(orbBounds(display, { size: 4 }).width).toBe(120)
   })
 
+  it('goes where it was dragged, as an offset from the work area', () => {
+    expect(orbBounds(display, { at: { x: 400, y: 100 } }))
+      .toEqual({ x: 400, y: 125, width: 300, height: 300 })
+  })
+
+  it('carries a dragged position onto another display', () => {
+    const right = { workArea: { x: 1512, y: 0, width: 1920, height: 1080 } }
+    expect(orbBounds(right, { at: { x: 400, y: 100 } }).x).toBe(1912)
+  })
+
+  it('may sit against an edge, because the margin is a start and not a fence', () => {
+    expect(orbBounds(display, { at: { x: 0, y: 0 } }))
+      .toEqual({ x: 0, y: 25, width: 300, height: 300 })
+  })
+
+  it('clamps a position that would hang off the screen', () => {
+    // 1512 - 300, and 920 - 300, both from the work area's own origin.
+    const rect = orbBounds(display, { at: { x: 9000, y: 9000 } })
+    expect(rect).toEqual({ x: 1212, y: 645, width: 300, height: 300 })
+  })
+
+  it('clamps a negative position back onto the screen', () => {
+    expect(orbBounds(display, { at: { x: -80, y: -80 } }))
+      .toEqual({ x: 0, y: 25, width: 300, height: 300 })
+  })
+
+  it('ignores a position that is not a pair of numbers', () => {
+    const corner = orbBounds(display)
+    expect(orbBounds(display, { at: null })).toEqual(corner)
+    expect(orbBounds(display, { at: { x: 10 } })).toEqual(corner)
+    expect(orbBounds(display, { at: { x: NaN, y: 10 } })).toEqual(corner)
+  })
+
+  it('still shrinks to fit when it has been dragged', () => {
+    const small = { workArea: { x: 0, y: 0, width: 800, height: 200 } }
+    const rect = orbBounds(small, { size: 300, margin: 24, at: { x: 700, y: 0 } })
+    expect(rect).toEqual({ x: 648, y: 0, width: 152, height: 152 })
+  })
+
   it('takes a zero margin literally', () => {
     expect(orbBounds(display, { size: 200, margin: 0 })).toEqual({
       x: 0, y: 745, width: 200, height: 200

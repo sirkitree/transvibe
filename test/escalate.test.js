@@ -1,9 +1,10 @@
 import { describe, it, expect } from 'vitest'
 import {
   PASS_SENTINEL, saysUnsure, needsFreshFacts, shouldEscalate,
-  buildEscalationPrompt, attribute, escalationChain
+  buildEscalationPrompt, attribute, escalationChain, answersAgree
 } from '../src/shared/escalate.js'
 import { acceptAnswer } from '../src/shared/conversation.js'
+import { QUESTIONS, ANSWERS, PAIRS } from './routing-cases.js'
 
 describe('the PASS sentinel', () => {
   it('is the token conversation.js recognises, so the two cannot drift apart', () => {
@@ -13,76 +14,50 @@ describe('the PASS sentinel', () => {
   })
 })
 
+/* The two phrase rules are checked against test/routing-cases.js rather than
+   against assertions written out here, because the corpus is the part that has
+   to grow: a misroute you notice is one line there, and the lists in
+   escalate.js can then be rewritten freely without losing the cases that made
+   them necessary. script/routing.mjs replays the same corpus and prints what
+   it gets wrong, including the cases marked `known`, which are skipped here —
+   a red suite is not a to-do list. */
+const asserted = cases => cases.filter(c => !c.known)
+
+const label = (text, note) => note || String(text).slice(0, 64) || '(nothing)'
+
 describe('saysUnsure', () => {
-  it('catches a model declining before it has said anything', () => {
-    expect(saysUnsure("I'm not sure — that happened after my training data.")).toBe(true)
-    expect(saysUnsure('I do not know.')).toBe(true)
-    expect(saysUnsure("I don't have access to current information.")).toBe(true)
-    expect(saysUnsure('I cannot browse the web, so I cannot check.')).toBe(true)
-    expect(saysUnsure('As an AI, I have no information about that.')).toBe(true)
-    expect(saysUnsure("I can't help with that one.")).toBe(true)
-  })
-
-  it('leaves an answer alone when the hedge is a caveat on the end of it', () => {
-    // The interesting false positive: this answered the question, and
-    // re-asking a frontier model would cost eight seconds to hear "Paris".
-    expect(saysUnsure(
-      'The capital of France is Paris, a city of a couple of million people ' +
-      'depending on where you draw the boundary, though I am not sure about ' +
-      'the exact population inside the city limits itself these days.'
-    )).toBe(false)
-  })
-
-  it('counts a hedge that opens a long answer, however much follows it', () => {
-    expect(saysUnsure(
-      'I do not know which version that is, but the release before it changed ' +
-      'the module resolution rules, added a permission model, and moved the ' +
-      'test runner out of the experimental section entirely.'
-    )).toBe(true)
-  })
-
-  it('still counts a hedge late in a short answer, where it is the whole reply', () => {
-    expect(saysUnsure('Paris, I think, but I am not sure.')).toBe(true)
-  })
-
-  it('is not fooled by ordinary uncertainty words in a real answer', () => {
-    expect(saysUnsure('It is probably around ten milliseconds.')).toBe(false)
-    expect(saysUnsure('Roughly forty, give or take.')).toBe(false)
-    expect(saysUnsure('You can access it from the settings panel.')).toBe(false)
-    expect(saysUnsure('Certainly — hold the key and speak.')).toBe(false)
-  })
+  for (const { said, unsure, note } of asserted(ANSWERS)) {
+    it(`${unsure ? 'hears a decline' : 'hears an answer'}: ${label(said, note)}`, () => {
+      expect(saysUnsure(said)).toBe(unsure)
+    })
+  }
 
   it('says nothing about nothing', () => {
-    expect(saysUnsure('')).toBe(false)
     expect(saysUnsure(null)).toBe(false)
   })
 })
 
 describe('needsFreshFacts', () => {
-  it('routes a question about now straight past the local model', () => {
-    expect(needsFreshFacts('what is the latest version of node')).toBe(true)
-    expect(needsFreshFacts("what's in the news today")).toBe(true)
-    expect(needsFreshFacts('who won the game last night, as of today')).toBe(true)
-    expect(needsFreshFacts('what is the price of a bitcoin')).toBe(true)
-    expect(needsFreshFacts('what is the release date for the next one')).toBe(true)
-    expect(needsFreshFacts('what is the weather like')).toBe(true)
-    expect(needsFreshFacts('what happened this week')).toBe(true)
+  for (const { ask, route, note } of asserted(QUESTIONS)) {
+    it(`${route}: ${label(ask, note)}`, () => {
+      expect(needsFreshFacts(ask)).toBe(route === 'fresh')
+    })
+  }
+})
+
+describe('answersAgree', () => {
+  for (const { a, b, agree, note } of PAIRS) {
+    it(`${agree === null ? 'cannot tell' : agree ? 'agree' : 'differ'}: ${label(`${a} / ${b}`, note)}`, () => {
+      expect(answersAgree(a, b)).toBe(agree)
+    })
+  }
+
+  it('is symmetrical, because neither answer is the authority', () => {
+    for (const { a, b } of PAIRS) expect(answersAgree(a, b)).toBe(answersAgree(b, a))
   })
 
-  it('does not hear a deadline as a news question', () => {
-    // 'latest' is a time of day here, and sending this to a web-searching CLI
-    // would spend fourteen seconds on a question about lunch.
-    expect(needsFreshFacts('what is the latest you can arrive')).toBe(false)
-    expect(needsFreshFacts("what's the latest on that bug I mentioned")).toBe(false)
-  })
-
-  it('leaves questions that have always had the same answer alone', () => {
-    expect(needsFreshFacts('what is the capital of france')).toBe(false)
-    expect(needsFreshFacts('how do I reverse a string in javascript')).toBe(false)
-    expect(needsFreshFacts('why is the sky blue')).toBe(false)
-    expect(needsFreshFacts('good news or bad news first')).toBe(false)
-    expect(needsFreshFacts('what price did I pay for being clever there')).toBe(false)
-    expect(needsFreshFacts('')).toBe(false)
+  it('does not throw on junk', () => {
+    expect(answersAgree(null, undefined)).toBe(null)
   })
 })
 

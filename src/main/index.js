@@ -10,7 +10,9 @@ import { createEngine } from './whisper.js'
 import { createAssist, listOllamaModels } from './assist.js'
 import { createCliAgent, listCliAgents } from './cli-agent.js'
 import { defaultModel, isRemote } from '../shared/agents.js'
-import { needsFreshFacts, shouldEscalate, escalationChain } from '../shared/escalate.js'
+import {
+  needsFreshFacts, shouldEscalate, escalationChain, answersAgree
+} from '../shared/escalate.js'
 import { speak, stopSpeaking, listVoices } from './speech.js'
 import { findModel, downloadModel, listModels, humanSize, MODELS_DIR } from './models.js'
 import * as config from './config.js'
@@ -24,6 +26,8 @@ let orbWin = null
 let orbHover = false        // the pointer is on the orb, so its controls show
 let orbOverTarget = false   // renderer: the pointer is on one of those controls
 let orbClickable = false
+let orbDrag = null          // an in-flight drag: where it started, and from where
+let orbDragTimer = null
 let tray = null
 let engine = null
 let assist = null
@@ -84,6 +88,13 @@ ipcMain.on('orb:signal', (_e, signal) => sendOrb('orb:signal', signal))
 /* And says when the pointer is on one of its two buttons, which is the only
    time the orb is allowed to stop being click-through. */
 ipcMain.on('orb:target', (_e, value) => { orbOverTarget = !!value })
+/* Grabbing and letting go of the drag handle. Where the orb goes in between is
+   worked out here, from the cursor. */
+ipcMain.on('orb:drag', (_e, phase) => {
+  if (phase === 'start') startOrbDrag()
+  else endOrbDrag()
+})
+ipcMain.on('orb:home', () => homeOrb())
 
 function setAwake (value) {
   if (!win || win.isDestroyed()) return
@@ -131,6 +142,10 @@ function startPointerWatch () {
    the same reason. */
 function pollOrb () {
   if (!orbWin || orbWin.isDestroyed()) return
+  /* A drag owns the orb until it is let go. Hover would otherwise be tested
+     against a window that is moving with the pointer, and one fast enough to
+     leave the circle behind for a poll would take the mouse away mid-drag. */
+  if (orbDrag) return
   const point = screen.getCursorScreenPoint()
   // The circle, not the square: the four corners of the window have nothing
   // drawn in them and belong to whatever is behind.
@@ -172,10 +187,83 @@ function pollOrb () {
    screen other things live in. `withinCircle` is the test. */
 
 function orbRect () {
-  const display = win && !win.isDestroyed()
+  return orbBounds(orbDisplay(), {
+    size: settings.orbSize,
+    margin: settings.orbMargin,
+    at: settings.orbPosition
+  })
+}
+
+/* -------------------------------------------------------- moving the orb
+
+   The corner is a default, not a decision: whatever is in the lower-left of
+   your screen is not the same as what is in mine. So the orb can be dragged,
+   by a handle among its controls rather than by the orb itself — grabbing the
+   whole circle would mean the window taking the mouse on hover, which is the
+   one thing the click-through HUD exists not to do.
+
+   The renderer says only "started" and "stopped". The motion is followed here
+   from the cursor rather than from mouse events, because the window is moving
+   under the pointer and a renderer counting its own deltas would be chasing a
+   coordinate system it is being dragged around inside. Position is saved once,
+   on release: a drag is one decision, not four hundred. */
+
+const ORB_DRAG_MS = 16
+
+function orbDisplay () {
+  return win && !win.isDestroyed()
     ? screen.getDisplayMatching(win.getBounds())
     : screen.getPrimaryDisplay()
-  return orbBounds(display, { size: settings.orbSize, margin: settings.orbMargin })
+}
+
+function startOrbDrag () {
+  if (!orbWin || orbWin.isDestroyed() || orbDrag) return
+  const bounds = orbWin.getBounds()
+  orbDrag = { from: screen.getCursorScreenPoint(), at: { x: bounds.x, y: bounds.y } }
+  // Held clickable for the whole drag, whatever the pointer wanders over.
+  orbClickable = true
+  orbWin.setIgnoreMouseEvents(false)
+  clearInterval(orbDragTimer)
+  orbDragTimer = setInterval(moveOrbToCursor, ORB_DRAG_MS)
+}
+
+/** Where the orb would sit now, clamped to the display it is being dragged on. */
+function orbDragRect () {
+  const point = screen.getCursorScreenPoint()
+  const size = orbWin.getBounds()
+  const area = orbDisplay().workArea
+  return orbBounds(orbDisplay(), {
+    size: Math.min(size.width, size.height),
+    margin: settings.orbMargin,
+    at: {
+      x: orbDrag.at.x + (point.x - orbDrag.from.x) - area.x,
+      y: orbDrag.at.y + (point.y - orbDrag.from.y) - area.y
+    }
+  })
+}
+
+function moveOrbToCursor () {
+  if (!orbDrag || !orbWin || orbWin.isDestroyed()) return endOrbDrag()
+  orbWin.setBounds(orbDragRect())
+}
+
+function endOrbDrag () {
+  clearInterval(orbDragTimer)
+  orbDragTimer = null
+  if (!orbDrag) return
+  const moved = orbWin && !orbWin.isDestroyed() ? orbDragRect() : null
+  orbDrag = null
+  if (!moved) return
+  orbWin.setBounds(moved)
+  const area = orbDisplay().workArea
+  settings = config.save({ orbPosition: { x: moved.x - area.x, y: moved.y - area.y } })
+}
+
+/** Back to the corner, for when it has been dragged somewhere regrettable. */
+function homeOrb () {
+  endOrbDrag()
+  settings = config.save({ orbPosition: null })
+  syncOrb()
 }
 
 function createOrbWindow () {
@@ -216,6 +304,9 @@ function createOrbWindow () {
 }
 
 function destroyOrbWindow () {
+  clearInterval(orbDragTimer)
+  orbDragTimer = null
+  orbDrag = null
   if (orbWin && !orbWin.isDestroyed()) orbWin.destroy()
   orbWin = null
   orbHover = false
@@ -396,6 +487,15 @@ function send (channel, payload) {
   if (win && !win.isDestroyed()) win.webContents.send(channel, payload)
 }
 
+/* The names the agents answer to. The transcriber needs them for one reason
+   only: an utterance that is nothing but a name is somebody being addressed,
+   which is the one case the glossary-echo rule must not throw away. */
+function agentNames () {
+  return (Array.isArray(settings.agents) ? settings.agents : [])
+    .map(a => a && a.name)
+    .filter(Boolean)
+}
+
 async function initEngine () {
   let modelPath = findModel(settings.modelPath)
 
@@ -416,7 +516,8 @@ async function initEngine () {
       vocabulary: settings.vocabulary,
       corrections: settings.corrections,
       dropGlossaryEcho: settings.dropGlossaryEcho,
-      confidenceFloor: settings.confidenceFloor
+      confidenceFloor: settings.confidenceFloor,
+      names: agentNames()
     })
     await engine.start()
     send('status', { state: 'ready', message: path.basename(modelPath), mode: engine.mode })
@@ -777,12 +878,14 @@ ipcMain.handle('settings:set', (_e, patch) => {
   settings = config.save(patch)
   // Glossary edits apply to the next utterance — no need to restart the server.
   if (engine && ('vocabulary' in patch || 'corrections' in patch ||
-      'dropGlossaryEcho' in patch || 'confidenceFloor' in patch)) {
+      'dropGlossaryEcho' in patch || 'confidenceFloor' in patch || 'agents' in patch)) {
     engine.setGlossary({
       vocabulary: settings.vocabulary,
       corrections: settings.corrections,
       dropGlossaryEcho: settings.dropGlossaryEcho,
-      confidenceFloor: settings.confidenceFloor
+      confidenceFloor: settings.confidenceFloor,
+      // Renaming an agent renames what the echo rule has to let through.
+      names: agentNames()
     })
   }
   if ('cleanup' in patch || 'commandFallback' in patch || 'agents' in patch ||
@@ -806,7 +909,8 @@ ipcMain.handle('settings:set', (_e, patch) => {
   /* The orb is created and destroyed live, because creating a small window is
      cheap and a visual setting you have to relaunch to see is one you tune
      badly. Its cost dials go through to the renderer, which rebuilds. */
-  if ('layout' in patch || 'orbSize' in patch || 'orbMargin' in patch) syncOrb()
+  if ('layout' in patch || 'orbSize' in patch || 'orbMargin' in patch ||
+      'orbPosition' in patch) syncOrb()
   if ('orbSeeds' in patch || 'orbSteps' in patch || 'orbSayScale' in patch ||
       'orbZoomGain' in patch || 'orbZoomDecay' in patch ||
       'vizFps' in patch || 'vizQuietFps' in patch) {
@@ -919,6 +1023,45 @@ function countRemoteCall () {
   settings = config.save({ remoteCallsToday: { [day]: used + 1 } })
 }
 
+/* The jobs allowed to leave this machine.
+
+   Not a permission check in any real sense — the four call sites are all in
+   the next hundred lines and every one of them passes a literal. It is a name
+   for the invariant, so that a fifth job cannot reach a CLI without somebody
+   typing it here and reading what that means. The two jobs that may never get
+   here (cleanup, commandFallback) cannot reach this function at all, and
+   test/boundary.test.js is what keeps that true; this catches the other way
+   in, which is a new handler calling askRemote directly. */
+const REMOTE_JOBS = new Set(['chat', 'fresh', 'asked'])
+
+/* How the escalation rules are doing. Numbers, and nothing else.
+
+   Two rates come out of this, per rule. How often it fires and the better
+   model then says the same thing anyway — that is the rule reaching for a
+   frontier model to be told what gemma already said, and eight seconds of a
+   quiet room for it. And how often you reached past it yourself: `asked` is
+   "Mira, ask Claude about this", which is you saying the rule should have
+   fired and did not. Those are the only two errors this can make, and both
+   of them are counted here without anyone having to keep notes.
+
+   No question and no answer is written down. The strip forgets a transcript
+   twenty seconds after you stop talking, and a permanent ledger of everything
+   you ever asked out loud would be the one place in this app that did not.
+   The text belongs in routing.log, behind a flag you turned on and can
+   delete. This is counters, always on, and it says nothing about you. */
+function countRouting (reason, agreed = null) {
+  if (!reason) return
+  const stats = settings.routingStats || {}
+  const row = { fired: 0, agreed: 0, differed: 0, ...(stats[reason] || {}) }
+  row.fired += 1
+  /* Three-valued, because answersAgree is: an answer with no content words in
+     it settles nothing, and rounding it to either side would put noise into
+     the only numbers there are. */
+  if (agreed === true) row.agreed += 1
+  if (agreed === false) row.differed += 1
+  settings = config.save({ routingStats: { ...stats, [reason]: row } })
+}
+
 /* How the picker's "2.7s last answer" line finds a measurement again.
 
    A local model is keyed by its Ollama tag, as it always has been. A remote
@@ -978,7 +1121,14 @@ async function askLocal (question, history, options = {}) {
 
 /* One question, out to a CLI. The only function in this file that spawns
    anything, so it is the only place the cap and the counter have to be. */
-async function askRemote (agent, question, history, { priorAnswer = '', webSearch, canEscalate = false } = {}) {
+async function askRemote (agent, question, history, { job, priorAnswer = '', webSearch, canEscalate = false } = {}) {
+  /* Fails closed rather than throwing. Every caller below already falls back
+     to the local model when this does not answer, so a job that should not be
+     here costs an escalation and not the question. */
+  if (!REMOTE_JOBS.has(job)) {
+    logRouting('remote', { agent: agent.name, job, ok: false, reason: 'not a job that may leave the machine' })
+    return { text: '', ok: false, reason: 'that is not a question this app sends out' }
+  }
   countRemoteCall()
   const cli = remoteFor(agent.provider)
   const started = Date.now()
@@ -996,6 +1146,7 @@ async function askRemote (agent, question, history, { priorAnswer = '', webSearc
   noteModelStat(answer, agent.provider)
   logRouting('remote', {
     agent: agent.name,
+    job,
     provider: agent.provider,
     model: answer.model,
     ok: answer.ok,
@@ -1036,7 +1187,9 @@ async function walkChain (chain, question, history) {
         capped = true
         continue
       }
-      answer = await askRemote(target, question, history)
+      /* Always the same job: walkChain exists for one caller, the chain
+         behind a question somebody asked a chat agent. */
+      answer = await askRemote(target, question, history, { job: 'chat' })
     } else {
       answer = await askLocal(question, history,
         { model: target.model, thinking: target.thinking })
@@ -1102,8 +1255,15 @@ ipcMain.handle('assist:ask', async (_e, question, history, options) => {
        was — is the thing missing from it. */
     logRouting('ask', { question: asked, agent: agent.name, direct: true, chain: chain.map(a => a.name) })
     if (remoteBudget().left <= 0) return cappedResult(null, agent.name)
-    const answer = await askRemote(agent, asked, history)
-    if (answer.ok) return { ...answer, via: agent.name, escalated: null }
+    const answer = await askRemote(agent, asked, history, { job: 'chat' })
+    if (answer.ok) {
+      /* Counted apart from the rules. Nothing decided this — you asked a CLI
+         by name — and folding it in would make every rule look busier than it
+         is. It is worth a row of its own for the opposite reason: it says how
+         much of a day's remote spend the router is not responsible for. */
+      countRouting('direct')
+      return { ...answer, via: agent.name, escalated: null }
+    }
     /* Signed out, not installed, or a network that is not there. Degrade to
        whatever is on this machine rather than to nothing — and without the
        agent's model, which names a frontier model Ollama has never heard of.
@@ -1123,8 +1283,15 @@ ipcMain.handle('assist:ask', async (_e, question, history, options) => {
     ? chain.find(a => a.provider === 'codex')
     : null
   if (fresh && remoteBudget().left > 0) {
-    const answer = await askRemote(fresh, asked, history, { webSearch: true })
-    if (answer.ok) return { ...answer, via: fresh.name, escalated: 'fresh' }
+    const answer = await askRemote(fresh, asked, history, { job: 'fresh', webSearch: true })
+    if (answer.ok) {
+      /* Fired, and that is all this can say: there is no local answer to
+         compare it with, because not asking for one is the whole point of the
+         route. Whether needsFreshFacts fires when it should is settled by the
+         corpus in test/routing-cases.js, which does not need a model at all. */
+      countRouting('fresh')
+      return { ...answer, via: fresh.name, escalated: 'fresh' }
+    }
     // It did not answer, so the local model gets its ordinary turn after all.
   }
 
@@ -1138,12 +1305,28 @@ ipcMain.handle('assist:ask', async (_e, question, history, options) => {
     verdict,
     chain: chain.map(a => a.name)
   })
-  if (!verdict.escalate || !chain.length) {
+  if (!verdict.escalate) {
+    countRouting('kept')
+    return { ...local, via: name, escalated: null }
+  }
+  if (!chain.length) {
+    // The rule fired. There was simply nobody on the roster to hand it to,
+    // which is a fact about the settings and not about the rule.
+    countRouting(verdict.why)
     return { ...local, via: name, escalated: null }
   }
 
   const { answer, via, capped } = await walkChain(chain, asked, history)
-  if (answer) return { ...answer, via: via.name, escalated: verdict.why }
+  if (answer) {
+    /* The measurement this whole tally exists for. `unsure` is the rule that
+       can be wrong in the expensive direction — it throws away an answer that
+       was already in hand — and it is the only reason that arrives here with a
+       local answer to compare against. `pass`, `failed` and `empty` come with
+       nothing to compare, and answersAgree says so rather than guessing. */
+    countRouting(verdict.why, answersAgree(local.text, answer.text))
+    return { ...answer, via: via.name, escalated: verdict.why }
+  }
+  countRouting(verdict.why)
   if (capped) return cappedResult(local, name)
   /* Nobody better answered. The local reply — hedge, admission of defeat and
      all — is what there is, and it is still better than silence. */
@@ -1183,11 +1366,16 @@ ipcMain.handle('assist:escalate', async (_e, question, priorAnswer, history, opt
      concerned — they asked somebody else — it just does not leave the room. */
   if (!isRemote(target)) {
     const answer = await askLocal(asked, history, { model: target.model, thinking: target.thinking })
+    countRouting('asked', answer.ok && prior ? answersAgree(prior, answer.text) : null)
     return { ...answer, via: target.name, escalated: 'asked' }
   }
 
   if (remoteBudget().left <= 0) return cappedResult(null, target.name)
-  const answer = await askRemote(target, asked, history, { priorAnswer: prior })
+  const answer = await askRemote(target, asked, history, { job: 'asked', priorAnswer: prior })
+  /* You overrode the router. Whether you were right is the one thing it cannot
+     work out for itself, and here it is for free: a differing answer means a
+     rule above should have escalated and did not. */
+  countRouting('asked', answer.ok && prior ? answersAgree(prior, answer.text) : null)
   return { ...answer, via: target.name, escalated: 'asked' }
 })
 

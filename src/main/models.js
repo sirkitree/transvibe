@@ -49,8 +49,29 @@ const DOWNLOADS = {
     file: 'ggml-small.en.bin',
     url: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.en.bin',
     bytes: 487601967
+  },
+  /* The large encoder with a decoder distilled down to four layers, which is
+     why it is worth its size: close to large-v3's accuracy at a speed the
+     small models are the usual excuse for. Multilingual only — there is no
+     .en build of it — which costs nothing here, because the language is
+     pinned in settings and passed to whisper on every utterance.
+
+     The quantized one is the same model at a third of the disk and nearly the
+     same accuracy, for machines where 1.6 GB resident is the objection. */
+  'large-v3-turbo': {
+    file: 'ggml-large-v3-turbo.bin',
+    url: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin',
+    bytes: 1624555275
+  },
+  'large-v3-turbo-q5_0': {
+    file: 'ggml-large-v3-turbo-q5_0.bin',
+    url: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin',
+    bytes: 574041195
   }
 }
+
+/** The models we know how to fetch, for anything offering a choice of them. */
+export const DOWNLOADABLE = Object.keys(DOWNLOADS)
 
 /**
  * The model's name, dug out of whatever the file that holds it is called.

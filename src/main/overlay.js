@@ -50,11 +50,17 @@ export function stripBounds (display, { height = STRIP_HEIGHT } = {}) {
  * the bottom-left sits above it with no special case, and follows it when the
  * Dock is hidden or moved to another edge.
  *
+ * `at` is where it has been dragged to, as an offset from the top-left of the
+ * work area rather than a screen point: the orb follows the strip onto other
+ * displays, and a remembered screen coordinate would put it off the edge of a
+ * smaller one. Offsets are clamped so the window always lands fully inside the
+ * work area, however the screen has changed since. `null` is the corner.
+ *
  * @param {{workArea?: {x,y,width,height}, bounds?: object}} display
- * @param {{size?: number, margin?: number}} [opts]
+ * @param {{size?: number, margin?: number, at?: {x:number,y:number}|null}} [opts]
  * @returns {{x:number, y:number, width:number, height:number}}
  */
-export function orbBounds (display, { size = ORB_SIZE, margin = ORB_MARGIN } = {}) {
+export function orbBounds (display, { size = ORB_SIZE, margin = ORB_MARGIN, at = null } = {}) {
   const area = (display && display.workArea) || (display && display.bounds) || null
   const inset = Math.max(0, finite(margin) ? margin : ORB_MARGIN)
   const want = Math.max(MIN_ORB, finite(size) ? size : ORB_SIZE)
@@ -66,6 +72,20 @@ export function orbBounds (display, { size = ORB_SIZE, margin = ORB_MARGIN } = {
     MIN_ORB,
     Math.min(want, area.width - inset * 2, area.height - inset * 2)
   ))
+  const placed = at && finite(at.x) && finite(at.y)
+  if (placed) {
+    /* Dragged: the margin no longer applies. It is the rule for where the orb
+       starts, not a fence it has to stay behind — putting it against an edge
+       is a thing people do with a HUD on purpose. The screen edge still
+       holds, because a window half off it cannot be dragged back. */
+    const clamp = (v, max) => Math.round(Math.min(Math.max(v, 0), Math.max(0, max)))
+    return {
+      x: Math.round(area.x) + clamp(at.x, area.width - side),
+      y: Math.round(area.y) + clamp(at.y, area.height - side),
+      width: side,
+      height: side
+    }
+  }
   return {
     x: Math.round(area.x + inset),
     // Bottom-left: the far edge of the work area, less the orb and its margin.

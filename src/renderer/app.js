@@ -79,6 +79,8 @@ const state = {
   asking: false,
   askSeq: 0,         // guards against a slow answer landing after a newer question
   pendingPlacement: null,   // where a panel is being dragged to, until released
+  // Which glossary fix is loaded into the form for editing, by what it hears.
+  editingRule: null,
   // The word fixer's checkboxes, remembered across opens: whoever turns
   // 'remember' off is usually making a run of one-off fixes, not one.
   fixRemember: true,
@@ -1797,16 +1799,45 @@ function renderGlossary () {
   } else {
     for (const [from, to] of entries) {
       const row = el('div', 'rule')
+      if (state.editingRule === from) row.classList.add('editing')
+      /* A fix that turned out to be wrong used to be removed and retyped from
+         nothing, both halves of it, to change one letter. Edit puts it back in
+         the form it was written in — the same two fields, the same submit —
+         and saving replaces the row it came from rather than adding a second
+         one beside it. */
+      const edit = el('button', null, '✎')
+      edit.type = 'button'
+      edit.title = `Edit ${from}`
+      edit.onclick = () => editRule(from, to)
       const remove = el('button', null, '×')
       remove.type = 'button'
       remove.title = `Remove ${from}`
-      remove.onclick = () =>
+      remove.onclick = () => {
+        if (state.editingRule === from) editRule(null)
         saveGlossary({ corrections: removeCorrection(corrections, from).corrections })
+      }
       row.append(el('span', 'heard', from), el('span', 'arrow', '→'),
-        el('span', 'wrote', to), remove)
+        el('span', 'wrote', to), edit, remove)
       rows.append(row)
     }
   }
+}
+
+/* Loading a fix back into the form, and the one bit of state that goes with
+   it: which row will be replaced when the form is submitted. Called with null
+   to stop editing, which is also what clicking the same row's pencil twice
+   does — the way out has to be as cheap as the way in. */
+function editRule (from, to = '') {
+  const same = from !== null && state.editingRule === from
+  state.editingRule = same ? null : from
+  const fromEl = $('rule-from')
+  const toEl = $('rule-to')
+  fromEl.value = state.editingRule ? from : ''
+  toEl.value = state.editingRule ? to : ''
+  $('rule-form').classList.toggle('editing', !!state.editingRule)
+  $('rule-submit').textContent = state.editingRule ? 'save' : 'add'
+  renderGlossary()
+  if (state.editingRule) fromEl.focus()
 }
 
 function wireGlossary () {
@@ -1825,14 +1856,30 @@ function wireGlossary () {
     e.preventDefault()
     const from = $('rule-from')
     const to = $('rule-to')
-    const result = addCorrection(state.settings.corrections || {}, from.value, to.value)
+    const result = addCorrection(state.settings.corrections || {}, from.value, to.value,
+      { replacing: state.editingRule || '' })
     if (!result.ok) return glossaryNote(result.error, true)
-    from.value = ''
-    to.value = ''
+    const { added, replaced, edited } = result
+    editRule(null)
     await saveGlossary({ corrections: result.corrections })
-    glossaryNote(result.replaced ? 'replaced an existing fix' : 'fix added')
+    /* Says what happened rather than that something did: typing three
+       spellings into one field makes three rules, which is worth seeing once
+       before you trust it. */
+    glossaryNote(edited
+      ? `fix updated${added.length > 1 ? ` — ${added.length} spellings` : ''}`
+      : added.length > 1
+        ? `added ${added.join(', ')}`
+        : replaced.length ? 'replaced an existing fix' : 'fix added')
     from.focus()
   }
+
+  // Escape backs out of an edit without touching the fix it came from.
+  $('rule-form').addEventListener('keydown', e => {
+    if (e.key === 'Escape' && state.editingRule) {
+      e.stopPropagation()
+      editRule(null)
+    }
+  })
 }
 
 /* ---------------------------------------------------------------- word fixer

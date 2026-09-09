@@ -83,8 +83,35 @@ describe('addCorrection', () => {
   it('replaces a key differing only in case, rather than adding a rival', () => {
     const r = addCorrection({ Drupple: 'Drupal' }, 'drupple', 'Drupal!')
     expect(r.ok).toBe(true)
-    expect(r.replaced).toBe(true)
+    expect(r.replaced).toEqual(['Drupple'])
     expect(r.corrections).toEqual({ drupple: 'Drupal!' })
+  })
+
+  it('makes one rule per spelling when several are given at once', () => {
+    /* Typed as one field because that is how the mistake is described — "it
+       writes Myra or Meera" — and stored as separate rules because that is
+       how each of them is then removed or edited. */
+    const r = addCorrection({}, 'Mirror, Myra, Meera', 'Mira')
+    expect(r.ok).toBe(true)
+    expect(r.added).toEqual(['Mirror', 'Myra', 'Meera'])
+    expect(r.corrections).toEqual({ Mirror: 'Mira', Myra: 'Mira', Meera: 'Mira' })
+  })
+
+  it('rejects the batch if any spelling is the word it writes', () => {
+    expect(addCorrection({}, 'Myra, Mira', 'Mira').error).toBe('those are the same word')
+  })
+
+  it('edits a fix in place, taking the old row with it when it is renamed', () => {
+    const base = { Mirror: 'Mira', Drupple: 'Drupal' }
+    const r = addCorrection(base, 'Myra', 'Mira', { replacing: 'Mirror' })
+    expect(r.ok).toBe(true)
+    expect(r.edited).toBe(true)
+    expect(r.corrections).toEqual({ Drupple: 'Drupal', Myra: 'Mira' })
+  })
+
+  it('edits only the right-hand side without disturbing the rest', () => {
+    const r = addCorrection({ Mirror: 'Mira' }, 'Mirror', 'Mira Jane', { replacing: 'Mirror' })
+    expect(r.corrections).toEqual({ Mirror: 'Mira Jane' })
   })
 
   it('does not mutate the map it was given', () => {

@@ -109,6 +109,13 @@ export const DEFAULTS = {
   layout: 'strip',
   orbSize: 300,
   orbMargin: 24,
+  /* Where the orb has been dragged to, as an offset from the top-left of the
+     display's work area. Remembered rather than chosen, like `panelPosition`:
+     the way you set it is by moving the thing. An offset rather than a screen
+     point because the orb follows the strip onto other displays. `null` is the
+     lower-left corner, `orbMargin` in from both edges, which is where it
+     starts and where the drag handle's double-click puts it back. */
+  orbPosition: null,
   orbSeeds: 120,
   orbSteps: 14,
   orbSayScale: 0.4,
@@ -179,6 +186,25 @@ export const DEFAULTS = {
      that reset every time the app restarted would not be a cap. Written by the
      app, not by you. */
   remoteCallsToday: {},
+
+  /* How the escalation rules are doing, counted rather than described.
+
+     A row per reason — `pass`, `unsure`, `failed`, `empty`, `fresh`, plus
+     `kept` for the answers that stayed here and `asked` for the times you
+     reached past the router yourself. Each row is three numbers: how often it
+     fired, and, where there were two answers to hold up against each other,
+     how often the better model agreed with the smaller one anyway.
+
+     That second number is the whole point. A rule that fires and then hears
+     the same answer back is spending eight seconds of silence to confirm
+     something that was already right, and there is no way to notice that from
+     the strip, where a good escalation and a needless one both look like an
+     answer in a voice. `script/routing.mjs` prints the table.
+
+     Nothing you said is in here. Questions and answers go to routing.log,
+     which is off unless you turn it on; this is integers, and it is on,
+     because integers about your own app are not a record of you. */
+  routingStats: {},
 
   /* How sure the recogniser has to have been that it was hearing speech.
      Whisper reports an average log probability per utterance, and the gap is

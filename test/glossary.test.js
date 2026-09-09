@@ -70,6 +70,25 @@ describe('applyCorrections', () => {
   })
 })
 
+describe('applyCorrections with comma alternatives', () => {
+  const corrections = { 'Mirror, Myra, Meera': 'Mira' }
+
+  it('treats a comma as "or", not as part of the phrase', () => {
+    expect(applyCorrections('ask Myra about it', corrections)).toBe('ask Mira about it')
+    expect(applyCorrections('hey Meera', corrections)).toBe('hey Mira')
+    expect(applyCorrections('Mirror', corrections)).toBe('Mira')
+  })
+
+  it('leaves the same words alone where they are not the mistake', () => {
+    expect(applyCorrections('the mirrors were dusty', corrections)).toBe('the mirrors were dusty')
+  })
+
+  it('still prefers the longest spelling across every rule', () => {
+    const pair = { 'cloud, clod': 'Claude', 'cloud code': 'Claude Code' }
+    expect(applyCorrections('open cloud code', pair)).toBe('open Claude Code')
+  })
+})
+
 describe('fromSettings', () => {
   it('splits a settings blob into prompt and fixups', () => {
     const { prompt, corrections } = fromSettings({ vocabulary: ['Drupal'], corrections: { a: 'b' } })
@@ -108,6 +127,23 @@ describe('isGlossaryEcho', () => {
 
   it('does not fire on half of a multi-word term', () => {
     expect(isGlossaryEcho('Claude', glossary)).toBe(false)
+  })
+
+  it('lets an agent be addressed by a name that is also in the glossary', () => {
+    /* The regression this exists for: "Hey Mira" alone is how you arm her, and
+       putting the name in the glossary so it is spelled right made the whole
+       utterance a glossary term. It broke only once the model got good enough
+       to transcribe the name exactly. */
+    const named = { vocabulary: ['Hey Mira'], corrections: {}, names: ['Hey Mira', 'Hey Atlas'] }
+    expect(isGlossaryEcho('Hey Mira.', named)).toBe(false)
+    expect(isGlossaryEcho(' hey mira ', named)).toBe(false)
+  })
+
+  it('still catches an echo of a term that is nobody\'s name', () => {
+    const named = { vocabulary: ['VINCI', 'Hey Mira'], corrections: {}, names: ['Hey Mira'] }
+    expect(isGlossaryEcho('VINCI.', named)).toBe(true)
+    // The exemption is the whole utterance being the name, not containing it.
+    expect(isGlossaryEcho('Hey Mira VINCI', named)).toBe(true)
   })
 
   it('never fires without a glossary', () => {

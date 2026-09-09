@@ -24,11 +24,13 @@ It says everything the ribbon says. Command mode washes it amber. Whoever is ans
 
 ![The orb in command mode, with an amber wash behind the ring](images/orb-command.png)
 
-**Rest the pointer on it** and two controls fade in, in the hole in the middle: mute, which stops the microphone, and a close button, which hides transvibe the same way ⌃⌥Space does — it is still listening, it is just not on the screen. Muting shows as a red microphone until you press it again, from either the orb or the strip.
+**Rest the pointer on it** and three controls fade in, in the hole in the middle: mute, which stops the microphone; a handle, which drags the orb somewhere else; and a close button, which hides transvibe the same way ⌃⌥Space does — it is still listening, it is just not on the screen. Muting shows as a red microphone until you press it again, from either the orb or the strip.
+
+**Drag it by the handle** and it stays where you put it, across restarts and onto whatever display the strip is on. The corner is only where it starts: what is in the lower-left of your screen is not what is in mine. It can sit against an edge if you want it to, but never half off one. **Double-click the handle** to put it back in the corner.
 
 ![The orb with the pointer on it: a mute button and a close button in the hole in the middle of the ring](images/orb-controls.png)
 
-It is click-through everywhere else, corners included — hovering it costs you nothing, and only the two buttons themselves ever take a click. There is no dwell: unlike the strip, which you sweep across on the way to the menu bar, the orb sits in a corner nothing else is trying to reach.
+It is click-through everywhere else, corners included — the handle is a button rather than the orb itself for that reason: a circle you could grab anywhere would be a circle that swallows every click that lands on it — hovering it costs you nothing, and only the two buttons themselves ever take a click. There is no dwell: unlike the strip, which you sweep across on the way to the menu bar, the orb sits in a corner nothing else is trying to reach.
 
 **Rest the pointer on it and it wakes**: the words become clickable and the buttons appear. Move away and it is a ghost again. Waking takes a deliberate dwell, so sweeping up to the menu bar never steals a click, and only the text, the buttons and the panels count — a click in the empty air between them reaches the app underneath even while the pointer is on the strip.
 
@@ -210,7 +212,7 @@ Esc, the *esc* button, or a click anywhere outside dismisses it without changing
 
 ![The glossary panel: terms to listen for as removable chips, and the wrong-to-right fixes below them](images/glossary.png)
 
-The book button opens the glossary panel: terms on top, fixes below, added and removed in place. Every edit is written to the settings file and swapped into the running recogniser immediately — the model stays loaded, and the change takes effect on the next thing you say.
+The book button opens the glossary panel: terms on top, fixes below, added, edited and removed in place. **✎ on a fix** puts it back in the form it was written in — change either side and *save* replaces it, Escape backs out. **Several spellings of one mistake** go in together, separated by commas: `Mirror, Myra, Meera` → `Mira` becomes three rules, each removable on its own. Every edit is written to the settings file and swapped into the running recogniser immediately — the model stays loaded, and the change takes effect on the next thing you say.
 
 The same data lives in the settings file, if you would rather paste a list in:
 
@@ -220,7 +222,8 @@ The same data lives in the settings file, if you would rather paste a list in:
   "corrections": {
     "trans vibe": "transvibe",
     "drupple": "Drupal",
-    "lolabot": "Lullabot"
+    "lolabot": "Lullabot",
+    "mirror, myra, meera": "Mira"
   }
 }
 ```

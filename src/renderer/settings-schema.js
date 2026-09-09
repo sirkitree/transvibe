@@ -48,7 +48,9 @@ export const PANEL_KEYS = ['agents']
     is next to the model rather than in a row of its own. So is the tally of
     how many questions went out to a frontier model today: it is counted, not
     set, and the number you would want to change is the switch above it. */
-export const REMEMBERED_KEYS = ['panelPosition', 'modelStats', 'remoteCallsToday']
+export const REMEMBERED_KEYS = [
+  'panelPosition', 'orbPosition', 'modelStats', 'remoteCallsToday', 'routingStats'
+]
 
 export const SECTIONS = [
   {
