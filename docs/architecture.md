@@ -53,7 +53,7 @@ Two rules keep the interims from getting in the final's way. Only one is ever in
 
 Small Whisper models emit stock phrases on near-silence ("Thank you.", "[BLANK_AUDIO]", "you"). `whisper-parse.js` filters these as whole-string matches only, so a real sentence containing "you" survives untouched.
 
-Bigger models fail the other way round: they caption the room correctly and confidently, so `confidenceFloor` never sees "Sad music." and the bracket rule never sees it either, because there are no brackets on it. `isArtifact` therefore also splits an utterance at sentence ends and adjacent brackets and asks of every piece whether it is a tag — bracketed, wrapped in `*` or `♪`, or made entirely of a curated sound vocabulary with at least one word naming a sound. All pieces or none: a single real sentence in the run keeps the whole thing.
+Bigger models fail the other way round: they caption the room correctly and confidently, so `confidenceFloor` never sees "Sad music." and the bracket rule never sees it either, because there are no brackets on it. `isArtifact` therefore also splits an utterance at sentence ends and adjacent brackets and asks of every piece whether it is a tag — bracketed, wrapped in `*` or `♪`, or made entirely of a curated sound vocabulary with at least one word naming a sound. All pieces or none: a single real sentence in the run keeps the whole thing. Separately, `isRepetitionLoop` catches the decoder latching onto a phrase and repeating it, which no vocabulary can recognise because every repeat is ordinary speech — it is judged on fragment counts alone.
 
 ## The overlay
 

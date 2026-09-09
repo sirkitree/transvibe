@@ -127,6 +127,26 @@ describe('artifact filtering', () => {
     expect(cleanTranscript('[music] [applause]')).toBe('')
   })
 
+  it('filters a decoder stuck in a loop', () => {
+    // Every repeat is an ordinary sentence at ordinary confidence: only the
+    // shape of the utterance says it was music.
+    expect(cleanTranscript("I'm sorry. I'm sorry. I'm sorry. Amen.")).toBe('')
+    expect(cleanTranscript('Okay. Okay. Okay.')).toBe('')
+    expect(cleanTranscript('Thank you. Bye. Thank you. Bye.')).toBe('')
+  })
+
+  it('keeps repetition inside real dictation', () => {
+    const keepers = [
+      'Open Slack. Then find the thread from yesterday. Reply to it.',
+      'No, I said the other one.',
+      'Yes. That works for me, let us do it that way.',
+      'Okay. Open settings.'
+    ]
+    for (const sentence of keepers) {
+      expect(isArtifact(sentence), sentence).toBe(false)
+    }
+  })
+
   it('keeps a run that has one real sentence in it', () => {
     const mixed = 'Sad music. Open Slack for me.'
     expect(isArtifact(mixed)).toBe(false)

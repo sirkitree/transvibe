@@ -209,6 +209,42 @@ function isTagLike (fragment) {
   return ARTIFACT_KEYS.has(normalize(trimmed))
 }
 
+/* The stuck decoder.
+   ------------------------------------------------------------------------
+   The other thing a big model does over music is loop. It latches onto a
+   short phrase and emits it over and over — "I'm sorry. I'm sorry. I'm sorry.
+   Amen." — and because each repeat is a perfectly ordinary sentence it clears
+   the confidence floor, is not a sound tag, and contains no word this app
+   could sensibly put on a list. Only the shape gives it away.
+
+   So: the shape. Three or more short fragments where one of them repeats at
+   least three times, or four or more where half of them are repeats, is a
+   decoder stuck in a loop rather than somebody talking. Real dictation does
+   not say the same short sentence three times running; the cost of being
+   wrong about that is one lost "No. No. No." */
+
+const MAX_LOOP_FRAGMENT_WORDS = 6
+
+function wordCount (fragment) {
+  return squash(fragment).split(/\s+/).filter(Boolean).length
+}
+
+function isRepetitionLoop (pieces) {
+  if (pieces.length < 3) return false
+  if (pieces.some(piece => wordCount(piece) > MAX_LOOP_FRAGMENT_WORDS)) return false
+  const counts = new Map()
+  for (const piece of pieces) {
+    const key = normalize(piece)
+    if (!key) continue
+    counts.set(key, (counts.get(key) || 0) + 1)
+  }
+  if (!counts.size) return false
+  const most = Math.max(...counts.values())
+  if (most >= 3) return true
+  // Two phrases traded back and forth is the same failure, one step wider.
+  return pieces.length >= 4 && counts.size * 2 <= pieces.length
+}
+
 export function isArtifact (text) {
   const trimmed = squash(text)
   if (!trimmed) return true
@@ -218,7 +254,8 @@ export function isArtifact (text) {
      piece has to be one — a single real sentence anywhere in there and the
      whole utterance is kept, punctuation and all. */
   const pieces = fragmentsOf(trimmed)
-  return pieces.length > 1 && pieces.every(isTagLike)
+  if (pieces.length > 1 && pieces.every(isTagLike)) return true
+  return isRepetitionLoop(pieces)
 }
 
 /**
