@@ -108,13 +108,43 @@ describe('artifact filtering', () => {
     expect(cleanTranscript('   ')).toBe('')
   })
 
+  it('filters bare sound tags the bigger models write out in full', () => {
+    // large-v3-turbo annotates the room instead of guessing at it: no
+    // brackets, confident enough to clear the floor, so the words are the
+    // only signal left.
+    expect(cleanTranscript('Sad music.')).toBe('')
+    expect(cleanTranscript('Tap.')).toBe('')
+    expect(cleanTranscript('soft piano music')).toBe('')
+    expect(cleanTranscript('music continues')).toBe('')
+    expect(cleanTranscript('*sighs*')).toBe('')
+    expect(cleanTranscript('\u266a \u266a')).toBe('')
+  })
+
+  it('filters a run of tags, bracketed or bare', () => {
+    expect(cleanTranscript('Pewds Sad music. Tap. Sad music.')).toBe('')
+    expect(cleanTranscript('Sad music. Tap. Sad music.')).toBe('')
+    expect(cleanTranscript('(soft piano music) (sad music)')).toBe('')
+    expect(cleanTranscript('[music] [applause]')).toBe('')
+  })
+
+  it('keeps a run that has one real sentence in it', () => {
+    const mixed = 'Sad music. Open Slack for me.'
+    expect(isArtifact(mixed)).toBe(false)
+    expect(cleanTranscript(mixed)).toBe(mixed)
+  })
+
   it('leaves real sentences containing artifact words untouched', () => {
     const keepers = [
       'I told you about the meeting yesterday.',
       'Thank you for sending over the notes.',
       'Please subscribe to the mailing list before Friday.',
       'You should see the new build.',
-      'Bye. See you at noon.'
+      'Bye. See you at noon.',
+      'The music was good.',
+      'Tap the button twice.',
+      'Turn the tap off.',
+      'Sad music was playing when I walked in.',
+      'Play some music and then open Slack.'
     ]
     for (const sentence of keepers) {
       expect(isArtifact(sentence), sentence).toBe(false)

@@ -20,7 +20,9 @@ export const ARTIFACTS = [
   '.',
   '...',
   'Mm-hmm.',
-  'Uh.'
+  'Uh.',
+  // large-v3-turbo's own favourite: a YouTube name over a piano.
+  'Pewds'
 ]
 
 function squash (text) {
@@ -117,14 +119,106 @@ export function parseServerJson (obj) {
   return { text: squash(obj.text), segments: [] }
 }
 
-export function isArtifact (text) {
-  const trimmed = squash(text)
+/* Sound tags, unbracketed.
+   ------------------------------------------------------------------------
+   A small model guesses at the room and gets it wrong cheaply: a piano comes
+   back as 'Thank you.' at an avg_logprob of -0.7, so the confidence floor
+   catches it without ever reading the words. A big one does something else
+   entirely — it *annotates* the room, deliberately and correctly, and is as
+   sure of 'Sad music.' as it is of a real sentence. The floor never sees it,
+   and it arrives with no brackets on it, so the bracket rule never sees it
+   either. What the model wrote is the only thing left to recognise it by.
+
+   So: a curated vocabulary, and an utterance is a tag only if *every* word in
+   it is in that vocabulary and at least one of them names a sound. That is
+   what keeps 'The music was good.' — 'was' and 'good' are not in here, and one
+   ordinary word is enough to make it a sentence. The cost is at the other end:
+   dictating nothing but 'Sad music.' does nothing, the same bargain the
+   glossary-echo rule already makes. */
+
+// At least one of these has to be present: the thing making the sound.
+const SOUND_EVENTS = [
+  'music', 'song', 'singing', 'humming', 'applause', 'clapping', 'cheering',
+  'laughter', 'laughing', 'chuckles', 'chuckling', 'giggling', 'sighs',
+  'sighing', 'coughing', 'sneezing', 'breathing', 'silence', 'static',
+  'beep', 'beeping', 'buzzing', 'ringing', 'click', 'clicking', 'tap',
+  'tapping', 'knock', 'knocking', 'thud', 'whoosh', 'footsteps', 'typing',
+  'chatter', 'rustling', 'creaking', 'squeaking', 'barking', 'snoring',
+  'gasps', 'groans', 'grunts', 'screaming', 'shouting', 'whispering',
+  'murmuring', 'mumbling', 'whistling', 'thunder', 'siren', 'horn', 'engine',
+  'wind', 'rain', 'vibrating', 'inaudible', 'indistinct'
+]
+
+// Allowed around them, but never enough on their own.
+const SOUND_MODIFIERS = [
+  'sad', 'soft', 'softly', 'light', 'gentle', 'gently', 'upbeat', 'slow',
+  'slowly', 'fast', 'dramatic', 'tense', 'somber', 'sombre', 'melancholy',
+  'melancholic', 'cheerful', 'calm', 'quiet', 'quietly', 'loud', 'loudly',
+  'faint', 'faintly', 'distant', 'eerie', 'ominous', 'suspenseful', 'dreamy',
+  'romantic', 'epic', 'intense', 'mellow', 'moody',
+  'piano', 'guitar', 'violin', 'drum', 'drums', 'orchestral', 'orchestra',
+  'electronic', 'classical', 'ambient', 'instrumental', 'jazz', 'jazzy',
+  'rock', 'pop', 'techno', 'rap', 'choir', 'synth', 'bass',
+  'background', 'continues', 'continuing', 'playing', 'plays', 'stops',
+  'fades', 'fading', 'sound', 'sounds', 'noise', 'noises', 'in', 'the', 'a',
+  // Stock junk this particular model likes to staple to the front of one.
+  'pewds', 'pewdiepie'
+]
+
+const SOUND_EVENT_WORDS = new Set(SOUND_EVENTS)
+const SOUND_WORDS = new Set([...SOUND_EVENTS, ...SOUND_MODIFIERS])
+
+// Longer than this and it is prose, whatever the words are.
+const MAX_TAG_WORDS = 5
+
+function isSoundTag (fragment) {
+  const words = squash(fragment)
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .split(' ')
+    .filter(Boolean)
+  if (!words.length || words.length > MAX_TAG_WORDS) return false
+  if (!words.some(word => SOUND_EVENT_WORDS.has(word))) return false
+  return words.every(word => SOUND_WORDS.has(word))
+}
+
+/* One utterance, cut where a run of tags would be cut: at sentence ends, at
+   line breaks, and between two adjacent brackets. 'Sad music. Tap. Sad music.'
+   is three of them, not one long one. */
+function fragmentsOf (text) {
+  return squash(text)
+    .split(/(?<=[.!?…])\s+|(?<=[)\]])\s*(?=[([])/u)
+    .map(squash)
+    .filter(Boolean)
+}
+
+const WRAPPED = /^[*♪♫~]+[^*♪♫~]*[*♪♫~]+$/u
+const EDGES = /^[[(*♪♫~\s]+|[\])*♪♫~\s.!?…]+$/gu
+
+/** One fragment: a bracketed tag, a bare sound tag, or a stock phrase. */
+function isTagLike (fragment) {
+  const trimmed = squash(fragment)
   if (!trimmed) return true
-  // Only punctuation / symbols, e.g. '...' or '?!'
+  // Only punctuation / symbols, e.g. '...' or '?!' or a bare '♪'
   if (!/[\p{L}\p{N}]/u.test(trimmed)) return true
   // A single fully bracketed token, e.g. '[music]' or '(applause)'
   if (/^\[[^[\]]*\]$/.test(trimmed) || /^\([^()]*\)$/.test(trimmed)) return true
+  // The same thing wrapped in asterisks or musical notes: '*sighs*', '♪ ♪'
+  if (WRAPPED.test(trimmed)) return true
+  if (isSoundTag(trimmed.replace(EDGES, ''))) return true
   return ARTIFACT_KEYS.has(normalize(trimmed))
+}
+
+export function isArtifact (text) {
+  const trimmed = squash(text)
+  if (!trimmed) return true
+  if (isTagLike(trimmed)) return true
+  /* A run of them is as much a non-utterance as one is, and the bigger models
+     produce runs: a minute of a track comes back as tag, tag, tag. Every
+     piece has to be one — a single real sentence anywhere in there and the
+     whole utterance is kept, punctuation and all. */
+  const pieces = fragmentsOf(trimmed)
+  return pieces.length > 1 && pieces.every(isTagLike)
 }
 
 /**

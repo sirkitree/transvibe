@@ -54,7 +54,9 @@ describe.skipIf(!runnable)('whisper engine (integration)', () => {
     const { text } = await engine.transcribe(samples)
     const norm = text.toLowerCase().replace(/[^a-z0-9 ]/g, '')
     expect(norm).toContain('transcribe this locally')
-    expect(norm).toMatch(/testing (one two three|123)/)
+    // Which spelling of the digits you get is the model's choice, not the app's:
+    // large-v3-turbo writes '1 2 3' where the smaller models wrote '123'.
+    expect(norm).toMatch(/testing (one two three|1 ?2 ?3)/)
   }, 60000)
 
   it('returns empty text for silence rather than a hallucinated phrase', async () => {
