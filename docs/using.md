@@ -194,7 +194,13 @@ The **?** button opens an in-app help panel with the full list (`esc` or `?` tog
 
 ## Music in the room
 
-A microphone that listens all the time hears the room, and a small Whisper model will happily turn a song into a sentence. Four things stop that, and none of them touches the visualizer — the ribbon still dances to whatever is playing, because it is fed from the microphone directly rather than from the transcript.
+A microphone that listens all the time hears the room, and a small Whisper model will happily turn a song into a sentence. Five things stop that, and none of them touches the visualizer — the ribbon still dances to whatever is playing, because it is fed from the microphone directly rather than from the transcript.
+
+The first one is different in kind from the rest. It stops music becoming words; the other four recognise the words afterwards and throw them away.
+
+**A detector that is asked whether anyone spoke.** Whisper answers "what was said" and has no way to answer "nothing" — handed twelve seconds of a song it returns `so`, or a sentence it invented. So it is not asked first. A small speech detector (Silero, under a megabyte, downloaded once beside the model) scores the sound for human voice, and whisper is handed only the parts that scored, or nothing at all. Measured here: a chord, a melody, pink noise, silence and two clips of real music all come back empty, while speech comes through untouched — down to a half-second slice of an utterance still in progress. It costs 23ms on a twelve-second chunk and pays that back whenever it fires, because there is then nothing to decode. The strip says `ignored — no speech`. **Settings › Listening › Ignore anything that is not speech** turns it off, and **How sure the detector has to be** (0.5) is the dial: higher ignores more of the room and eventually starts costing you quiet or distant speech. Both restart the recogniser, which takes about a second.
+
+The four below still run, and still matter — they are what catches whatever the detector lets through, and they are the whole defence on a machine where it could not be downloaded.
 
 **The recogniser's own confidence.** Whisper reports how sure it was, per utterance, and the gap is not subtle. Measured against this app's own server: real speech comes back at an average log probability of −0.01 to −0.08, while a chord, a fan and a pure tone land at −0.65, −0.76 and −0.64. Anything below **Settings › Listening › Ignore anything less certain than** (−0.5 by default) is thrown away, and the strip says `ignored — not speech` so you can see it working while you tune it. All the way right turns the check off. (`no_speech_prob`, which sounds like the field for exactly this job, reads 0.0000 for music and is no use at all.)
 

@@ -49,6 +49,8 @@ Behind it is `~/Library/Application Support/transvibe/settings.json`, written on
 | `language` | `'en'` | recognition language |
 | `vocabulary` | `[]` | terms to bias recognition toward |
 | `corrections` | `{}` | wrong → right rewrites applied to finished text |
+| `vad` | `true` | ignore anything a speech detector says was not speech, before the recogniser sees it |
+| `vadThreshold` | `0.5` | how sure that detector has to be; higher ignores more of the room |
 | `confidenceFloor` | `-0.5` | ignore an utterance the recogniser was less sure of than this; `0` off |
 | `dropGlossaryEcho` | `true` | discard an utterance that is only glossary words |
 | `cleanup` | `false` | tidy fillers out of settled text with the assist model |

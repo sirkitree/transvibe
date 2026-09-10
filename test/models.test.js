@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { modelName, humanSize, listModels, DOWNLOADABLE } from '../src/main/models.js'
+import { modelName, humanSize, listModels, DOWNLOADABLE, VAD } from '../src/main/models.js'
 
 describe('DOWNLOADABLE', () => {
   it('offers a model worth upgrading to, not just the small ones', () => {
@@ -16,6 +16,21 @@ describe('DOWNLOADABLE', () => {
     for (const name of DOWNLOADABLE) {
       expect(modelName(`ggml-${name}.bin`)).toBe(name)
     }
+  })
+})
+
+describe('VAD', () => {
+  it('is not one of the models anything can choose', () => {
+    // It answers a different question, and a speech detector offered in the
+    // model picker is a picker entry that cannot transcribe.
+    expect(DOWNLOADABLE).not.toContain(modelName(VAD.file))
+  })
+
+  it('is small enough that listModels will never show it', () => {
+    // The guard is MIN_BYTES in models.js, and it lives in the same folder as
+    // the real models, so the two numbers have to stay on the right sides of
+    // each other.
+    expect(VAD.bytes).toBeLessThan(1e7)
   })
 })
 
@@ -98,6 +113,14 @@ describe('listModels', () => {
     write('superwhisper/vad-v1.onnx', big)
     write('superwhisper/ggml-tiny.en.bin', 1e6)
     expect(found()).toEqual([])
+  })
+
+  it('leaves our own speech detector out of the model list', () => {
+    // It is downloaded into the same folder as the models we download, so this
+    // is the one case where the small-blob rule protects our own file.
+    write(`transvibe/models/${VAD.file}`, VAD.bytes)
+    write('transvibe/models/ggml-base.en.bin', big)
+    expect(found().map(m => m.name)).toEqual(['base.en'])
   })
 
   it('says nothing rather than throwing when there is nowhere to look', () => {

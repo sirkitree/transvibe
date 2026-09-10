@@ -70,6 +70,20 @@ const DOWNLOADS = {
   }
 }
 
+/* The speech detector that runs ahead of the recogniser.
+
+   Not a whisper model and not in DOWNLOADS: nothing chooses it, there is no
+   bigger one to trade up to, and it must never appear in the model picker. It
+   is under MIN_BYTES, so listModels() would skip it anyway even though it
+   lives in the same folder — but the reason it is separate is that it answers
+   a different question. Whisper asks what was said; this asks whether anybody
+   said anything, which is the question music gets wrong. */
+export const VAD = {
+  file: 'ggml-silero-v5.1.2.bin',
+  url: 'https://huggingface.co/ggml-org/whisper-vad/resolve/main/ggml-silero-v5.1.2.bin',
+  bytes: 885098
+}
+
 /** The models we know how to fetch, for anything offering a choice of them. */
 export const DOWNLOADABLE = Object.keys(DOWNLOADS)
 
@@ -162,9 +176,40 @@ export function findModel (preferred) {
   return listModels()[0]?.path ?? null
 }
 
+/**
+ * The speech detector on disk, or null if it has never been fetched.
+ *
+ * Only our own folder is searched, unlike findModel: this file is small enough
+ * that other apps keeping one is not worth the walk, and a stranger's copy of
+ * a differently-versioned silero is a thing we would rather not load blind.
+ * Any `ggml-silero-*.bin` counts, so a bumped version already sitting there is
+ * used rather than re-downloaded under a new name.
+ */
+export function findVadModel () {
+  const exact = path.join(MODELS_DIR, VAD.file)
+  if (fs.existsSync(exact)) return exact
+  try {
+    const found = fs.readdirSync(MODELS_DIR)
+      .filter(f => /^ggml-silero-.*\.bin$/i.test(f))
+      .sort()
+      .pop()
+    return found ? path.join(MODELS_DIR, found) : null
+  } catch {
+    return null
+  }
+}
+
+export function downloadVadModel (onProgress = () => {}) {
+  return fetchTo(VAD, onProgress)
+}
+
 export function downloadModel (name = 'base.en', onProgress = () => {}) {
   const spec = DOWNLOADS[name]
   if (!spec) throw new Error(`unknown model: ${name}`)
+  return fetchTo(spec, onProgress)
+}
+
+function fetchTo (spec, onProgress = () => {}) {
   fs.mkdirSync(MODELS_DIR, { recursive: true })
   const dest = path.join(MODELS_DIR, spec.file)
   if (fs.existsSync(dest) && fs.statSync(dest).size === spec.bytes) return Promise.resolve(dest)

@@ -206,6 +206,30 @@ export const DEFAULTS = {
      because integers about your own app are not a record of you. */
   routingStats: {},
 
+  /* Whether anybody was speaking at all, asked before the recogniser is asked
+     what they said.
+
+     A small neural detector (Silero, ~865 KB, fetched once beside the whisper
+     model) scores the audio for speech and hands whisper only the parts that
+     scored. It is the difference between filtering music out of the text and
+     never turning music into text: measured on this machine, a chord, a
+     melody, pink noise, silence and two clips of real music all come back
+     empty with this on, while speech — down to a half-second interim slice —
+     comes back untouched. It costs 22.7ms on a twelve-second chunk and saves
+     more than that whenever it fires, because there is then nothing to decode.
+
+     `vadThreshold` is how sure it has to be. Higher is stricter and starts
+     costing you quiet speech; 0.5 is silero's own default and is where the
+     measurements above were taken. This is a server flag, so changing either
+     of these restarts the recogniser — about a second, with the model reload
+     in it.
+
+     `confidenceFloor` below stays, and stays on. It is the backstop for
+     whatever the gate lets through, and for the machines where the detector
+     could not be downloaded. */
+  vad: true,
+  vadThreshold: 0.5,
+
   /* How sure the recogniser has to have been that it was hearing speech.
      Whisper reports an average log probability per utterance, and the gap is
      wide: measured on this app's own server, real speech comes back at -0.01

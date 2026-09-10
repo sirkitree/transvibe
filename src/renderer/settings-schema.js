@@ -74,6 +74,20 @@ export const SECTIONS = [
         type: 'range', min: 150, max: 2000, step: 50, unit: 'ms'
       },
       {
+        key: 'vad',
+        label: 'Ignore anything that is not speech',
+        help: 'A small speech detector listens before the recogniser does, and music, a fan or a passing car never reach it at all. Off falls back to judging the words after they arrive, which catches less. Restarts the recogniser.',
+        spoken: ['speech detection', 'the speech detector', 'the noise gate'],
+        type: 'toggle'
+      },
+      {
+        key: 'vadThreshold',
+        label: 'How sure the detector has to be',
+        help: 'Higher ignores more of the room and starts costing you quiet or distant speech. 0.5 is the default and where this was measured.',
+        spoken: ['the detector threshold', 'how sure the detector has to be'],
+        type: 'range', min: 0.1, max: 0.9, step: 0.05, decimals: 2
+      },
+      {
         key: 'confidenceFloor',
         label: 'Ignore anything less certain than',
         help: 'Whisper says how sure it was. Real speech scores about -0.05; music, a fan or a passing car score about -0.7, which is how music playing in the room turns into words. Lower is more permissive; all the way right turns the check off.',

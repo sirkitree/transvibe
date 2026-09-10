@@ -14,7 +14,9 @@ import {
   needsFreshFacts, shouldEscalate, escalationChain, answersAgree
 } from '../shared/escalate.js'
 import { speak, stopSpeaking, listVoices } from './speech.js'
-import { findModel, downloadModel, listModels, humanSize, MODELS_DIR } from './models.js'
+import {
+  findModel, downloadModel, findVadModel, downloadVadModel, listModels, humanSize, MODELS_DIR
+} from './models.js'
 import * as config from './config.js'
 import { stripBounds, orbBounds, contains, withinCircle, nextWake } from './overlay.js'
 import { listSpaces, listSwitchTargets, dockClickScript } from './spaces.js'
@@ -517,7 +519,8 @@ async function initEngine () {
       corrections: settings.corrections,
       dropGlossaryEcho: settings.dropGlossaryEcho,
       confidenceFloor: settings.confidenceFloor,
-      names: agentNames()
+      names: agentNames(),
+      vad: { enabled: settings.vad, modelPath: await vadModel(), threshold: settings.vadThreshold }
     })
     await engine.start()
     send('status', { state: 'ready', message: path.basename(modelPath), mode: engine.mode })
@@ -526,6 +529,35 @@ async function initEngine () {
   } catch (err) {
     send('status', { state: 'error', message: err.message })
   }
+}
+
+/* The speech detector, fetched on the way past if it is wanted and missing.
+
+   Best-effort on purpose. The app already works with no network once a whisper
+   model is on disk, and gaining a gate must not cost that: a failed download
+   returns null, `vadArgs` sees no file and emits no flags, and what is left is
+   exactly the app as it was — confidenceFloor and the artifact rules doing the
+   work alone. Under a megabyte, so there is no progress to report. */
+async function vadModel () {
+  if (!settings.vad) return null
+  const found = findVadModel()
+  if (found) return found
+  try {
+    return await downloadVadModel()
+  } catch (err) {
+    send('status', { state: 'error', message: `Speech detector unavailable: ${err.message}` })
+    return null
+  }
+}
+
+/* Both VAD settings are whisper-server startup flags, so the only way to
+   change one is to bring the sidecar back up with it. Costs a model reload —
+   about a second — during which `transcribe` answers 'engine not ready', which
+   is the truth. */
+async function restartEngine () {
+  if (engine) engine.stop()
+  engine = null
+  await initEngine()
 }
 
 /* The assist model is optional in the strongest sense: if Ollama is not
@@ -888,6 +920,7 @@ ipcMain.handle('settings:set', (_e, patch) => {
       names: agentNames()
     })
   }
+  if ('vad' in patch || 'vadThreshold' in patch) restartEngine()
   if ('cleanup' in patch || 'commandFallback' in patch || 'agents' in patch ||
       'assistUrl' in patch || 'speakReplies' in patch) {
     initAssist()
