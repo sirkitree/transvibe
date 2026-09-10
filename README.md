@@ -58,7 +58,17 @@ npm start          # or: npm run dev  (opens a CDP port on 9333)
 
 The bundle it builds runs **this working tree** — Electron's own `.app`, copied and renamed, with `Resources/app` symlinked back to the repo — so an ordinary source edit needs a relaunch and not a rebuild. Re-run the script after `npm install` pulls a new Electron; moving the checkout breaks the symlink.
 
-`npm run dist` builds a self-contained `.app` instead, and is **not** currently usable: `electron-builder` seals `bin/` inside the asar, where the app cannot spawn the two Swift helpers, so the right-⌥ hotkey and pasting on send both fail. Packaging also does not run `build:native`. The app is unsigned either way and does not bundle `whisper-cpp`.
+## Download it
+
+Every tagged release has a `.dmg` on the [releases page](https://github.com/sirkitree/transvibe/releases), built by `.github/workflows/release.yml`. It still expects `brew install whisper-cpp` — the engine is not bundled — but needs neither Node nor Swift.
+
+The app is not signed or notarized, so on first open macOS will say it is damaged or from an unidentified developer. Clear the quarantine flag once and it opens normally after that:
+
+```sh
+xattr -d com.apple.quarantine /Applications/transvibe.app
+```
+
+`npm run dist` builds the same `.dmg` locally into `dist/`. It compiles the two Swift helpers first and packages them next to the app's resources, outside the asar, where the app can spawn them.
 
 On first launch it asks for microphone access, then finds a Whisper model. It looks for `ggml-*.bin` in its own `~/Library/Application Support/transvibe/models/` and then, read only, a few folders deep through `~/Library/Application Support`, `~/Library/Caches` and `~/.cache` — which is where superwhisper, MacWhisper, Highlight and whisper.cpp keep theirs. Failing all of that it downloads `ggml-base.en.bin` (~148 MB). The Transcription tab lists everything it found, with the size and whose folder it came from.
 

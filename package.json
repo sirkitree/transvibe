@@ -12,8 +12,8 @@
     "test:unit": "vitest run --exclude \"**/*.integration.test.js\"",
     "test:watch": "vitest",
     "routing": "node script/routing.mjs",
-    "dist": "electron-builder --mac --arm64",
-    "build:native": "swiftc -O -o bin/rightopt src/native/rightopt.swift && swiftc -O -o bin/sendkeys src/native/sendkeys.swift"
+    "dist": "npm run build:native && electron-builder --mac --arm64",
+    "build:native": "mkdir -p bin && swiftc -O -o bin/rightopt src/native/rightopt.swift && swiftc -O -o bin/sendkeys src/native/sendkeys.swift"
   },
   "license": "MIT",
   "devDependencies": {
@@ -26,7 +26,6 @@
     "productName": "transvibe",
     "files": [
       "src/**/*",
-      "bin/**",
       "package.json"
     ],
     "directories": {
@@ -37,7 +36,13 @@
       "category": "public.app-category.productivity",
       "target": [
         {
-          "target": "dir",
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
           "arch": [
             "arm64"
           ]
@@ -50,6 +55,20 @@
         "NSMicrophoneUsageDescription": "transvibe transcribes your speech to text entirely on this Mac. Audio never leaves the device.",
         "LSUIElement": false
       }
+    },
+    "extraResources": [
+      {
+        "from": "bin",
+        "to": "bin",
+        "filter": [
+          "rightopt",
+          "sendkeys"
+        ]
+      }
+    ],
+    "publish": {
+      "provider": "github"
     }
-  }
+  },
+  "repository": "github:sirkitree/transvibe"
 }

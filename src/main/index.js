@@ -23,6 +23,20 @@ import { listSpaces, listSwitchTargets, dockClickScript } from './spaces.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
+/**
+ * Where the two Swift helpers live. In a checkout that is `bin/` at the repo
+ * root, built by `npm run build:native`. In a packaged app electron-builder
+ * copies them to `Contents/Resources/bin/` (see `build.extraResources` in
+ * package.json) — they have to sit outside the asar, because `spawn` needs a
+ * real file on disk and the asar is only a virtual one.
+ */
+function helperPath (name) {
+  const dir = app.isPackaged
+    ? path.join(process.resourcesPath, 'bin')
+    : path.join(__dirname, '..', '..', 'bin')
+  return path.join(dir, name)
+}
+
 let win = null
 let orbWin = null
 let orbHover = false        // the pointer is on the orb, so its controls show
@@ -700,7 +714,7 @@ function disarmCommandMode () {
  * has consumed one utterance.
  */
 function startKeyTap () {
-  const bin = path.join(__dirname, '..', '..', 'bin', 'rightopt')
+  const bin = helperPath('rightopt')
   if (!existsSync(bin)) {
     console.warn('[transvibe] bin/rightopt not built — run: npm run build:native')
     return
@@ -758,7 +772,7 @@ const wait = ms => new Promise(r => setTimeout(r, ms))
 async function sendTranscript (text) {
   if (!text || !text.trim()) return { ok: false, error: 'nothing to send' }
 
-  const bin = path.join(__dirname, '..', '..', 'bin', 'sendkeys')
+  const bin = helperPath('sendkeys')
   clipboard.writeText(text)
   if (!existsSync(bin)) {
     return { ok: false, error: 'copied — build bin/sendkeys to paste automatically' }

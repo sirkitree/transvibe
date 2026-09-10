@@ -1,0 +1,41 @@
+# Builds the macOS app and attaches it to the GitHub Release for a tag.
+#
+# Tag a commit `vX.Y.Z` and push it; electron-builder creates (or fills in) the
+# release for that tag with the .dmg, the .zip and the update manifest. The
+# version in the tag should match package.json — electron-builder names the
+# artifacts from package.json, not from the tag.
+#
+# The app is not signed or notarized: there is no Developer ID in this repo's
+# secrets, and CSC_IDENTITY_AUTO_DISCOVERY=false stops electron-builder from
+# looking for one on the runner. Gatekeeper will therefore refuse the .dmg on
+# first open; the README says what to do about that.
+name: release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  mac:
+    runs-on: macos-latest   # Apple Silicon runner; the app is arm64-only
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run test:unit
+
+      # `dist` builds the Swift helpers first, then packages. `--publish
+      # always` uploads to the release for this tag.
+      - run: npm run dist -- --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
