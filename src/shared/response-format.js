@@ -102,6 +102,32 @@ function firstWords (text, max) {
   return out || text
 }
 
+/** The two forms of one piece of text: what the strip shows, and what the
+    speaker gets. Shared so there is one implementation of the lengths. */
+function twoForms (full) {
+  const text = firstWords(full, SHOWN_MAX_WORDS)
+  return { text, spoken: firstWords(speakable(text), SPOKEN_MAX_WORDS) }
+}
+
+/**
+ * The same two forms, for text that is not an answer to anything.
+ *
+ * A message from a coding agent has the same problem as a model's reply — it
+ * is markdown, it has paths and addresses in it, and it is longer than a
+ * microphone can afford to sit through — and none of `acceptAnswer`'s
+ * judgements. It cannot decline, so PASS is not a sentinel in it but a word;
+ * there is no speaker label to strip because nobody prefixed it; and it is
+ * never rejected, because it is not a candidate for anything. It is what was
+ * said, and the only question is how to show and say it.
+ *
+ * @param {string} text
+ * @returns {{text: string, spoken: string}}
+ */
+export function forSpeech (text) {
+  const full = unformat(text)
+  return full ? twoForms(full) : { text: '', spoken: '' }
+}
+
 /**
  * Decide whether an answer is safe to say out loud.
  *
@@ -126,8 +152,7 @@ export function acceptAnswer (reply, { speakerNames = [] } = {}) {
      thing it can do. The caller escalates rather than speaking it. */
   if (IS_PASS.test(full)) return { text: '', ok: false, reason: 'pass' }
 
-  const text = firstWords(full, SHOWN_MAX_WORDS)
-  const spoken = firstWords(speakable(text), SPOKEN_MAX_WORDS)
+  const { text, spoken } = twoForms(full)
   return {
     text,
     spoken,

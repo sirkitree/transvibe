@@ -1,6 +1,6 @@
 # Plan: the agent plugin — answer your coding agent out loud
 
-Status: **step one built**, 2026-09-13. The plugin loads, the hook runs, and the payloads below are recorded from a real session rather than read off a documentation page. Steps 2–7 are still ahead.
+Status: **steps one and two built**, 2026-09-13. The plugin loads, the hook runs, the payloads below are recorded from a real session rather than read off a documentation page, and `src/shared/agent-request.js` turns one into what to say and what to answer with. Nothing is wired to a microphone yet; steps 3–7 are ahead.
 
 ## What step one found
 
