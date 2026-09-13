@@ -1,4 +1,7 @@
+import { configureVoiceIsolation } from './voice-isolation.js'
+import { createInterimPolicy } from './interim-policy.js'
 import { createVad } from './vad.js'
+import { captureStart } from './capture-timing.js'
 import { createRecordingBuffer } from './recording-buffer.js'
 
 const SAMPLE_RATE = 16000
@@ -17,6 +20,7 @@ export async function startCapture ({ onSegment, onPartial, onLevel, onError, on
     stream = await navigator.mediaDevices.getUserMedia({
       audio: {
         channelCount: 1,
+        voiceIsolation: { ideal: !!settings.voiceIsolation },
         echoCancellation: true,
         noiseSuppression: true,
         autoGainControl: true
@@ -26,6 +30,9 @@ export async function startCapture ({ onSegment, onPartial, onLevel, onError, on
     onError(`Microphone unavailable: ${err.message}`)
     return null
   }
+
+  const microphone = stream.getAudioTracks()[0]
+  const voiceIsolation = await configureVoiceIsolation(microphone, settings.voiceIsolation)
 
   const ctx = new AudioContext({ sampleRate: SAMPLE_RATE })
   if (ctx.state === 'suspended') await ctx.resume()
@@ -49,10 +56,12 @@ export async function startCapture ({ onSegment, onPartial, onLevel, onError, on
   const ringFrames = Math.ceil((RING_SECONDS * 1000) / FRAME_MS)
   const ring = new Float32Array(ringFrames * frameSize)
   let writeFrame = 0
+  let earliestFrame = 0
 
   const vad = createVad({
     frameMs: FRAME_MS,
     threshold: settings.threshold,
+    minSegmentMs: settings.minSegmentMs,
     hangoverMs: settings.hangoverMs
   })
 
@@ -63,6 +72,7 @@ export async function startCapture ({ onSegment, onPartial, onLevel, onError, on
   const minInterimFrames = Math.round(500 / FRAME_MS)
   let openStart = null
   let lastInterim = 0
+  const previews = createInterimPolicy()
 
   const sliceFrames = (from, to) => {
     const count = to - from + 1
@@ -99,33 +109,38 @@ export async function startCapture ({ onSegment, onPartial, onLevel, onError, on
     if (deaf) return
 
     if (ev && ev.type === 'start') {
-      openStart = ev.startFrame
+      previews.newSegment()
+      openStart = captureStart(ev.startFrame, earliestFrame)
       lastInterim = writeFrame
       return
     }
 
     if (ev && ev.type === 'end') {
-      const seg = ev.reason === 'discarded' ? null : sliceFrames(ev.startFrame, ev.atFrame)
+      previews.newSegment()
+      const seg = ev.reason === 'discarded' ? null : sliceFrames(openStart ?? ev.startFrame, ev.atFrame)
+      const retrySamples = seg ? sliceFrames(Math.max(earliestFrame, (openStart ?? ev.startFrame) - 50), ev.atFrame) : null
+      earliestFrame = ev.atFrame + 1
       // a 'max' flush reopens on the same frame, so the utterance keeps going
       openStart = ev.reason === 'max' ? ev.atFrame : null
       lastInterim = writeFrame
-      if (seg) onSegment(seg, ev)
+      if (seg) onSegment(seg, { ...ev, retrySamples })
       return
     }
 
     if (openStart === null || !onPartial) return
     const here = writeFrame - 1
-    if (here - lastInterim < interimFrames) return
+    if ((here - lastInterim) * FRAME_MS < previews.intervalMs(interimFrames * FRAME_MS)) return
     if (here - openStart < minInterimFrames) return
     lastInterim = here
-    const partial = sliceFrames(openStart, here)
-    if (partial) onPartial(partial)
+    const partial = sliceFrames(previews.fromFrame(openStart, here), here)
+    const token = previews.generation
+    if (partial) Promise.resolve(onPartial(partial)).then(result => previews.observe(result, token)).catch(() => {})
   }
 
   return {
     analyser,
     vad,
-    recordingInfo: { microphone: stream.getAudioTracks()[0]?.label, constraints: stream.getAudioTracks()[0]?.getSettings(), sampleRate: ctx.sampleRate },
+    recordingInfo: { voiceIsolation, microphone: stream.getAudioTracks()[0]?.label, constraints: stream.getAudioTracks()[0]?.getSettings(), sampleRate: ctx.sampleRate },
     setRecording: active => recording.setActive(active),
     flushRecording: () => recording.flush(),
     /* Anything half-heard when the app started speaking is abandoned rather
@@ -136,6 +151,8 @@ export async function startCapture ({ onSegment, onPartial, onLevel, onError, on
       const next = !!value
       if (next === deaf) return
       deaf = next
+      previews.newSegment()
+      earliestFrame = writeFrame
       if (next) {
         openStart = null
         lastInterim = writeFrame
@@ -143,6 +160,7 @@ export async function startCapture ({ onSegment, onPartial, onLevel, onError, on
     },
     get deaf () { return deaf },
     setThreshold: t => vad.setThreshold(t),
+    setMinSegmentMs: ms => vad.setMinSegmentMs(ms),
     setHangoverMs: ms => vad.setHangoverMs(ms),
     /* The settings panel retunes a live microphone rather than reopening it:
        getUserMedia again would drop the utterance in progress. */

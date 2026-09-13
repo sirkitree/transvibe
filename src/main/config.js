@@ -11,6 +11,9 @@ const FILE = path.join(DIR, 'settings.json')
 
 export const DEFAULTS = {
   threshold: 0.02,
+  voiceIsolation: false,
+  wakeConfidenceFloor: -0.85,
+  minSegmentMs: 250, // retain short wake phrases
   hangoverMs: 550,
   interimMs: 500,      // how often the open utterance is re-transcribed
   commandTimeoutMs: 6000,   // command mode disarms itself if you say nothing

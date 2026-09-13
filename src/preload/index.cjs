@@ -2,8 +2,8 @@ const { contextBridge, ipcRenderer } = require('electron')
 
 contextBridge.exposeInMainWorld('transvibe', {
   /** @param {Float32Array} samples 16 kHz mono — transferred, not copied */
-  transcribe: (samples, interim = false) =>
-    ipcRenderer.invoke('transcribe', samples.buffer, interim),
+  transcribe: (samples, interim = false, retrySamples = null, context = '') =>
+    ipcRenderer.invoke('transcribe', samples.buffer, interim, retrySamples?.buffer, context),
   onDebugFlush: fn => ipcRenderer.on('debug:flush', fn),
   debugFlushed: () => ipcRenderer.send('debug:flushed'),
   debugEvent: (type, detail) => ipcRenderer.send('debug:event', type, detail),

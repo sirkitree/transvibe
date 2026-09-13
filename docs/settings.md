@@ -23,6 +23,8 @@ Behind it is `~/Library/Application Support/transvibe/settings.json`, written on
 | key | default | |
 |---|---|---|
 | `threshold` | `0.02` | RMS level that counts as speech |
+| `minSegmentMs` | `250` | shortest speech retained; lower helps quick wake phrases |
+| `wakeConfidenceFloor` | `-0.85` | lower confidence allowed only for short exact multiword addresses after speech detection |
 | `hangoverMs` | `550` | silence before an utterance is considered finished |
 | `interimMs` | `500` | how often the open utterance is re-transcribed |
 | `commandTimeoutMs` | `6000` | command mode disarms itself after this |
@@ -75,5 +77,13 @@ Behind it is `~/Library/Application Support/transvibe/settings.json`, written on
 | `remoteCallsToday` | `{}` | written by the app: how many questions went out, per day |
 | `debugRecording` | `false` | save local microphone audio and conversation diagnostics; see [recording and review](recording.md) |
 | `debugRouting` | `false` | append a line per question to `routing.log`, questions and answers included |
+
+Voice isolation can be requested in Listening settings and requires a restart.
+The app checks microphone capabilities, requests isolation, and records its
+actual state in capture-info during debug recording. Advertised support is not
+proof of activation: a rejected constraint or `active: false` means ordinary
+capture continues. On the built-in MacBook microphone tested September 12, the
+runtime advertised support but rejected activation with “Cannot satisfy
+constraints,” both at startup and through applyConstraints.
 
 Agents can have comma-separated **Wake aliases**, such as “Hey Mera” for “Hey Mira”. Aliases match full phrases at the start of an utterance without rewriting dictation. An exact primary name wins over an alias; aliases shared by agents are ambiguous and do not route.

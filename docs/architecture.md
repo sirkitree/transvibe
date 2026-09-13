@@ -33,7 +33,7 @@ One microphone stream feeds both consumers, so there is no second capture proces
 
 `whisper-server` is spawned once on a free loopback port and keeps the model resident. That turns the ~160 ms per-utterance model load into a one-time cost: measured round-trip from renderer to transcript is **~105 ms** for a 3-second utterance with `small.en`. If `whisper-server` is missing, the engine falls back to spawning `whisper-cli` per utterance behind the same interface.
 
-The VAD opens a segment after 3 consecutive frames above threshold and closes it after 550 ms of silence, reporting the *true* onset frame so the ring-buffer slice never clips the first syllable. Segments under 400 ms are discarded, and one running past 15 s is force-flushed and immediately reopened.
+The VAD opens a segment after 3 consecutive frames above threshold and closes it after 550 ms of silence, reporting the *true* onset frame; capture includes up to 200 ms before it for quiet word beginnings, bounded by the last utterance or microphone-unmute boundary. Segments under the configurable minimum (250 ms by default) are discarded, and one running past 15 s is force-flushed and immediately reopened.
 
 ## Interim results
 

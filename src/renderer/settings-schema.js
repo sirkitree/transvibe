@@ -58,11 +58,30 @@ export const SECTIONS = [
     note: 'What counts as speech, when an utterance is over, and what is thrown away rather than written down. These are the settings you tune by talking and watching.',
     fields: [
       {
+        key: 'voiceIsolation', label: 'Voice isolation', type: 'toggle', restart: true,
+        spoken: ['voice isolation'],
+        help: 'Ask the microphone to emphasize your voice and suppress background sound. Availability depends on the microphone and platform. Debug recordings report whether it actually activated.'
+      },
+      {
         key: 'threshold',
         label: 'Speech threshold',
         help: 'Raise it in a noisy room, lower it if quiet speech is missed.',
         spoken: ['the threshold', 'the speech threshold', 'the sensitivity'],
         type: 'range', min: 0.002, max: 0.08, step: 0.002, decimals: 3
+      },
+      {
+        key: 'wakeConfidenceFloor',
+        label: 'Confidence for a short wake phrase',
+        help: 'A separate floor for exact configured multiword names, after speech detection. Does not relax commands or ordinary dictation.',
+        spoken: ['the wake confidence'],
+        type: 'range', min: -1, max: -0.1, step: 0.05, decimals: 2
+      },
+      {
+        key: 'minSegmentMs',
+        label: 'Minimum speech duration',
+        help: 'Shorter keeps quick wake phrases. Longer rejects more brief noises.',
+        spoken: ['the minimum speech duration'],
+        type: 'range', min: 100, max: 1000, step: 50, unit: 'ms'
       },
       {
         key: 'hangoverMs',

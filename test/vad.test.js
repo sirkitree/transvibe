@@ -298,3 +298,19 @@ describe('a room that never goes quiet', () => {
     expect(vad.loudMs).toBe(0)
   })
 })
+
+describe('short wake phrases', () => {
+  it('retains 260ms speech with a 250ms minimum but rejects 240ms noise', () => {
+    for (const [frames, reason] of [[13, 'silence'], [12, 'discarded']]) {
+      const events = drive(createVad({ minSegmentMs: 250 }), [...rep(frames, SPEECH), ...rep(40, SILENCE)])
+      expect(events.at(-1).reason).toBe(reason)
+    }
+  })
+  it('retunes the minimum without reopening capture and ignores invalid values', () => {
+    const vad = createVad({ minSegmentMs: 400 })
+    vad.setMinSegmentMs(250)
+    vad.setMinSegmentMs(NaN)
+    vad.setMinSegmentMs(-1)
+    expect(drive(vad, [...rep(15, SPEECH), ...rep(40, SILENCE)]).at(-1).reason).toBe('silence')
+  })
+})

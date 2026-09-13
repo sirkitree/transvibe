@@ -2162,6 +2162,7 @@ function applyLiveSetting (key, { preview = true } = {}) {
   const value = state.settings[key]
   const capture = state.capture
 
+  if (key === 'minSegmentMs' && capture) capture.setMinSegmentMs(value)
   if (key === 'threshold' && capture) capture.setThreshold(value)
   if (key === 'hangoverMs' && capture) capture.setHangoverMs(value)
   if (key === 'interimMs' && capture) capture.setInterimMs(value)
@@ -2575,7 +2576,7 @@ async function main () {
         document.body.classList.toggle('quiet', !speaking)
       }
     },
-    onSegment: async samples => {
+    onSegment: async (samples, detail) => {
       if (!state.listening) return
       // the utterance is over: whatever interim is in flight is now stale
       state.liveSeq++
@@ -2593,7 +2594,8 @@ async function main () {
       noteActivity()
       render()
       try {
-        const res = await window.transvibe.transcribe(samples)
+        const res = await window.transvibe.transcribe(samples, false, detail?.retrySamples,
+          inConversation() ? state.history.filter(t => t.role === 'user').slice(-2).map(t => t.content).join(' ') : '')
         debugEvent('transcript-route', { debugId: res.debugId, text: res.text, dropped: res.dropped,
           error: res.error, asCommand, followUpOpen: inConversation(), talkingTo: state.talkingTo?.name,
           wake: matchAgent(res.text, state.settings.agents, { fuzzy: state.settings.wakeWordFuzzy }) })
@@ -2693,6 +2695,7 @@ async function main () {
           noteActivity()
           render()
         }
+        return res
       } catch {
         /* an interim that fails is simply skipped */
       } finally {

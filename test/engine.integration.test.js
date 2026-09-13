@@ -51,7 +51,9 @@ describe.skipIf(!runnable)('whisper engine (integration)', () => {
   })
 
   it('transcribes synthesised speech', async () => {
-    const { text } = await engine.transcribe(samples)
+    const { text, rawText } = await engine.transcribe(samples)
+    expect(typeof rawText).toBe('string')
+    expect(rawText.length).toBeGreaterThan(0)
     const norm = text.toLowerCase().replace(/[^a-z0-9 ]/g, '')
     expect(norm).toContain('transcribe this locally')
     // Which spelling of the digits you get is the model's choice, not the app's:
@@ -127,6 +129,13 @@ describe.skipIf(!runnable)('whisper engine (integration)', () => {
       const { text, dropped } = await gated.transcribe(samples)
       expect(dropped).toBeUndefined()
       expect(text.toLowerCase()).toContain('locally')
+    }, 60000)
+
+    it('hears speech over a quieter instrumental background', async () => {
+      const mixed = Float32Array.from(samples, (sample, i) => sample + 0.12 * music[i % music.length])
+      const { text, dropped } = await gated.transcribe(mixed)
+      expect(dropped).toBeUndefined()
+      expect(text.toLowerCase()).toContain('transcribe this locally')
     }, 60000)
 
     it('does not clip a half-second interim slice down to nothing', async () => {

@@ -526,6 +526,7 @@ async function initEngine () {
       corrections: settings.corrections,
       dropGlossaryEcho: settings.dropGlossaryEcho,
       confidenceFloor: settings.confidenceFloor,
+      wakeConfidenceFloor: settings.wakeConfidenceFloor,
       names: agentNames(),
       vad: { enabled: settings.vad, modelPath: await vadModel(), threshold: settings.vadThreshold }
     })
@@ -909,7 +910,7 @@ ipcMain.on('debug:audio', (_e, buffer, detail) => {
   }
 })
 
-ipcMain.handle('transcribe', async (_e, buffer, interim = false) => {
+ipcMain.handle('transcribe', async (_e, buffer, interim = false, retryBuffer = null, context = '') => {
   const debugId = randomUUID()
   const session = debugRecording.status.id
   const samples = new Float32Array(buffer)
@@ -920,7 +921,14 @@ ipcMain.handle('transcribe', async (_e, buffer, interim = false) => {
     return { text: '', error: 'engine not ready', debugId }
   }
   try {
-    const result = await engine.transcribe(samples, { interim })
+    const retrySamples = retryBuffer instanceof ArrayBuffer && retryBuffer.byteLength <= 16000 * 4 * 30
+      ? new Float32Array(retryBuffer) : null
+    const retryContext = typeof context === 'string' ? context.slice(-400) : ''
+    const result = await engine.transcribe(samples, { interim, context: retryContext, retrySamples })
+    if (result.retry) {
+      result.retry.context = retryContext
+      result.retry.audio = retrySamples ? debugRecording.segment(retrySamples, `${debugId}-retry`) : audio
+    }
     // only a settled utterance is worth putting on the clipboard
     if (result.text && !interim && settings.autoCopy) clipboard.writeText(result.text)
     debugRecording.event('transcription-result', { debugId, interim, ...result }, session)
@@ -943,12 +951,13 @@ ipcMain.handle('settings:set', (_e, patch) => {
   debugRecording.event('settings-change', { patch })
   // Glossary edits apply to the next utterance — no need to restart the server.
   if (engine && ('vocabulary' in patch || 'corrections' in patch ||
-      'dropGlossaryEcho' in patch || 'confidenceFloor' in patch || 'agents' in patch)) {
+      'dropGlossaryEcho' in patch || 'wakeConfidenceFloor' in patch || 'confidenceFloor' in patch || 'agents' in patch)) {
     engine.setGlossary({
       vocabulary: settings.vocabulary,
       corrections: settings.corrections,
       dropGlossaryEcho: settings.dropGlossaryEcho,
       confidenceFloor: settings.confidenceFloor,
+      wakeConfidenceFloor: settings.wakeConfidenceFloor,
       // Renaming an agent renames what the echo rule has to let through.
       names: agentNames()
     })

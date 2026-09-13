@@ -7,6 +7,8 @@ import { encodeWav } from './wav.js'
 import {
   parseServerJson, parseCliOutput, cleanTranscript, isConfident, createQueue
 } from './whisper-parse.js'
+import { shouldRetryTranscript, preferRetry } from '../shared/transcript-retry.js'
+import { acceptShortAddress } from '../shared/wake-confidence.js'
 import { buildPrompt, applyCorrections, isGlossaryEcho } from '../shared/glossary.js'
 
 const BIN_DIRS = ['/opt/homebrew/bin', '/usr/local/bin', '/usr/bin']
@@ -82,7 +84,7 @@ export function vadArgs (vad) {
  */
 export function createEngine ({
   modelPath, threads = 6, language = 'en',
-  vocabulary = [], corrections = {}, dropGlossaryEcho = true, confidenceFloor = 0,
+  vocabulary = [], corrections = {}, dropGlossaryEcho = true, confidenceFloor = 0, wakeConfidenceFloor = -0.85,
   names = [], vad = null
 }) {
   const serverBin = which('whisper-server')
@@ -98,6 +100,7 @@ export function createEngine ({
   let addressed = names
   let dropEcho = dropGlossaryEcho
   let floor = confidenceFloor
+  let addressFloor = wakeConfidenceFloor
   let proc = null
   let port = null
   let ready = null
@@ -216,7 +219,7 @@ export function createEngine ({
     }
   }
 
-  async function viaServer (wav, { interim = false } = {}) {
+  async function viaServer (wav, { interim = false, retry = false, retryContext = '' } = {}) {
     await start()
     const form = new FormData()
     form.append('file', new Blob([wav], { type: 'audio/wav' }), 'chunk.wav')
@@ -227,7 +230,8 @@ export function createEngine ({
     // The initial prompt biases the decoder toward glossary spellings. It is
     // safe on interim passes too: `no_context` drops the *previous chunk's*
     // text, not this field.
-    if (prompt) form.append('prompt', prompt)
+    if (retry && retryContext) form.append('prompt', retryContext)
+    else if (prompt && !retry) form.append('prompt', prompt)
     // Interim passes are thrown away as soon as the next one lands, so trade
     // accuracy for latency: greedy decode, no fallback retries.
     if (interim) {
@@ -240,10 +244,11 @@ export function createEngine ({
     return parseServerJson(await res.json())
   }
 
-  function viaCli (wav) {
+  function viaCli (wav, { retry = false, retryContext = '' } = {}) {
     return new Promise((resolve, reject) => {
       const args = ['-m', modelPath, '-f', '-', '-t', String(threads), '-l', language, '-np', ...gate]
-      if (prompt) args.push('--prompt', prompt)
+      if (retry && retryContext) args.push('--prompt', retryContext)
+      else if (prompt && !retry) args.push('--prompt', prompt)
       const p = spawn(cliBin, args)
       let out = ''
       let err = ''
@@ -259,7 +264,20 @@ export function createEngine ({
 
   const queue = createQueue(async ({ samples, opts }) => {
     const wav = encodeWav(samples, 16000)
-    const parsed = mode === 'server' ? await viaServer(wav, opts) : await viaCli(wav)
+    let parsed = mode === 'server' ? await viaServer(wav, opts) : await viaCli(wav, opts)
+    const original = parsed
+    if (shouldRetryTranscript(parsed, opts?.interim)) {
+      try {
+        const retryWav = opts?.retrySamples?.length ? encodeWav(opts.retrySamples, 16000) : wav
+        const retryOptions = { retry: true, retryContext: String(opts?.context || '').slice(-400) }
+        const retry = mode === 'server' ? await viaServer(retryWav, retryOptions) : await viaCli(retryWav, retryOptions)
+        const accepted = preferRetry(original, retry)
+        if (accepted) parsed = retry
+        parsed.retry = { originalText: original.text, originalConfidence: original.confidence,
+          text: retry.text, confidence: retry.confidence, accepted }
+      } catch (err) { parsed.retry = { error: err.message, accepted: false } }
+    }
+    parsed.rawText = parsed.text
     /* The gate found no speech in it at all, so whisper was handed nothing and
        there is no text to judge. Named rather than silent for the same reason
        the confidence floor is: the threshold is a setting, and watching what it
@@ -272,7 +290,11 @@ export function createEngine ({
     /* Music the room was playing, confidently turned into words. The decoder
        is the one that knows: this is the same text it produced, thrown away
        on its own numbers. */
-    if (!isConfident(parsed.confidence, floor)) {
+    const shortAddress = !isConfident(parsed.confidence, floor) && acceptShortAddress({
+      text: parsed.text, confidence: parsed.confidence, durationMs: samples.length / 16,
+      names: addressed, gated, interim: opts?.interim, floor: addressFloor
+    })
+    if (!isConfident(parsed.confidence, floor) && !shortAddress) {
       /* With the number in it, because the floor is a setting and the only way
          to tune it is to see what it just rejected. A drop at -0.52 against a
          floor of -0.5 is a floor set slightly too high; one at -1.4 is the
@@ -285,7 +307,7 @@ export function createEngine ({
     // back, not something that was said.
     const echo = dropEcho &&
       isGlossaryEcho(text, { vocabulary: terms, corrections: fixups, names: addressed })
-    return { ...parsed, text: echo ? '' : text }
+    return { ...parsed, ...(shortAddress ? { acceptedBy: 'short-address' } : {}), text: echo ? '' : text, ...(echo ? { dropped: 'glossary echo' } : {}) }
   })
 
   return {
@@ -298,8 +320,9 @@ export function createEngine ({
     transcribe: (samples, opts = {}) => queue.push({ samples, opts }),
     get pending () { return queue.size },
     /** Swap the glossary in place; takes effect on the next utterance. */
-    setGlossary ({ vocabulary, corrections, dropGlossaryEcho, confidenceFloor, names } = {}) {
+    setGlossary ({ vocabulary, corrections, dropGlossaryEcho, confidenceFloor, wakeConfidenceFloor, names } = {}) {
       if (dropGlossaryEcho !== undefined) dropEcho = !!dropGlossaryEcho
+      if (Number.isFinite(wakeConfidenceFloor)) addressFloor = wakeConfidenceFloor
       if (confidenceFloor !== undefined) floor = Number(confidenceFloor) || 0
       if (names !== undefined) addressed = Array.isArray(names) ? names : []
       if (vocabulary !== undefined) { prompt = buildPrompt(vocabulary); terms = vocabulary }
