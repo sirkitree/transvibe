@@ -404,7 +404,7 @@ export function createCliAgent ({
       }
 
       return {
-        ...acceptAnswer(parsed.text),
+        ...acceptAnswer(parsed.text, { speakerNames: history.filter(t => t?.name).map(t => t.name) }),
         ms,
         tokens: parsed.tokens || null,
         model: at,

@@ -110,7 +110,7 @@ describe('buildEscalationPrompt', () => {
     expect(typeof prompt).toBe('string')
     expect(prompt).toContain('what is a VAD')
     expect(prompt).toContain('Them: are you there')
-    expect(prompt).toContain('You: Yes.')
+    expect(prompt).toContain('Assistant (identity unknown): Yes.')
   })
 
   /* The rules live in conversation.js and reach the model through the slot

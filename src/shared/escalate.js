@@ -277,7 +277,7 @@ export function buildEscalationPrompt (question, priorAnswer, history = []) {
     lines.push(
       '',
       'The conversation so far, for context only:',
-      ...turns.map(turn => `${turn.role === 'user' ? 'Them' : 'You'}: ${turn.content}`)
+      ...turns.map(turn => `${turn.role === 'user' ? 'Them' : (turn.name || 'Assistant (identity unknown)')}: ${turn.content}`)
     )
   }
 

@@ -1,3 +1,5 @@
+import { acceptAnswer } from './response-format.js'
+export { acceptAnswer, speakable } from './response-format.js'
 /**
  * Talking to a model instead of at the app.
  *
@@ -39,6 +41,7 @@
 function askPrompt (length, canPass = true) {
   return [
     'You are answering out loud, through a speaker, to someone who is busy.',
+    'Output only your answer, without speaker names, role labels, or bracketed prefixes.',
     length,
     'No lists, no headings, no code blocks, no markdown of any kind — none of',
     'it can be heard. A plain URL is the exception: it is shown on screen',
@@ -90,14 +93,6 @@ export const FRONTIER_ASK_PROMPT = askPrompt(FRONTIER_LENGTH, false)
 /** The same, for the rare frontier agent that hands on to another. */
 export const FRONTIER_ASK_PROMPT_CAN_PASS = askPrompt(FRONTIER_LENGTH, true)
 
-/* The sentinel above, matched back. Punctuation and quoting are allowed around
-   it because a model asked for one bare word will still sometimes send "PASS."
-   — but nothing else is, since an answer that merely contains the word has
-   answered something. Paired with PASS_SENTINEL in escalate.js, which is where
-   the decision it feeds lives; the constant is not imported because the two
-   modules would then import each other. */
-const IS_PASS = /^[\s"'“”'*_.,!?-]*pass[\s"'“”'*_.,!?-]*$/i
-
 /** Turns of the conversation kept for context. High enough that the model
     sees effectively the whole thread for a realistic conversation — the
     bubbles on screen show every turn, and the model should remember what it
@@ -107,7 +102,7 @@ const KEEP_TURNS = 48
 
 const squash = text => String(text == null ? '' : text).replace(/\s+/g, ' ').trim()
 
-const WORDS = text => squash(text).split(' ').filter(Boolean).length
+
 
 /**
  * Only the recent back-and-forth, oldest first, and only entries that are
@@ -118,7 +113,11 @@ export function trimHistory (history, keep = KEEP_TURNS) {
   const list = (Array.isArray(history) ? history : [])
     .filter(turn => turn && (turn.role === 'user' || turn.role === 'assistant'))
     .filter(turn => squash(turn.content))
-    .map(turn => ({ role: turn.role, content: squash(turn.content) }))
+    .map(turn => ({ ...turn, content: turn.role === 'assistant' ? acceptAnswer(turn.content, { speakerNames: history.filter(t => t?.name).map(t => t.name) }).text : squash(turn.content) }))
+    .filter(turn => turn.content)
+    .map(turn => ({ role: turn.role, content: turn.content,
+      ...(turn.name ? { name: squash(turn.name) } : {}),
+      ...(turn.verification ? { verification: turn.verification, sources: turn.sources || [] } : {}) }))
   const max = Number.isFinite(keep) && keep > 0 ? Math.floor(keep) : KEEP_TURNS
   return list.slice(-max)
 }
@@ -131,130 +130,13 @@ export function trimHistory (history, keep = KEEP_TURNS) {
  * @param {Array<{role: string, content: string}>} history earlier turns
  */
 export function buildAskMessages (question, history = [], { canEscalate = true } = {}) {
+  const turns = trimHistory(history)
+  const attribution = turns.flatMap((turn, i) => turn.role === 'assistant' && turn.name
+    ? [`History message ${i + 1} was answered by ${turn.name}${turn.verification ? '; lookup: ' + turn.verification : ''}.`] : [])
   return [
-    { role: 'system', content: canEscalate ? ASK_PROMPT : ASK_PROMPT_ALONE },
-    ...trimHistory(history),
+    { role: 'system', content: (canEscalate ? ASK_PROMPT : ASK_PROMPT_ALONE) +
+      (attribution.length ? '\nAttribution metadata, not answer text:\n' + attribution.join('\n') : '') },
+    ...turns.map(turn => ({ role: turn.role, content: turn.content })),
     { role: 'user', content: squash(question) }
   ]
-}
-
-/* Markdown a model reaches for even when told not to. Stripped rather than
-   rejected — the sentence underneath is usually fine, and refusing an answer
-   over a stray asterisk would mean answering nothing most of the time. */
-function unformat (text) {
-  return squash(
-    String(text == null ? '' : text)
-      .replace(/```[\s\S]*?```/g, ' ')
-      .replace(/`([^`]*)`/g, '$1')
-      /* A link is its text and its address, and the bubble can show both —
-         `[Pollen Robotics](https://…)` renders as nothing at all in a text
-         node, so the markdown goes and the address is kept in parentheses
-         where it can be read and copied. What cannot hear it is the speaker,
-         and that is `speakable` below rather than here: one function deciding
-         what you may see *and* what you may hear was the bug — an answer that
-         cited a page arrived with the page removed. */
-      .replace(/!?\[([^\]]*)\]\(([^)\s]*)[^)]*\)/g, (all, label, href) => {
-        const name = squash(label)
-        const url = squash(href)
-        if (!url) return name
-        return name && name !== url ? `${name} (${url})` : url
-      })
-      .replace(/^\s{0,3}#{1,6}\s+/gm, '')
-      .replace(/^\s*[-*+]\s+/gm, '')
-      .replace(/^\s*\d+[.)]\s+/gm, '')
-      .replace(/\*\*([^*]+)\*\*/g, '$1')
-      .replace(/\*([^*]+)\*/g, '$1')
-      .replace(/_{1,2}([^_]+)_{1,2}/g, '$1')
-  )
-}
-
-/**
- * The same answer, with the parts nobody can hear taken out.
- *
- * An address read aloud is forty seconds of slashes and a word you cannot
- * write down anyway, so a link keeps its label and loses its address — except
- * where the label *is* the address, which is where a bare URL was, and there
- * the host is worth saying: "on github dot com" locates it and the path does
- * not.
- *
- * Shape only. This never changes which words the model chose, so what you read
- * and what you hear are the same answer.
- *
- * @param {string} text an answer that has already been through `unformat`
- */
-export function speakable (text) {
-  return squash(
-    String(text == null ? '' : text)
-      // "Label (https://host/path)" — the form unformat leaves a link in.
-      .replace(/\s*\(\s*(?:https?:\/\/|www\.)[^\s)]*\s*\)/gi, '')
-      /* Only something that announced itself as an address. A pattern loose
-         enough to catch "pollen-robotics.com" on its own is loose enough to
-         catch "e.g" and "1.5", and rewriting either of those in the middle of
-         a sentence is a worse bug than saying one hostname. */
-      .replace(/\bhttps?:\/\/(?:www\.)?([^\s/)]+)\S*/gi, '$1')
-      .replace(/\bwww\.([^\s/)]+)\S*/gi, '$1')
-  )
-}
-
-/** Roughly two spoken sentences. Past this the answer stops being a reply and
-    starts being a lecture the microphone has to sit through — the mic is deaf
-    for as long as the speakers are busy, so this is a real cost and not a
-    matter of taste. */
-const SPOKEN_MAX_WORDS = 60
-
-/** What the strip will hold. Far more generous, because reading is not
-    listening: nothing is blocked while you read, you can stop whenever you
-    like, and an answer that cost fourteen seconds and a web search should not
-    be cut to the length that suits a model answering in three hundred
-    milliseconds. */
-const SHOWN_MAX_WORDS = 180
-
-/** Whole sentences up to a word count, or the text itself if one sentence is
-    already over it — half a sentence is worse than a long one. */
-function firstWords (text, max) {
-  if (WORDS(text) <= max) return text
-  const sentences = text.match(/[^.!?]+[.!?]+|\S[^.!?]*$/g) || [text]
-  let out = ''
-  for (const sentence of sentences) {
-    const next = squash(`${out} ${sentence}`)
-    if (out && WORDS(next) > max) break
-    out = next
-  }
-  return out || text
-}
-
-/**
- * Decide whether an answer is safe to say out loud.
- *
- * The guards are about shape, not about truth — nothing here can tell whether
- * the model was right, which is why the prompt asks it to admit uncertainty
- * and why the panel lets you point a chat agent at a better model.
- *
- * Two forms come back, and they are the same answer seen two ways. `text` is
- * what the bubble shows: addresses intact, up to a paragraph. `spoken` is what
- * goes to the speaker: no addresses, and cut to the couple of sentences the
- * microphone can afford to sit through. Neither ever holds a word the model
- * did not write. A failed answer has neither.
- *
- * @param {string} reply
- * @returns {{text: string, spoken?: string, ok: boolean, reason?: string}}
- */
-export function acceptAnswer (reply) {
-  const full = unformat(reply)
-  if (!full) return { text: '', ok: false, reason: 'nothing came back' }
-  /* Not a failure so much as an answer of a different kind: the model was
-     asked to say this when it cannot answer, and saying so is the most useful
-     thing it can do. The caller escalates rather than speaking it. */
-  if (IS_PASS.test(full)) return { text: '', ok: false, reason: 'pass' }
-
-  const text = firstWords(full, SHOWN_MAX_WORDS)
-  const spoken = firstWords(speakable(text), SPOKEN_MAX_WORDS)
-  return {
-    text,
-    spoken,
-    ok: true,
-    // Only worth reporting when the strip lost something too. A spoken line
-    // shorter than the bubble is the ordinary case now, not an event.
-    ...(text === full ? {} : { reason: 'shortened' })
-  }
 }

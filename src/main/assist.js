@@ -229,7 +229,7 @@ export function createAssist ({
            "which of these models is worth waiting for", and it costs nothing
            because the question was being asked anyway. */
         return {
-          ...acceptAnswer(reply.text),
+          ...acceptAnswer(reply.text, { speakerNames: history.filter(t => t?.name).map(t => t.name) }),
           ms: Date.now() - started,
           tokens: reply.tokens,
           model: at || model
