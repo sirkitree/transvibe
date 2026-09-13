@@ -354,3 +354,18 @@ describe('listCliAgents', () => {
     expect((await listCliAgents({ spawn })).every(f => f.present === false)).toBe(true)
   })
 })
+
+describe('timeouts with partial output', () => {
+  it('does not promote a progress message to a successful answer', async () => {
+    vi.useFakeTimers()
+    try {
+      const spawn = fakeSpawn(child => {
+        child.stdout.emit('data', '{"type":"item.completed","item":{"type":"agent_message","text":"I’ll look for the article to verify the state."}}\n')
+        child.kill = () => { child.emit('close', null); return true }
+      })
+      const pending = createCliAgent({ provider: 'codex', spawn, timeoutMs: 30000 }).ask('Find the article and verify.')
+      await vi.advanceTimersByTimeAsync(30000)
+      expect(await pending).toMatchObject({ ok: false, reason: 'took too long', text: '' })
+    } finally { vi.useRealTimers() }
+  })
+})

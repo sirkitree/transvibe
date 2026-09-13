@@ -225,15 +225,16 @@ export function parseCodexJsonl (stdout) {
   if (!objects.length) return fail(squash(stdout) ? 'not json' : 'no output', { tokens: null })
 
   let answer = ''
+  let completed = false
   let tokens = null
   let error = ''
   for (const line of objects) {
     const item = options(line.item)
     if (line.type === 'item.completed' && item.type === 'agent_message') {
       const said = squash(item.text)
-      if (said) answer = said
+      if (said && item.phase !== 'commentary') answer = said
     }
-    if (line.type === 'turn.completed') tokens = codexTokens(line.usage)
+    if (line.type === 'turn.completed') { completed = true; tokens = codexTokens(line.usage) }
     // A failed turn reports itself in the stream rather than on stderr, and
     // the message is the only clue about why — usually "not logged in".
     if (line.type === 'error' || line.type === 'turn.failed' || item.type === 'error') {
@@ -241,7 +242,9 @@ export function parseCodexJsonl (stdout) {
     }
   }
 
-  if (answer) return { text: answer, ok: true, tokens }
+  if (error) return fail(error, { tokens })
+  if (answer && completed) return { text: answer, ok: true, tokens }
+  if (answer) return fail('incomplete turn', { tokens })
   return fail(error || 'no answer', { tokens })
 }
 

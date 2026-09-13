@@ -384,6 +384,7 @@ export function createCliAgent ({
          arrived and is sitting there in stdout. The user asked for silence,
          not for the most recent thing to be read out. */
       if (result.outcome === 'cancelled') return failed('cancelled')
+      if (result.outcome === 'timeout') return failed('took too long')
 
       const parsed = which === 'codex'
         ? parseCodexJsonl(result.stdout)

@@ -171,8 +171,23 @@ describe('parseCodexJsonl', () => {
   it('ignores an empty agent message rather than answering with nothing', () => {
     const r = parseCodexJsonl([
       '{"type":"item.completed","item":{"type":"agent_message","text":"The answer."}}',
-      '{"type":"item.completed","item":{"type":"agent_message","text":"  "}}'
+      '{"type":"item.completed","item":{"type":"agent_message","text":"  "}}',
+      '{"type":"turn.completed"}'
     ].join('\n'))
     expect(r.text).toBe('The answer.')
+  })
+})
+
+describe('completed Codex turns only', () => {
+  const message = (text, phase) => JSON.stringify({ type: 'item.completed', item: { type: 'agent_message', text, phase } })
+  it('rejects the recorded progress-only stream without completion', () => {
+    expect(parseCodexJsonl(message('I’ll look for the article to verify the state.')))
+      .toMatchObject({ ok: false, reason: 'incomplete turn', text: '' })
+  })
+  it('does not accept commentary even with a completed turn', () => {
+    expect(parseCodexJsonl(message('I will look.', 'commentary') + '\n{"type":"turn.completed"}').ok).toBe(false)
+  })
+  it('does not accept an answer followed by a failed turn', () => {
+    expect(parseCodexJsonl(message('Ohio.') + '\n{"type":"turn.failed","error":{"message":"request failed"}}').ok).toBe(false)
   })
 })
