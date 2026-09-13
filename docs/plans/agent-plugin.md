@@ -11,7 +11,10 @@ Status: **step one built**, 2026-09-13. The plugin loads, the hook runs, and the
 - **`claude --plugin-dir plugin` loads the hooks without touching `~/.claude/settings.json`**, which is how to work on this without arming it for every session.
 - **`Notification` carries a written `message` alongside `notification_type`** — "Claude is waiting for your input" for `idle_prompt`. That is a sentence someone wrote to be read by a person, which means the speakable form of a notification is a field rather than something we compose.
 - **`SessionStart` also carries `model`**, so a session can say which model it is as well as where it is.
-- **`PermissionRequest` is still uncaptured.** It does not fire in `permission_mode: auto`, which is what the recorded session ran in. It needs an interactive session in the default mode doing something that prompts.
+- **`PermissionRequest` only fires in the default permission mode**, not in `auto`. It carries `tool_name`, `tool_input` and `permission_suggestions` — but **no `permission_category` and no `tool_use_id`**, both of which the reference lists. Do not depend on either.
+- **`permission_suggestions` is what "always allow" is made of**: `[{"type": "setMode", "mode": "acceptEdits", "destination": "session"}]` for a file write. Offering that out loud is a real option later, and it is the session's own suggestion rather than something we would be inventing.
+- **`tool_input` is not speakable.** For a `Write` it holds the entire file content. What gets said is the shape of the request — "Claude wants to write hooktest.txt" — never the argument.
+- **A permission prompt fires twice.** `PermissionRequest` first, then a `Notification` with `notification_type: "permission_prompt"` about six seconds later, both carrying the same `prompt_id`. Handling both would ask the room the same question twice. `PermissionRequest` is the actionable one — it is the event that can answer — so a `permission_prompt` notification for a `prompt_id` already in hand is dropped. `prompt_id` is the join, and it is on every event that has one.
 
 The recordings are in `test/fixtures/hooks/`, and `test/agent-hook.test.js` runs every one of them through the hook, so a payload captured later is covered by being added rather than by somebody remembering to write a test for it. Two were kept for what they will exercise later rather than for their shape: one long enough that the spoken-length rules will have to cut it, and one ending in "Want it at `…` instead?" — an agent stopped, waiting on an answer nobody is at the terminal to give, which is the feature in a sentence.
 
@@ -39,8 +42,8 @@ Read from the current hooks reference, not from the plugin:
 | event | blocks? | how we use it |
 |---|---|---|
 | `Stop` | yes, **exit 2 with the reason on stderr** | Claude finished. Speak `last_assistant_message`; what you say back becomes the next turn. |
-| `PermissionRequest` | via `hookSpecificOutput.decision` = `allow` / `deny` / `abstain`; **exit 2 is ignored here** | Speak what it wants to do; yes or no decides it; anything else abstains and the TUI asks as usual. |
-| `Notification` | no | `notification_type` is one of a known set — `permission_prompt`, `idle_prompt`, `agent_needs_input`, `agent_completed`. Speak the ones worth hearing, say nothing for the rest. |
+| `PermissionRequest` | via `hookSpecificOutput.decision` = `allow` / `deny` / `abstain`; **exit 2 is ignored here** | Speak what it wants to do — the tool, never the argument; yes or no decides it; anything else abstains and the TUI asks as usual. |
+| `Notification` | no | Read its `message` out. `notification_type` decides whether it is worth hearing at all, and drops the `permission_prompt` that doubles a `PermissionRequest` we already have. |
 | `SessionStart` | no | Register the session: `cwd`, `session_id`, so a request can be given a name. |
 
 Two details matter and are easy to get wrong. `Stop` no longer takes the `{"decision": "block", "reason": …}` JSON that superwhisper's binary still emits — the documented mechanism is **exit code 2 with the text on stderr**, which is what continues the conversation with what you said. And `Stop` carries `stop_hook_active`; when it is true the hook must do nothing at all, or a voice reply that itself ends in a Stop event becomes a loop that never gives the terminal back.

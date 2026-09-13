@@ -1,0 +1,10 @@
+{
+  "session_id": "00000000-0000-4000-8000-000000000003",
+  "transcript_path": "/Users/example/.claude/projects/-Users-example-repos-transvibe/00000000-0000-4000-8000-000000000003.jsonl",
+  "cwd": "/Users/example/repos/transvibe",
+  "scratchpad_dir": "/private/tmp/claude-501/-Users-example-repos-transvibe/00000000-0000-4000-8000-000000000003/scratchpad",
+  "prompt_id": "00000000-0000-4000-8000-000000000004",
+  "hook_event_name": "Notification",
+  "message": "Claude needs your permission",
+  "notification_type": "permission_prompt"
+}
