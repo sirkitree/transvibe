@@ -185,6 +185,18 @@ export const DEFAULTS = {
   remoteTimeoutMs: 30000,
   remoteWebSearch: false,
 
+  /* The same CLIs, the other way round: a session already running in a
+     terminal asks *this* app, through the plugin's hook, and hears the answer
+     you say out loud. Off by default because it is a way in — nothing can use
+     it until it is switched on, and until then the hook exits before it does
+     anything at all. Nothing about it reaches the network.
+
+     `agentReplyMs` is how long a session will sit still waiting to hear from
+     you. Long enough to notice, think and say a sentence; short enough that
+     walking away from the desk does not strand a terminal. */
+  agentPlugin: false,
+  agentReplyMs: 90000,
+
   /* How many questions went out today, per day. Observed rather than chosen,
      like modelStats above: it is what the daily cap counts against, and a cap
      that reset every time the app restarted would not be a cap. Written by the

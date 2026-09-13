@@ -7,6 +7,8 @@ import { createLatestRequest } from './latest-request.js'
 import { conversationFact, isAcknowledgment, needsVerification, claimsLocalSearch, verificationReply, UNVERIFIED } from '../shared/reply-policy.js'
 import { randomUUID } from 'node:crypto'
 import { createDebugRecording } from './debug-recording.js'
+import { createAgentInbox } from './agent-inbox.js'
+import { sessionName } from '../shared/agent-request.js'
 import { spawn } from 'node:child_process'
 import fs, { existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
@@ -48,6 +50,36 @@ const debugRecording = createDebugRecording(path.join(config.DIR, 'recordings'),
   if (tray) tray.setTitle(debugRecording.status.active ? '● REC' : '')
   send('debug:status', debugRecording.status)
 })
+/* A coding agent's way in. Built always, started only when the setting says
+   so: while it is not started there is no `listening` file, and the plugin's
+   hook exits before it does anything at all — so a session pays nothing at
+   all for this being installed and switched off. */
+const agentInbox = createAgentInbox({
+  dir: config.DIR,
+  replySeconds: Math.max(1, Math.round((settings.agentReplyMs || 90000) / 1000)),
+  onRequest ({ id, request, say }) {
+    debugRecording.event('agent-request', { id, event: request.event, say })
+    send('agent:request', {
+      id,
+      name: sessionName(request),
+      event: request.event,
+      cwd: request.cwd,
+      model: request.model,
+      say,
+      answerable: say.answerable
+    })
+  },
+  onExpire ({ id }) {
+    debugRecording.event('agent-expired', { id })
+    send('agent:expired', { id })
+  },
+  onError (message) {
+    console.warn('[transvibe] agent inbox stopped:', message)
+    debugRecording.event('agent-error', { message })
+    send('agent:status', agentInbox.status)
+  }
+})
+
 let listening = true
 let commandTimer = null
 let tapProc = null
@@ -650,6 +682,7 @@ app.whenReady().then(async () => {
   const granted = await systemPreferences.askForMediaAccess('microphone').catch(() => false)
   createWindow()
   if (settings.debugRecording) debugRecording.start(settings)
+  if (settings.agentPlugin) agentInbox.start()
 
   win.webContents.once('did-finish-load', () => {
     if (!granted) {
@@ -941,6 +974,13 @@ ipcMain.handle('transcribe', async (_e, buffer, interim = false, retryBuffer = n
   }
 })
 
+ipcMain.handle('agent:status', () => agentInbox.status)
+/* Answers, not questions: what the room said goes back to the session that
+   asked, and nowhere near a model. REMOTE_JOBS and boundary.test.js are the
+   two halves of keeping that true. */
+ipcMain.on('agent:answer', (_e, id, said) => agentInbox.answer(id, said))
+ipcMain.on('agent:decline', (_e, id) => agentInbox.decline(id))
+
 ipcMain.handle('settings:get', () => settings)
 ipcMain.handle('settings:set', (_e, patch) => {
   settings = config.save(patch)
@@ -951,6 +991,14 @@ ipcMain.handle('settings:set', (_e, patch) => {
     send('debug:status', debugRecording.status)
   }
   debugRecording.event('settings-change', { patch })
+  /* The switch is the whole enforcement. Off, the `listening` file goes and
+     every hook waiting behind one of these is released rather than left to
+     discover it ninety seconds later. */
+  if ('agentPlugin' in patch || 'agentReplyMs' in patch) {
+    agentInbox.stop()
+    if (settings.agentPlugin) agentInbox.start()
+    send('agent:status', agentInbox.status)
+  }
   // Glossary edits apply to the next utterance — no need to restart the server.
   if (engine && ('vocabulary' in patch || 'corrections' in patch ||
       'dropGlossaryEcho' in patch || 'wakeConfidenceFloor' in patch || 'confidenceFloor' in patch || 'agents' in patch)) {
@@ -1689,6 +1737,7 @@ app.on('before-quit', event => {
 })
 
 app.on('will-quit', () => {
+  agentInbox.stop()
   clearInterval(wakeTimer)
   destroyOrbWindow()
   cancelRemote()

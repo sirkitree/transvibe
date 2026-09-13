@@ -79,6 +79,11 @@ const state = {
   // The follow-up countdown is suspended until speech and its echo tail end.
   conversationWindow: createConversationWindow(),
   asking: false,
+  /* A coding agent's session, waiting on an answer, and the ones that arrived
+     while the room was busy. Only one question is put at a time: two voices
+     talking over each other is how neither gets answered. */
+  agentAsking: null,
+  agentQueue: [],
   askSeq: 0,         // guards against a slow answer landing after a newer question
   pendingPlacement: null,   // where a panel is being dragged to, until released
   // Which glossary fix is loaded into the form for editing, by what it hears.
@@ -261,6 +266,8 @@ function setText (text) {
    answer. Ending it here means the next turn starts a new thread rather than
    picking the old one back up half an hour later. */
 function clearConversation () {
+  declineAgent('cleared')
+  state.agentQueue = []
   turnBuffer.reset()
   if (state.asking) window.transvibe.cancelEscalation()
   state.askSeq++
@@ -330,6 +337,17 @@ async function addressAgent (agent, utterance, { keep = null } = {}) {
     const cmd = parseCommand(utterance, parseOptions())
     if (cmd && UNIVERSAL.has(cmd.action)) return runCommand(utterance)
     return converse(agent, utterance)
+  }
+
+  /* A session that asked something. It is not on the roster and it is not a
+     model: what you say goes back down the hook it came from, and nothing
+     here may reach one. The universal commands still work, because you have
+     to be able to interrupt a question as much as an answer. */
+  if (agent.kind === 'session') {
+    turnBuffer.abort()
+    const cmd = parseCommand(utterance, parseOptions())
+    if (cmd && UNIVERSAL.has(cmd.action)) return runCommand(utterance)
+    return answerAgent(utterance)
   }
 
   /* Reserved, and refused rather than quietly ignored: a name that is set up
@@ -410,7 +428,10 @@ function stopWaiting () {
    because after "stop" nothing is what you asked for.
    @returns {boolean} whether there was anything to stop */
 function cancelEscalation () {
-  if (!state.asking && !turnBuffer.pending && (!state.waiting || !state.waiting.waiting)) return false
+  /* "Stop" is also how you turn a session down. Counted as something to
+     stop, so saying it does not fall through to the parser as dictation. */
+  const declined = declineAgent('stopped')
+  if (!state.asking && !turnBuffer.pending && (!state.waiting || !state.waiting.waiting)) return declined
   turnBuffer.reset()
   state.askSeq++
   window.transvibe.cancelEscalation()
@@ -467,6 +488,90 @@ const turnBuffer = createTurnBuffer({
     debugEvent('conversation-continuation', { question: turn.question })
   }
 })
+
+/* A colour per session, stable, so two terminals are two colours and the
+   same terminal is the same one tomorrow. Not from the roster's wheel: a
+   session is not an agent and must not take a hue an agent is using. */
+function hueFor (name) {
+  let hash = 0
+  for (const ch of String(name || '')) hash = (hash * 31 + ch.codePointAt(0)) % 360
+  return hash / 360
+}
+
+/**
+ * A coding agent's session, asking something.
+ *
+ * It arrives as a turn in the conversation, spoken by a name, and is answered
+ * the way a follow-up is answered — which is the whole reason the turn buffer
+ * and the conversation window were built. Nothing about it is a question for
+ * a model: the answer goes back down the hook it came from.
+ *
+ * A permission request is a fragment ("wants to write hooktest.txt") so that
+ * the name can be said in front of it out loud while the bubble, which
+ * already shows who it is from, does not repeat itself.
+ */
+function presentAgentRequest (request) {
+  const agent = {
+    name: request.name, kind: 'session', hue: hueFor(request.name), voice: null, rate: null
+  }
+  state.talkingTo = agent
+  state.agent = agent
+  state.history = [...state.history,
+    { role: 'assistant', content: request.say.show, name: agent.name, hue: agent.hue }]
+  if (request.answerable) state.agentAsking = { ...request, agent }
+  state.conversationWindow.open(state.settings.conversationMs || 0)
+  debugEvent('agent-request', { id: request.id, name: request.name, say: request.say })
+  hint(request.say.show)
+  say(request.say.kind === 'permission'
+    ? `${agent.name} ${request.say.spoken}`
+    : request.say.spoken, { plain: true })
+  noteActivity()
+  render()
+}
+
+/* Nothing is put to the room over the top of something else: a question that
+   lands while the app is speaking, thinking, or waiting on a thought to
+   finish waits its turn. The idle tick drains it. */
+function agentBusy () {
+  return !!state.agentAsking || state.asking || turnBuffer.pending || state.deaf > 0
+}
+
+function drainAgentQueue () {
+  if (!state.agentQueue.length || agentBusy()) return
+  presentAgentRequest(state.agentQueue.shift())
+}
+
+/** What was said, back to the session that asked, and nowhere else. */
+function answerAgent (said) {
+  const open = state.agentAsking
+  if (!open) {
+    hint('nothing is waiting on an answer')
+    return
+  }
+  state.agentAsking = null
+  window.transvibe.answerAgent(open.id, said)
+  state.history = [...state.history, { role: 'user', content: said }]
+  debugEvent('agent-answer', { id: open.id, said })
+  hint(`answered ${open.agent.name}`)
+  state.conversationWindow.open(state.settings.conversationMs || 0)
+  noteActivity()
+  render()
+  drainAgentQueue()
+}
+
+/* Not an answer, and said so rather than left to time out: whatever asked is
+   let go now and carries on without the room. */
+function declineAgent (reason) {
+  const open = state.agentAsking
+  if (!open) return false
+  state.agentAsking = null
+  window.transvibe.declineAgent(open.id)
+  debugEvent('agent-declined', { id: open.id, reason })
+  hint(`${open.agent.name} carried on without an answer`)
+  render()
+  drainAgentQueue()
+  return true
+}
 
 async function converse (agent, question) {
   state.talkingTo = agent
@@ -1377,6 +1482,8 @@ function forgetTranscript () {
      its own clock and is allowed to be longer than the idle one. The tick
      asks again once the window has lapsed. */
   if (inConversation() || state.asking || turnBuffer.pending || state.deaf > 0) return
+  // A session is still waiting on an answer; the question stays on screen.
+  if (state.agentAsking) return
   state.finals = []
   state.live = ''
   state.liveSeq++
@@ -2537,6 +2644,23 @@ async function main () {
     window.transvibe.debugFlushed()
   })
   updateRecording(await window.transvibe.debugStatus())
+  /* A session cannot be turned away at the door: by the time a request
+     arrives, a hook is already blocked behind it. Queued rather than dropped,
+     and drained by the idle tick below. */
+  window.transvibe.onAgentRequest(request => {
+    if (agentBusy()) state.agentQueue.push(request)
+    else presentAgentRequest(request)
+  })
+  window.transvibe.onAgentExpired(({ id }) => {
+    if (state.agentAsking?.id !== id) return
+    state.agentAsking = null
+    hint(`${state.talkingTo?.name || 'the agent'} stopped waiting`)
+    render()
+    drainAgentQueue()
+  })
+  window.transvibe.onAgentStatus(status => {
+    if (status.error) hint(`agent plugin stopped: ${status.error}`)
+  })
   $('recording-status').onclick = async () => {
     state.settings = await saveSettings({ debugRecording: false })
   }
@@ -2605,6 +2729,8 @@ async function main () {
        conversation is still open — so it is asked again on every tick past
        the line. Cheap: it returns at once unless there is something to do. */
     if (expired || state.presence.expired) forgetTranscript()
+    // A question that arrived while the room was busy, once it is not.
+    drainAgentQueue()
     // Fires every tick rather than only on an edge: the indicator's own
     // conversation clock is cheaper to just recheck than to track.
     renderConvoIndicator()

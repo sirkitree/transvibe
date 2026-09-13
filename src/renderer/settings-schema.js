@@ -223,6 +223,26 @@ export const SECTIONS = [
         spoken: ['the remote timeout', 'how long to wait for a frontier model'],
         type: 'range', min: 5000, max: 120000, step: 5000, unit: 'ms'
       },
+      {
+        /* The other direction, and the reason it sits under this heading
+           rather than under Advanced: it is the same relationship with the
+           same CLIs, turned around. Nothing about it reaches the network —
+           a session on this Mac speaks to this app over a directory. */
+        group: 'The other way round',
+        key: 'agentPlugin',
+        label: 'Let a coding agent ask you out loud',
+        help: 'With the transvibe plugin installed in Claude Code, a session running in your terminal can say when it has finished or needs a decision, and you answer by voice. Install it with: claude plugin marketplace add sirkitree/transvibe && claude plugin install transvibe@transvibe',
+        spoken: ['the agent plugin', 'the coding agent plugin'],
+        type: 'toggle'
+      },
+      {
+        group: 'The other way round',
+        key: 'agentReplyMs',
+        label: 'An agent waits for your answer for',
+        help: 'How long a session sits still waiting to hear from you. Past this it carries on without an answer, which for a permission request means the terminal asks you the ordinary way.',
+        spoken: ['the agent reply timeout', 'how long an agent waits'],
+        type: 'range', min: 15000, max: 300000, step: 15000, unit: 'ms'
+      }
     ]
   },
   {

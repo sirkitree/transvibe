@@ -35,6 +35,10 @@ One microphone stream feeds both consumers, so there is no second capture proces
 
 The VAD opens a segment after 3 consecutive frames above threshold and closes it after 550 ms of silence in dictation or 950 ms during a conversation, reporting the *true* onset frame; capture includes up to 200 ms before it for quiet word beginnings, bounded by the last utterance or microphone-unmute boundary. Segments under the configurable minimum (250 ms by default) are discarded, and one running past 15 s is force-flushed and immediately reopened.
 
+## The way in
+
+Everything else here starts at the microphone. One thing does not: with the agent plugin switched on, `src/main/agent-inbox.js` watches `agent/requests/` in Application Support, where a coding agent's hook drops what its session wants to say and blocks until an answer appears in `agent/replies/`. What arrives is shown and spoken and answered out loud — it is never a question for a model, and `test/boundary.test.js` walks the import graph to keep that structural. A directory rather than a socket: no port, no server, it survives the app restarting mid-question, and it can be tested by writing a file.
+
 ## Interim results
 
 Waiting for the hangover to expire means text only appears once you stop talking. So while an utterance is still open, the audio so far is re-transcribed every 500 ms and shown highlighted in blue. When the utterance closes, the final replaces it.
