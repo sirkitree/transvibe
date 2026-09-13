@@ -139,7 +139,7 @@ function skipBridge (tokens, at) {
  * @returns {{matched: boolean, rest: string}} `rest` is '' when the phrase was
  *   said on its own, which means "arm, I will say the command next"
  */
-export function splitWakeWord (text, { phrase = '', fuzzy = true } = {}) {
+export function splitWakeWord (text, { phrase = '', fuzzy = true, stripBridge = true } = {}) {
   const source = typeof text === 'string' ? text : ''
   const miss = { matched: false, rest: source }
 
@@ -159,7 +159,7 @@ export function splitWakeWord (text, { phrase = '', fuzzy = true } = {}) {
   }
   if (at < 0) return miss
 
-  const after = skipBridge(tokens, at + wanted.length)
+  const after = stripBridge ? skipBridge(tokens, at + wanted.length) : at + wanted.length
   const rest = after < tokens.length ? source.slice(tokens[after].start).trim() : ''
   // `cost` is 0 for an exact hearing and rises with each letter that was
   // wrong. On a roster it is how one name is preferred over another.
@@ -200,21 +200,26 @@ export function matchAgent (text, roster, { fuzzy = true } = {}) {
 
   const hits = []
   for (const agent of list) {
-    const split = splitWakeWord(source, { phrase: agent.name, fuzzy })
-    if (split.matched) hits.push({ agent, ...split })
+    const split = splitWakeWord(source, { phrase: agent.name, fuzzy, stripBridge: agent.kind !== 'chat' })
+    if (split.matched) hits.push({ agent, ...split, alias: false })
+    // Explicit aliases match exactly, without widening fuzzy matching.
+    for (const phrase of Array.isArray(agent.aliases) ? agent.aliases : []) {
+      const alias = splitWakeWord(source, { phrase, fuzzy: false, stripBridge: agent.kind !== 'chat' })
+      if (alias.matched) hits.push({ agent, ...alias, alias: true })
+    }
   }
   if (!hits.length) return miss
 
   /* Closest hearing first, then the longer name. Cost before length is what
      makes exact beat near: a name heard perfectly is zero edits away and no
      amount of extra words can outrank it. */
-  hits.sort((a, b) => a.cost - b.cost || b.words - a.words)
+  hits.sort((a, b) => a.cost - b.cost || Number(a.alias) - Number(b.alias) || b.words - a.words)
   const best = hits[0]
 
   // Equally close, and the same number of words: nothing here can tell them
   // apart, and neither could you from the outside. Better to hear nothing.
   const tied = hits.some(h =>
-    h.agent !== best.agent && h.cost === best.cost && h.words === best.words)
+    h.agent !== best.agent && h.cost === best.cost && h.alias === best.alias && h.words === best.words)
   if (tied) return { ...miss, ambiguous: true }
 
   return { matched: true, agent: best.agent, rest: best.rest }

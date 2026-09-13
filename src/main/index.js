@@ -494,7 +494,7 @@ function send (channel, payload) {
    which is the one case the glossary-echo rule must not throw away. */
 function agentNames () {
   return (Array.isArray(settings.agents) ? settings.agents : [])
-    .map(a => a && a.name)
+    .flatMap(a => a ? [a.name, ...(Array.isArray(a.aliases) ? a.aliases : [])] : [])
     .filter(Boolean)
 }
 

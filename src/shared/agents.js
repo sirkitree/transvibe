@@ -108,6 +108,9 @@ export function normalizeAgent (raw, index = 0) {
   const provider = PROVIDERS.includes(source.provider) ? source.provider : 'local'
   return {
     name,
+    aliases: [...new Map((Array.isArray(source.aliases) ? source.aliases : [])
+      .map(text).filter(Boolean).filter(a => a.toLowerCase() !== name.toLowerCase())
+      .map(a => [a.toLowerCase(), a])).values()],
     kind,
     provider,
     // Null means "whatever the app is set to" rather than a value of its own.

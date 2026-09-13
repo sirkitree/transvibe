@@ -200,3 +200,25 @@ describe('matchAgent — who was addressed', () => {
     expect(matchAgent('', roster).matched).toBe(false)
   })
 })
+
+describe('explicit wake aliases', () => {
+  const mira = normalizeRoster([{ name: 'Hey Mira', aliases: ['Hey Mera', 'Hey mirror', 'Hey Myra', 'Hey Meera'] }])
+  it('preserves aliases through normalization and routes without rewriting the request', () => {
+    for (const alias of mira[0].aliases) {
+      expect(matchAgent(`${alias}, Explain Mirrors`, mira, { fuzzy: false }))
+        .toMatchObject({ matched: true, agent: mira[0], rest: 'Explain Mirrors' })
+      expect(matchAgent(alias, mira)).toMatchObject({ matched: true, rest: '' })
+    }
+  })
+  it('does not match aliases inside dictation or fuzzy variants of aliases', () => {
+    for (const text of ['mirror', 'I said hey mirror yesterday', 'Hey mirrors hello']) {
+      expect(matchAgent(text, mira).matched).toBe(false)
+    }
+  })
+  it('prefers an exact primary name and refuses shared aliases', () => {
+    const other = { name: 'Hey mirror' }
+    expect(matchAgent('Hey mirror hello', [...mira, other]).agent).toBe(other)
+    expect(matchAgent('Hey Mera', [...mira, { name: 'Ada', aliases: ['Hey Mera'] }]))
+      .toMatchObject({ matched: false, ambiguous: true })
+  })
+})

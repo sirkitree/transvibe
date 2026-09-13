@@ -1555,6 +1555,17 @@ async function renderAgents (into = null) {
        you want deciding whether you said "delete that". */
     if (agent.kind !== 'external') {
       const sub = el('div', 'agent-sub')
+      const aliasesLabel = el('label', 'agent-sub', 'Wake aliases ')
+      const aliases = el('input')
+      aliases.type = 'text'
+      aliases.value = (agent.aliases || []).join(', ')
+      aliases.placeholder = 'Hey Mera, Hey mirror'
+      aliases.title = 'Alternate full wake phrases, separated by commas'
+      aliases.onchange = () => saveAgents(updateAgent(roster, agent.name, {
+        aliases: aliases.value.split(',')
+      }))
+      aliasesLabel.append(aliases)
+      row.append(aliasesLabel)
       const remote = isRemote(agent)
 
       /* Where it thinks. Offered to a chat agent and to nothing else: the jobs
