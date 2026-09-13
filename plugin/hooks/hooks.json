@@ -1,31 +1,47 @@
 {
-  "description": "transvibe voice integration — speak what the agent needs, answer it out loud",
+  "description": "transvibe voice integration \u2014 speak what the agent needs, answer it out loud",
   "hooks": {
     "SessionStart": [
       {
         "hooks": [
-          { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/bin/transvibe-hook", "timeout": 10 }
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/bin/transvibe-hook",
+            "timeout": 10
+          }
         ]
       }
     ],
     "Stop": [
       {
         "hooks": [
-          { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/bin/transvibe-hook", "timeout": 10 }
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/bin/transvibe-hook",
+            "timeout": 120
+          }
         ]
       }
     ],
     "Notification": [
       {
         "hooks": [
-          { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/bin/transvibe-hook", "timeout": 10 }
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/bin/transvibe-hook",
+            "timeout": 30
+          }
         ]
       }
     ],
     "PermissionRequest": [
       {
         "hooks": [
-          { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/bin/transvibe-hook", "timeout": 10 }
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/bin/transvibe-hook",
+            "timeout": 120
+          }
         ]
       }
     ]

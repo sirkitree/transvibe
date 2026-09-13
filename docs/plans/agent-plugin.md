@@ -1,6 +1,6 @@
 # Plan: the agent plugin — answer your coding agent out loud
 
-Status: **steps one and two built**, 2026-09-13. The plugin loads, the hook runs, the payloads below are recorded from a real session rather than read off a documentation page, and `src/shared/agent-request.js` turns one into what to say and what to answer with. Nothing is wired to a microphone yet; steps 3–7 are ahead.
+Status: **steps one to three built**, 2026-09-13. The plugin loads, the hook runs, the payloads below are recorded from a real session rather than read off a documentation page, `src/shared/agent-request.js` turns one into what to say and what to answer with, and the hook now waits for that answer rather than only recording. Nothing is wired to a microphone yet — with the app not watching, the hook exits at once and a session never notices it ran. Steps 4–7 are ahead.
 
 ## What step one found
 
@@ -58,6 +58,8 @@ That is affordable only if the hook never has to parse JSON. So it does not:
 
 1. Read stdin verbatim, write it to `<DIR>/agent/requests/<id>.json` (to `.tmp`, then `mv` — a watcher must never see half a file).
 2. Wait for `<DIR>/agent/replies/<id>.ack` to appear, briefly. No ack means transvibe is not running, is switched off, or is not listening: remove the request and exit 0. **The agent is never held up by an app that is not there.**
+
+   Built with one thing the plan did not have: a `<DIR>/agent/listening` file the app keeps while it watches. Waiting a second and a half on every turn of every session for an app that is simply not running is a cost somebody would feel, and testing for a file is not. The ack still gates the case that matters — the app died and left the file behind — at the old price.
 3. Wait for `<DIR>/agent/replies/<id>.done`, up to the deadline.
 4. `cat` `<id>.out` to stdout and `<id>.err` to stderr, then `exit` the integer in `<id>.exit`.
 

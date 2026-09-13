@@ -1,42 +1,109 @@
 #!/bin/sh
 # transvibe's Claude Code hook.
 #
-# Step one of docs/plans/agent-plugin.md: capture only. It reads whatever
-# Claude Code puts on stdin, writes it where the app can find it, and gets out
-# of the way. Nothing here blocks, decides, or speaks yet — the point of this
-# version is to find out what the payloads actually look like, from a real
-# session, before anything is built on a guess about their shape.
+# A courier, and deliberately nothing more. It carries whatever Claude Code
+# put on stdin to a file the app watches, waits for the app to write four
+# files back, prints them and exits with the number in one of them. It never
+# parses what it carries and has no opinion about any event: the protocol
+# lives in src/shared/agent-request.js, where it can be tested without a
+# terminal, and changing what an event does needs no reinstall of this.
 #
-# sh rather than node, and no JSON parsing, for the reason the plan gives: a
-# Claude Code user is not guaranteed to have node on PATH, and a hook that
-# fails to start fails in the middle of somebody's work. The one thing it does
-# read out of the payload is the event name, by pattern rather than by parse,
-# and only to name the file.
+# sh, not node: a Claude Code user is not guaranteed to have node on PATH, and
+# a hook that fails to start fails in the middle of somebody's work.
 #
-# Exit 0, always. A capture that cannot write is a capture that did not
-# happen, not an agent that stops.
+# The four files are .ack, then .out, .err, .exit and .done. The ack is the
+# safety mechanism — it means transvibe is running, listening, and has taken
+# this one — and without it quickly, the hook cleans up and gets out of the
+# way. An app that is closed, paused or switched off must never be something
+# an agent waits on. The ack's contents are how many seconds the app wants,
+# so the deadline belongs to the app without this script reading a setting.
+#
+# Every path out of here that is not an answer is exit 0. On Stop, a non-zero
+# exit means "keep going, here is why" — so an error exit would turn a
+# microphone that heard nothing into an instruction.
 set -u
 
 : "${TRANSVIBE_DIR:=$HOME/Library/Application Support/transvibe}"
 
 # Two off switches, both about this terminal rather than about the app: an
-# environment variable for one session, and a file for one project.
+# environment variable for one session, a file for one project. The global one
+# lives in the app's settings and needs nothing here — it simply does not ack.
 [ "${TRANSVIBE_AGENT:-1}" = "0" ] && exit 0
-hash=$(printf '%s' "${PWD:-}" | cksum | cut -d' ' -f1)
-[ -f "$TRANSVIBE_DIR/agent/off/$hash" ] && exit 0
+project=$(printf '%s' "${PWD:-}" | cksum | cut -d' ' -f1)
+[ -f "$TRANSVIBE_DIR/agent/off/$project" ] && exit 0
 
-dir="$TRANSVIBE_DIR/agent/capture"
-mkdir -p "$dir" 2>/dev/null || exit 0
+# The app writes this while it is watching and removes it when it stops, so
+# the ordinary case — transvibe not running — costs a test for a file rather
+# than a second and a half of somebody's agent sitting still. It is only a
+# fast path: if it is stale because the app died, the ack below still catches
+# it, at the old price.
+[ -f "$TRANSVIBE_DIR/agent/listening" ] || exit 0
 
-payload=$(cat)
-[ -n "$payload" ] || exit 0
+requests="$TRANSVIBE_DIR/agent/requests"
+replies="$TRANSVIBE_DIR/agent/replies"
+mkdir -p "$requests" "$replies" 2>/dev/null || exit 0
 
-event=$(printf '%s' "$payload" |
-  sed -n 's/.*"hook_event_name"[[:space:]]*:[[:space:]]*"\([A-Za-z]*\)".*/\1/p' |
-  head -1)
-[ -n "$event" ] || event=unknown
+id="$(date -u +%Y%m%dT%H%M%SZ)-$$"
+request="$requests/$id.json"
 
-file="$dir/$(date -u +%Y%m%dT%H%M%SZ)-$$-$event.json"
-printf '%s' "$payload" > "$file.tmp" 2>/dev/null && mv "$file.tmp" "$file" 2>/dev/null
+# This hook owns every file it causes, including on the way out through a
+# signal: Claude Code cancelling us must not leave a request behind that the
+# app would later read as something somebody is still waiting on.
+cleanup () {
+  rm -f "$request" "$request.tmp" \
+    "$replies/$id.ack" "$replies/$id.out" "$replies/$id.err" \
+    "$replies/$id.exit" "$replies/$id.done" 2>/dev/null
+}
+trap 'cleanup; exit 0' INT TERM HUP
 
-exit 0
+# Straight to the file rather than through a variable, so a large payload
+# costs nothing here, and under a temporary name so that a watcher never sees
+# half of one.
+cat > "$request.tmp" 2>/dev/null || { cleanup; exit 0; }
+[ -s "$request.tmp" ] || { cleanup; exit 0; }
+mv "$request.tmp" "$request" 2>/dev/null || { cleanup; exit 0; }
+
+# Opt-in, for working on this: keep a copy of what arrived. Off by default
+# because a payload holds the session's last message and its working
+# directory, and a directory quietly filling with those is not a default.
+if [ "${TRANSVIBE_CAPTURE:-0}" = "1" ]; then
+  event=$(sed -n 's/.*"hook_event_name"[[:space:]]*:[[:space:]]*"\([A-Za-z]*\)".*/\1/p' \
+    "$request" 2>/dev/null | head -1)
+  [ -n "$event" ] || event=unknown
+  mkdir -p "$TRANSVIBE_DIR/agent/capture" 2>/dev/null &&
+    cp "$request" "$TRANSVIBE_DIR/agent/capture/$id-$event.json" 2>/dev/null
+fi
+
+# Is anybody there? A second and a half, polled fast, because this is the
+# common case when the app is not running and the whole cost of the feature
+# when it is not.
+waited=0
+while [ ! -f "$replies/$id.ack" ]; do
+  waited=$((waited + 1))
+  [ "$waited" -gt 30 ] && { cleanup; exit 0; }
+  sleep 0.05
+done
+
+# How long the app wants, in whole seconds, clamped: a corrupt ack must not
+# hold a session open for ten minutes.
+seconds=$(cat "$replies/$id.ack" 2>/dev/null)
+case "$seconds" in '' | *[!0-9]*) seconds=60 ;; esac
+[ "$seconds" -lt 1 ] && seconds=1
+[ "$seconds" -gt 300 ] && seconds=300
+
+waited=0
+limit=$((seconds * 10))
+while [ ! -f "$replies/$id.done" ]; do
+  waited=$((waited + 1))
+  [ "$waited" -gt "$limit" ] && { cleanup; exit 0; }
+  sleep 0.1
+done
+
+code=$(cat "$replies/$id.exit" 2>/dev/null)
+case "$code" in '' | *[!0-9]*) code=0 ;; esac
+
+[ -s "$replies/$id.out" ] && cat "$replies/$id.out"
+[ -s "$replies/$id.err" ] && cat "$replies/$id.err" >&2
+
+cleanup
+exit "$code"
