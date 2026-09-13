@@ -444,6 +444,13 @@ export const SECTIONS = [
       },
       { key: 'assistUrl', label: 'Ollama at', type: 'text', placeholder: 'http://127.0.0.1:11434' },
       {
+        key: 'debugRecording',
+        label: 'Record audio and conversations for debugging',
+        help: 'Saves microphone audio, transcripts and replies locally in Application Support/transvibe/recordings. Includes room audio while listening, even during replies. Pause listening to pause audio; switch this off to finish the session. About 115 MB per hour. Recording continues across app restarts until switched off.',
+        spoken: ['debug recording', 'conversation recording'],
+        type: 'toggle'
+      },
+      {
         key: 'debugRouting',
         label: 'Write a log of how each question was answered',
         help: 'For working out why an answer came from where it did. A line per question in routing.log, next to settings.json — the question, what the local model said, which rule sent it on, and how long each leg took. It holds what you asked and what you were told, so leave it off unless you are chasing something.',

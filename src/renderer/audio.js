@@ -1,4 +1,5 @@
 import { createVad } from './vad.js'
+import { createRecordingBuffer } from './recording-buffer.js'
 
 const SAMPLE_RATE = 16000
 const FRAME_MS = 20
@@ -10,7 +11,7 @@ const RING_SECONDS = 30
  * for the visualizer, and an AudioWorklet feeding the VAD + a ring buffer that
  * closed segments are sliced out of.
  */
-export async function startCapture ({ onSegment, onPartial, onLevel, onError, settings }) {
+export async function startCapture ({ onSegment, onPartial, onLevel, onError, onRecording = () => {}, settings }) {
   let stream
   try {
     stream = await navigator.mediaDevices.getUserMedia({
@@ -81,10 +82,12 @@ export async function startCapture ({ onSegment, onPartial, onLevel, onError, se
      back at us. Echo cancellation alone does not survive a laptop speaker at
      arm's length. */
   let deaf = false
+  const recording = createRecordingBuffer(onRecording)
 
   /* vad.frame advances in lockstep with writeFrame, so a segment event's
      frame indices are already absolute indices into the ring. */
   collector.port.onmessage = ({ data }) => {
+    recording.push(data.pcm)
     ring.set(data.pcm, (writeFrame % ringFrames) * frameSize)
     writeFrame++
 
@@ -122,6 +125,9 @@ export async function startCapture ({ onSegment, onPartial, onLevel, onError, se
   return {
     analyser,
     vad,
+    recordingInfo: { microphone: stream.getAudioTracks()[0]?.label, constraints: stream.getAudioTracks()[0]?.getSettings(), sampleRate: ctx.sampleRate },
+    setRecording: active => recording.setActive(active),
+    flushRecording: () => recording.flush(),
     /* Anything half-heard when the app started speaking is abandoned rather
        than resumed: the words either side of a spoken confirmation are two
        different thoughts, and stitching them into one utterance is worse than
@@ -144,6 +150,7 @@ export async function startCapture ({ onSegment, onPartial, onLevel, onError, se
       if (Number.isFinite(ms) && ms > 0) interimFrames = Math.max(1, Math.round(ms / FRAME_MS))
     },
     stop () {
+      recording.setActive(false)
       collector.port.onmessage = null
       collector.disconnect()
       source.disconnect()

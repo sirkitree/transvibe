@@ -257,6 +257,7 @@ export const DEFAULTS = {
      A line per question, JSON, appended, and capped so a flag left on does not
      quietly fill the disk. Questions and answers are in it, which is the point
      and also the reason it is off unless you turn it on. */
+  debugRecording: false,
   debugRouting: false
 }
 

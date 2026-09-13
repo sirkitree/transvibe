@@ -913,3 +913,5 @@ body.awake .bar {
    the space nor shrinks its own text away. */
 .agent-sub .agent-thinking { flex: 0 0 auto; width: auto; }
 .agent-sub .note { font-size: 11px; white-space: nowrap; }
+
+.recording-status { position: absolute; top: 8px; right: 16px; z-index: 5; pointer-events: auto; align-self: center; border: 1px solid #e76b6b; border-radius: 6px; background: #301b20; color: #ffb8b8; padding: 4px 10px; cursor: pointer; font: 12px system-ui; }

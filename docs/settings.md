@@ -73,6 +73,7 @@ Behind it is `~/Library/Application Support/transvibe/settings.json`, written on
 | `remoteTimeoutMs` | `30000` | how long a CLI may take before it is given up on |
 | `remoteWebSearch` | `false` | let codex search the web; roughly doubles the wait |
 | `remoteCallsToday` | `{}` | written by the app: how many questions went out, per day |
+| `debugRecording` | `false` | save local microphone audio and conversation diagnostics; see [recording and review](recording.md) |
 | `debugRouting` | `false` | append a line per question to `routing.log`, questions and answers included |
 
 Agents can have comma-separated **Wake aliases**, such as “Hey Mera” for “Hey Mira”. Aliases match full phrases at the start of an utterance without rewriting dictation. An exact primary name wins over an alias; aliases shared by agents are ambiguous and do not route.

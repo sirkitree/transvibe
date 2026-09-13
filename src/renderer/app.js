@@ -194,6 +194,7 @@ function conversing () {
    than be hidden behind them. Only the live, in-flight words have to pick a
    side, and they go to whichever the utterance is for. */
 function render () {
+  recordDisplay()
   const chat = conversing()
   // Words still being spoken belong to the thread when they are a follow-up
   // or the question being asked; otherwise they are dictation on the way in.
@@ -258,6 +259,7 @@ function setText (text) {
    answer. Ending it here means the next turn starts a new thread rather than
    picking the old one back up half an hour later. */
 function clearConversation () {
+  debugEvent('conversation-clear')
   state.asking = false
   state.history = []
   state.talkingTo = null
@@ -447,6 +449,7 @@ async function converse (agent, question) {
   // What the model sees on this turn — before the question below joins the
   // bubbles on screen, so it is not sent to itself as part of its own history.
   const priorHistory = state.history
+  debugEvent('conversation-question', { agent: agent.name, question, history: priorHistory })
 
   /* Which question this is, the way `liveSeq` guards a slow interim. A local
      answer is back in half a second and nobody can speak over it, but a
@@ -530,6 +533,7 @@ const WHY = {
  * @returns {string} what to say
  */
 function landAnswer (answer, asked) {
+  debugEvent('conversation-answer', { asked: asked.name, answer })
   const from = answer.via || ''
   const via = from && from.toLowerCase() !== asked.name.toLowerCase() ? from : null
   const who = via ? (agentNamed(via) || { name: via, hue: null }) : asked
@@ -1053,7 +1057,7 @@ async function runSettingCommand (cmd, { collect = null } = {}) {
 
   if (result.changed) {
     if (field.external) await window.transvibe.setLaunchAtLogin(result.value)
-    else state.settings = await window.transvibe.setSettings({ [field.key]: result.value })
+    else state.settings = await saveSettings({ [field.key]: result.value })
     // The spoken confirmation is itself the preview when it is a voice or a
     // rate that just changed — it comes out in the new one — so the panel's
     // sample line would be the same sentence twice.
@@ -1115,7 +1119,7 @@ async function runAgentVoiceCommand (cmd, field, announce) {
     hint(saved.error)
     return true
   }
-  state.settings = await window.transvibe.setSettings({ agents: saved.agents })
+  state.settings = await saveSettings({ agents: saved.agents })
   state.agent = saved.agents.find(a => a.name === agent.name) || agent
   if (openPanel() === 'settings') state.settingsPanel.render()
   for (const into of document.querySelectorAll('[data-agents]')) renderAgents(into)
@@ -1200,13 +1204,21 @@ async function voice (line, options) {
   // one of them it was without being told.
   const sound = speechFor(state.agent, state.settings)
   const model = state.agent && state.agent.model
-  await whileDeaf(() => window.transvibe.speak(line, { ...sound, model, ...options }))
+  debugEvent('speech-start', { text: line, agent: state.agent?.name, ...sound })
+  try {
+    const result = await whileDeaf(() => window.transvibe.speak(line, { ...sound, model, ...options }))
+    debugEvent('speech-end', { result })
+  } catch (err) {
+    debugEvent('speech-error', { error: err.message })
+    throw err
+  }
 }
 
 /* Everything that makes noise goes through here, so there is one place that
    owns the microphone being off and one place that guarantees it comes back
    on. `speak` resolves when the speaker is quiet; the tail covers the room. */
 async function whileDeaf (speaking) {
+  debugEvent('microphone-gate', { muted: true })
   state.deaf++
   if (state.capture) state.capture.setDeaf(true)
   // Both halves of the same moment: the microphone goes off and the app's own
@@ -1220,7 +1232,8 @@ async function whileDeaf (speaking) {
     state.sayingViz.start()
   }
   try {
-    await speaking()
+    const result = await speaking()
+    debugEvent('speech-playback-complete', { result })
     if (state.sayingViz) state.sayingViz.stop()
     await new Promise(resolve => setTimeout(resolve, SPEECH_TAIL_MS))
   } finally {
@@ -1229,6 +1242,7 @@ async function whileDeaf (speaking) {
     // Whatever went wrong, the microphone comes back on: deaf is a state no
     // failure is allowed to leave the app stuck in.
     if (state.capture && state.deaf === 0) state.capture.setDeaf(false)
+    debugEvent('microphone-gate', { muted: state.deaf > 0, followUpOpen: inConversation() })
   }
 }
 
@@ -1451,7 +1465,7 @@ function agentsNote (text, warn = false) {
 
 async function saveAgents (result) {
   if (!result.ok) return agentsNote(result.error, true)
-  state.settings = await window.transvibe.setSettings({ agents: result.agents })
+  state.settings = await saveSettings({ agents: result.agents })
   for (const into of document.querySelectorAll('[data-agents]')) renderAgents(into)
   agentsNote('Saved.')
 }
@@ -1779,7 +1793,7 @@ function glossaryNote (text, warn = false) {
 }
 
 async function saveGlossary (patch) {
-  state.settings = await window.transvibe.setSettings(patch)
+  state.settings = await saveSettings(patch)
   renderGlossary()
 }
 
@@ -1996,7 +2010,7 @@ function wireFixer () {
       // A term already listed is not a failure here — it is already doing its job.
       if (terms.ok) patch.vocabulary = terms.terms
     }
-    state.settings = await window.transvibe.setSettings(patch)
+    state.settings = await saveSettings(patch)
     if (!$('glossary').hidden) renderGlossary()
     hint(`"${heard}" → ${written} · saved to glossary`)
   }
@@ -2361,7 +2375,7 @@ function startPanelDrag (event, panel) {
     panel.classList.remove('dragging')
     if (!state.pendingPlacement) return
     // Saved on release rather than on every pixel: a drag is one decision.
-    state.settings = await window.transvibe.setSettings({
+    state.settings = await saveSettings({
       panelPosition: state.pendingPlacement
     })
     state.pendingPlacement = null
@@ -2375,7 +2389,7 @@ function startPanelDrag (event, panel) {
 async function resetPanelPlacement (panel) {
   panel.classList.remove('placed')
   panel.style.left = panel.style.top = panel.style.maxHeight = ''
-  state.settings = await window.transvibe.setSettings({ panelPosition: null })
+  state.settings = await saveSettings({ panelPosition: null })
   syncHeight()
 }
 
@@ -2414,8 +2428,50 @@ function syncHold () {
   if (state.presence) state.presence.setHeld(held, Date.now())
 }
 
+let recordingStatus = { active: false }
+let lastRecordedDisplay = ''
+function debugEvent (type, detail = {}) {
+  if (recordingStatus.active) window.transvibe.debugEvent(type, detail)
+}
+async function saveSettings (patch) {
+  if (patch.debugRecording === false) state.capture?.flushRecording()
+  return window.transvibe.setSettings(patch)
+}
+function recordDisplay () {
+  if (!recordingStatus.active) return
+  const snapshot = { transcript: state.finals, interim: state.live, history: state.history,
+    agent: state.agent?.name, talkingTo: state.talkingTo?.name,
+    listening: state.listening, followUpOpen: inConversation(), asking: state.asking }
+  const serialized = JSON.stringify(snapshot)
+  if (serialized !== lastRecordedDisplay) {
+    lastRecordedDisplay = serialized
+    debugEvent('display', snapshot)
+  }
+}
+function updateRecording (status) {
+  recordingStatus = status
+  lastRecordedDisplay = ''
+  state.capture?.setRecording(status.active && state.listening)
+  if (status.active && state.capture) debugEvent('capture-info', state.capture.recordingInfo)
+  const button = $('recording-status')
+  button.hidden = !status.active && !status.error
+  button.textContent = status.error ? `Recording stopped: ${status.error}` : '● Recording locally — stop'
+  button.title = status.directory || status.error || ''
+  recordDisplay()
+  syncHeight()
+}
+
 async function main () {
   state.settings = await window.transvibe.getSettings()
+  window.transvibe.onDebugStatus(updateRecording)
+  window.transvibe.onDebugFlush(() => {
+    state.capture?.flushRecording()
+    window.transvibe.debugFlushed()
+  })
+  updateRecording(await window.transvibe.debugStatus())
+  $('recording-status').onclick = async () => {
+    state.settings = await saveSettings({ debugRecording: false })
+  }
   await refreshSpaces()
   // Point the folder setting somewhere else and the names change with it.
   window.transvibe.onSpaces(list => { state.spaces = Array.isArray(list) ? list : [] })
@@ -2426,7 +2482,7 @@ async function main () {
     body: $('settings-body'),
     note: text => { $('settings-note').textContent = text },
     getSettings: () => state.settings,
-    save: async patch => { state.settings = await window.transvibe.setSettings(patch) },
+    save: async patch => { state.settings = await saveSettings(patch) },
     applyLive: applyLiveSetting,
     open: name => togglePanel(name, true),
     getExternal: () => window.transvibe.getLaunchAtLogin(),
@@ -2456,7 +2512,7 @@ async function main () {
      what makes selective wake possible: the main process only counts the
      pointer as "on the strip" when it is over something worth clicking. Empty
      air between the ribbon and the words stays transparent to the mouse. */
-  const TARGETS = '.bar, .panel, .fixer, .transcript'
+  const TARGETS = '.bar, .panel, .fixer, .transcript, .recording-status'
   let overTarget = null
   const reportTarget = value => {
     if (overTarget === value) return
@@ -2508,6 +2564,7 @@ async function main () {
   const capture = await startCapture({
     settings: state.settings,
     onError: msg => hint(msg),
+    onRecording: (samples, detail) => window.transvibe.debugAudio(samples, detail),
     onLevel: () => {
       // pace the visualizer off the VAD rather than off its own boosted level
       if (state.viz && state.capture) {
@@ -2537,6 +2594,9 @@ async function main () {
       render()
       try {
         const res = await window.transvibe.transcribe(samples)
+        debugEvent('transcript-route', { debugId: res.debugId, text: res.text, dropped: res.dropped,
+          error: res.error, asCommand, followUpOpen: inConversation(), talkingTo: state.talkingTo?.name,
+          wake: matchAgent(res.text, state.settings.agents, { fuzzy: state.settings.wakeWordFuzzy }) })
         if (res.error) hint(res.error)
         /* Said out loud on the strip rather than dropped in silence: the floor
            is a setting, and the only way to tune it is to see it working. */
@@ -2643,6 +2703,8 @@ async function main () {
 
   if (!capture) return
   state.capture = capture
+  capture?.setRecording(recordingStatus.active && state.listening)
+  debugEvent('capture-info', capture.recordingInfo)
   // handy from the devtools console: `state` for VAD tuning, `render` to redraw
   // after poking at it, `runCommand` to fire one without saying it out loud
   window.__transvibe = { state, render, runCommand, addressAgent, say }
@@ -2723,6 +2785,8 @@ async function main () {
 
   function setListening (value) {
     state.listening = value
+    state.capture?.setRecording(recordingStatus.active && value)
+    debugEvent('listening', { active: value })
     $('mute').classList.toggle('on', !value)
     hint(value ? 'listening' : 'paused')
   }

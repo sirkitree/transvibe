@@ -3,6 +3,8 @@ import {
   globalShortcut, Tray, Menu, nativeImage, screen, shell
 } from 'electron'
 import path from 'node:path'
+import { randomUUID } from 'node:crypto'
+import { createDebugRecording } from './debug-recording.js'
 import { spawn } from 'node:child_process'
 import fs, { existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
@@ -39,6 +41,11 @@ let assist = null
    every process a provider has running, not just the one agent's. */
 let remotes = new Map()
 let settings = config.load()
+const debugRecording = createDebugRecording(path.join(config.DIR, 'recordings'), message => {
+  console.warn('[transvibe] recording stopped:', message)
+  if (tray) tray.setTitle(debugRecording.status.active ? '● REC' : '')
+  send('debug:status', debugRecording.status)
+})
 let listening = true
 let commandTimer = null
 let tapProc = null
@@ -639,6 +646,7 @@ function cancelRemote () {
 app.whenReady().then(async () => {
   const granted = await systemPreferences.askForMediaAccess('microphone').catch(() => false)
   createWindow()
+  if (settings.debugRecording) debugRecording.start(settings)
 
   win.webContents.once('did-finish-load', () => {
     if (!granted) {
@@ -651,6 +659,7 @@ app.whenReady().then(async () => {
   })
 
   createTray()
+  tray.setTitle(debugRecording.status.active ? '● REC' : '')
 
   startKeyTap()
 
@@ -892,22 +901,46 @@ ipcMain.on('command-mode', (_e, active) => {
   else disarmCommandMode()
 })
 
+ipcMain.handle('debug:status', () => debugRecording.status)
+ipcMain.on('debug:event', (_e, type, detail) => debugRecording.event(type, detail))
+ipcMain.on('debug:audio', (_e, buffer, detail) => {
+  if (buffer instanceof ArrayBuffer && buffer.byteLength <= 16000 * 4) {
+    debugRecording.audio(new Float32Array(buffer), detail)
+  }
+})
+
 ipcMain.handle('transcribe', async (_e, buffer, interim = false) => {
-  if (!engine) return { text: '', error: 'engine not ready' }
+  const debugId = randomUUID()
+  const session = debugRecording.status.id
+  const samples = new Float32Array(buffer)
+  const audio = !interim ? debugRecording.segment(samples, debugId) : null
+  debugRecording.event('transcription-start', { debugId, interim, audio, durationSeconds: samples.length / 16000 })
+  if (!engine) {
+    debugRecording.event('transcription-result', { debugId, interim, error: 'engine not ready' }, session)
+    return { text: '', error: 'engine not ready', debugId }
+  }
   try {
-    const samples = new Float32Array(buffer)
     const result = await engine.transcribe(samples, { interim })
     // only a settled utterance is worth putting on the clipboard
     if (result.text && !interim && settings.autoCopy) clipboard.writeText(result.text)
-    return result
+    debugRecording.event('transcription-result', { debugId, interim, ...result }, session)
+    return { ...result, debugId }
   } catch (err) {
-    return { text: '', error: err.message }
+    debugRecording.event('transcription-result', { debugId, interim, error: err.message }, session)
+    return { debugId, text: '', error: err.message }
   }
 })
 
 ipcMain.handle('settings:get', () => settings)
 ipcMain.handle('settings:set', (_e, patch) => {
   settings = config.save(patch)
+  if ('debugRecording' in patch) {
+    if (settings.debugRecording) debugRecording.start(settings)
+    else debugRecording.stop()
+    if (tray) tray.setTitle(debugRecording.status.active ? '● REC' : '')
+    send('debug:status', debugRecording.status)
+  }
+  debugRecording.event('settings-change', { patch })
   // Glossary edits apply to the next utterance — no need to restart the server.
   if (engine && ('vocabulary' in patch || 'corrections' in patch ||
       'dropGlossaryEcho' in patch || 'confidenceFloor' in patch || 'agents' in patch)) {
@@ -1028,6 +1061,7 @@ const ROUTING_LOG_MAX = 512 * 1024
  * @param {object} detail whatever is worth knowing about it
  */
 function logRouting (event, detail) {
+  debugRecording.event(`routing-${event}`, detail)
   if (!settings.debugRouting) return
   try {
     if (fs.existsSync(ROUTING_LOG) && fs.statSync(ROUTING_LOG).size > ROUTING_LOG_MAX) {
@@ -1577,7 +1611,28 @@ function setListening (value) {
 
 ipcMain.on('listening', (_e, value) => setListening(value))
 
-app.on('before-quit', () => { app.isQuitting = true })
+let recordingQuitPending = false
+let recordingQuitReady = false
+function finishRecordingQuit () {
+  if (!recordingQuitPending || recordingQuitReady) return
+  recordingQuitReady = true
+  debugRecording.stop()
+  app.quit()
+}
+ipcMain.on('debug:flushed', finishRecordingQuit)
+app.on('before-quit', event => {
+  if (debugRecording.status.active && !recordingQuitReady) {
+    event.preventDefault()
+    if (!recordingQuitPending) {
+      recordingQuitPending = true
+      send('debug:flush')
+      setTimeout(finishRecordingQuit, 1000)
+    }
+    return
+  }
+  debugRecording.stop()
+  app.isQuitting = true
+})
 
 app.on('will-quit', () => {
   clearInterval(wakeTimer)

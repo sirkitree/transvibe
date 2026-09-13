@@ -4,6 +4,12 @@ contextBridge.exposeInMainWorld('transvibe', {
   /** @param {Float32Array} samples 16 kHz mono — transferred, not copied */
   transcribe: (samples, interim = false) =>
     ipcRenderer.invoke('transcribe', samples.buffer, interim),
+  onDebugFlush: fn => ipcRenderer.on('debug:flush', fn),
+  debugFlushed: () => ipcRenderer.send('debug:flushed'),
+  debugEvent: (type, detail) => ipcRenderer.send('debug:event', type, detail),
+  debugAudio: (samples, detail) => ipcRenderer.send('debug:audio', samples.buffer, detail),
+  debugStatus: () => ipcRenderer.invoke('debug:status'),
+  onDebugStatus: fn => ipcRenderer.on('debug:status', (_e, status) => fn(status)),
   getSettings: () => ipcRenderer.invoke('settings:get'),
   /* Not a setting in settings.json: macOS owns this one, and the answer is
      whatever the login item list actually says. */
