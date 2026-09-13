@@ -1,3 +1,4 @@
+import { createTurnBuffer } from './turn-buffer.js'
 import { startCapture } from './audio.js'
 import { createVisualizer } from './visualizer.js'
 import { createSayingViz } from './saying-viz.js'
@@ -19,6 +20,7 @@ import {
 import { applyCorrections } from '../shared/glossary.js'
 import { describeModel, canThink } from '../shared/assist.js'
 import { createPresence } from './presence.js'
+import { createConversationWindow } from './conversation-window.js'
 import { createWaiting } from './waiting.js'
 import { clampPlacement, heightFor, isReachable, MARGIN } from './placement.js'
 import { createSettingsPanel } from './settings-panel.js'
@@ -73,9 +75,8 @@ const state = {
      sent rather than here, so the bubbles on screen always show the whole
      thread even once the model itself has started forgetting the start of it. */
   history: [],
-  /* Until when the next sentence continues the conversation without the name.
-     A thread you have to re-address every turn is a query box, not a talk. */
-  listeningUntil: 0,
+  // The follow-up countdown is suspended until speech and its echo tail end.
+  conversationWindow: createConversationWindow(),
   asking: false,
   askSeq: 0,         // guards against a slow answer landing after a newer question
   pendingPlacement: null,   // where a panel is being dragged to, until released
@@ -259,11 +260,14 @@ function setText (text) {
    answer. Ending it here means the next turn starts a new thread rather than
    picking the old one back up half an hour later. */
 function clearConversation () {
+  turnBuffer.reset()
+  if (state.asking) window.transvibe.cancelEscalation()
+  state.askSeq++
   debugEvent('conversation-clear')
   state.asking = false
   state.history = []
   state.talkingTo = null
-  state.listeningUntil = 0
+  state.conversationWindow.clear()
 }
 
 /** The thread as text, both sides, for copying out. */
@@ -312,7 +316,10 @@ const commandPhrases = () => [
  * @param {{keep?: function}} options `keep` puts the words back as dictation
  */
 async function addressAgent (agent, utterance, { keep = null } = {}) {
-  if (!agent || agent.kind === 'commands') return runCommand(utterance, { keep })
+  if (!agent || agent.kind === 'commands') {
+    turnBuffer.abort()
+    return runCommand(utterance, { keep })
+  }
 
   if (agent.kind === 'chat') {
     /* A handful of commands work whoever you are addressing — you have to be
@@ -402,7 +409,9 @@ function stopWaiting () {
    because after "stop" nothing is what you asked for.
    @returns {boolean} whether there was anything to stop */
 function cancelEscalation () {
-  if (!state.waiting || !state.waiting.waiting) return false
+  if (!state.asking && !turnBuffer.pending && (!state.waiting || !state.waiting.waiting)) return false
+  turnBuffer.reset()
+  state.askSeq++
   window.transvibe.cancelEscalation()
   state.asking = false
   stopWaiting()
@@ -445,7 +454,29 @@ function agentNamed (name) {
  * prompt asks for uncertainty rather than invention, and the agent can be
  * pointed at a better model than the one doing the cleanup.
  */
+const turnBuffer = createTurnBuffer({
+  dispatch: (agent, question) => dispatchConversation(agent, question),
+  cancel: turn => {
+    state.askSeq++
+    window.transvibe.cancelEscalation()
+    state.asking = false
+    stopWaiting()
+    const last = state.history.at(-1)
+    if (last?.role === 'user' && last.content === turn.question) state.history = state.history.slice(0, -1)
+    debugEvent('conversation-continuation', { question: turn.question })
+  }
+})
+
 async function converse (agent, question) {
+  state.talkingTo = agent
+  state.conversationWindow.open(state.settings.conversationMs || 0)
+  turnBuffer.submit(agent, question)
+  hint(`${agent.name} is listening…`)
+  noteActivity()
+  render()
+}
+
+async function dispatchConversation (agent, question) {
   // What the model sees on this turn — before the question below joins the
   // bubbles on screen, so it is not sent to itself as part of its own history.
   const priorHistory = state.history
@@ -481,6 +512,7 @@ async function converse (agent, question) {
     // Overtaken while it was out. Someone else's turn now, and everything
     // below would be writing into a thread that has moved on.
     if (seq !== state.askSeq) return
+    turnBuffer.complete()
     state.asking = false
     if (!answer.ok) {
       /* Cancelled is the one failure nobody needs told about out loud: you
@@ -495,6 +527,7 @@ async function converse (agent, question) {
     say(landAnswer(answer, agent), { plain: true })
   } catch (err) {
     if (seq !== state.askSeq) return
+    turnBuffer.complete()
     state.asking = false
     hint(err.message)
     render()
@@ -542,7 +575,7 @@ function landAnswer (answer, asked) {
     { role: 'assistant', content: answer.text, name: who.name, hue: who.hue }]
   /* The thread stays open for a while, so the next sentence can be "and how
      far is that from London" rather than the whole name again. */
-  state.listeningUntil = Date.now() + (state.settings.conversationMs || 0)
+  state.conversationWindow.open(state.settings.conversationMs || 0)
   hint(answer.text)
   /* The daily cap and a frontier model that would not answer are both facts
      about an answer that still arrived, from the local model. They go to the
@@ -607,6 +640,8 @@ async function escalate (args, announce) {
   const priorHistory = state.history
   const priorAnswer = lastAnswer()
 
+  if (state.asking) window.transvibe.cancelEscalation()
+  const seq = ++state.askSeq
   state.asking = true
   if (!state.talkingTo && to) state.talkingTo = to
   if (args.question) state.history = [...priorHistory, { role: 'user', content: question }]
@@ -618,6 +653,8 @@ async function escalate (args, announce) {
   try {
     const answer = await window.transvibe.escalate(question, priorAnswer, priorHistory,
       { to: args.to })
+    if (seq !== state.askSeq) return
+    turnBuffer.complete()
     state.asking = false
     if (!answer || !answer.ok) {
       if (answer && answer.reason === 'cancelled') { render(); return }
@@ -635,12 +672,14 @@ async function escalate (args, announce) {
        being told so a third time is the duplication landAnswer avoids. */
     speak(landAnswer(answer, state.talkingTo || { name: '', hue: null }), { plain: true })
   } catch (err) {
+    if (seq !== state.askSeq) return
+    turnBuffer.complete()
     state.asking = false
     hint(err.message)
     speak(err.message, { plain: true })
     render()
   } finally {
-    stopWaiting()
+    if (seq === state.askSeq) stopWaiting()
   }
 }
 
@@ -648,7 +687,7 @@ async function escalate (args, announce) {
     the thread's owner, not of whoever ran the last command — a one-off
     "hey Trinity, copy the answer" does not hang up on Mira. */
 function inConversation () {
-  return !!state.talkingTo && state.listeningUntil > Date.now()
+  return !!state.talkingTo && state.conversationWindow.isOpen()
 }
 
 /* Whoever the next thing said will go to, or null when that is nobody.
@@ -674,7 +713,7 @@ function addressed () {
 /* On or off, on the ribbon rather than in the stage: this has to be readable
    whether or not the transcript has faded, so it is redrawn on its own —
    from the idle tick as well as from render() — rather than only when
-   something else already needed a redraw. `listeningUntil` running out is not
+   something else already needed a redraw. The follow-up window running out is not
    an event, it is a clock, and nothing else changing means nothing else
    would ever notice it happened. */
 function renderConvoIndicator () {
@@ -685,9 +724,15 @@ function renderConvoIndicator () {
     ? state.waiting
     : null
   const who = wait || addressed()
-  convoIndicatorEl.hidden = !who
-  if (!who) return
-  convoIndicatorLabelEl.textContent = who.name
+  convoIndicatorEl.hidden = !who && !state.talkingTo
+  if (!who) {
+    convoIndicatorLabelEl.textContent = state.talkingTo ? `Say ${state.talkingTo.name} to continue` : ''
+    return
+  }
+  const seconds = Math.ceil(state.conversationWindow.remainingMs() / 1000)
+  convoIndicatorLabelEl.textContent = wait ? `${who.name} · waiting`
+    : state.deaf ? `${who.name} · speaking`
+      : `${who.name}${seconds ? ` · listening ${seconds}s` : ''}`
   const dot = convoIndicatorEl.querySelector('.dot')
   const hue = Number.isFinite(who.hue) ? who.hue : 0.58
   const color = `hsl(${Math.round(hue * 360)} 90% 65%)`
@@ -911,7 +956,7 @@ async function runCommand (utterance, { retry = true, keep = null, collect = nul
       cancelEscalation()
       // Interrupting is also how you end a conversation: the next thing said
       // after cutting one off is not a follow-up.
-      state.listeningUntil = 0
+      state.conversationWindow.clear()
       break
     case 'closePanel': closeOpenPanel(); break
     /* Awaited, unlike the rest. The others are done the moment they are asked
@@ -1219,6 +1264,7 @@ async function voice (line, options) {
    on. `speak` resolves when the speaker is quiet; the tail covers the room. */
 async function whileDeaf (speaking) {
   debugEvent('microphone-gate', { muted: true })
+  state.conversationWindow.pause()
   state.deaf++
   if (state.capture) state.capture.setDeaf(true)
   // Both halves of the same moment: the microphone goes off and the app's own
@@ -1242,6 +1288,7 @@ async function whileDeaf (speaking) {
     // Whatever went wrong, the microphone comes back on: deaf is a state no
     // failure is allowed to leave the app stuck in.
     if (state.capture && state.deaf === 0) state.capture.setDeaf(false)
+    state.conversationWindow.resume()
     debugEvent('microphone-gate', { muted: state.deaf > 0, followUpOpen: inConversation() })
   }
 }
@@ -1311,7 +1358,7 @@ function forgetTranscript () {
   /* Not while a chat agent is still listening: the conversation window is
      its own clock and is allowed to be longer than the idle one. The tick
      asks again once the window has lapsed. */
-  if (inConversation()) return
+  if (inConversation() || state.asking || turnBuffer.pending || state.deaf > 0) return
   state.finals = []
   state.live = ''
   state.liveSeq++
@@ -2162,8 +2209,10 @@ function applyLiveSetting (key, { preview = true } = {}) {
   const value = state.settings[key]
   const capture = state.capture
 
+  if (key === 'conversationMs' && !value) state.conversationWindow.clear()
   if (key === 'minSegmentMs' && capture) capture.setMinSegmentMs(value)
   if (key === 'threshold' && capture) capture.setThreshold(value)
+  if (key === 'conversationHangoverMs' && capture) capture.setConversationHangoverMs(value)
   if (key === 'hangoverMs' && capture) capture.setHangoverMs(value)
   if (key === 'interimMs' && capture) capture.setInterimMs(value)
   if (key === 'idleFadeMs' && state.presence) state.presence.setIdleFadeMs(value)
@@ -2539,7 +2588,7 @@ async function main () {
        the line. Cheap: it returns at once unless there is something to do. */
     if (expired || state.presence.expired) forgetTranscript()
     // Fires every tick rather than only on an edge: the indicator's own
-    // clock (listeningUntil) is cheaper to just recheck than to track.
+    // conversation clock is cheaper to just recheck than to track.
     renderConvoIndicator()
     /* And the other clock. The second count in the pending bubble has to move
        or the wait reads as a hang, and past the threshold the app says so out
@@ -2548,7 +2597,7 @@ async function main () {
        the strip. The 2.7s claude path never reaches it. */
     if (state.waiting && state.waiting.waiting) {
       const beat = state.waiting.tick(Date.now())
-      if (beat.nudge) say(state.waiting.nudgeText, { plain: true })
+      if (beat.nudge && !turnBuffer.pending && state.capture?.vad.state === 'idle') say(state.waiting.nudgeText, { plain: true })
       render()
     }
   }, 400)
@@ -2566,6 +2615,13 @@ async function main () {
     settings: state.settings,
     onError: msg => hint(msg),
     onRecording: (samples, detail) => window.transvibe.debugAudio(samples, detail),
+    isConversation: () => inConversation() || state.liveWake || state.asking,
+    onVad: detail => {
+      debugEvent('vad', detail)
+      if (!state.listening || detail.deaf) return
+      if (detail.boundary === 'start') turnBuffer.speechStart()
+      if (detail.boundary === 'end') turnBuffer.speechEnd(detail.reason === 'discarded')
+    },
     onLevel: () => {
       // pace the visualizer off the VAD rather than off its own boosted level
       if (state.viz && state.capture) {
@@ -2602,8 +2658,8 @@ async function main () {
         if (res.error) hint(res.error)
         /* Said out loud on the strip rather than dropped in silence: the floor
            is a setting, and the only way to tune it is to see it working. */
-        else if (res.dropped) hint(`ignored — ${res.dropped}`)
-        else if (!res.text) { /* silence or a filtered artifact */ }
+        else if (res.dropped) { hint(`ignored — ${res.dropped}`); turnBuffer.speechEnd(true) }
+        else if (!res.text) { turnBuffer.speechEnd(true) }
         // Not awaited: command mode has to disarm the moment the utterance is
         // consumed, and the assist fallback may still be thinking.
         /* Armed, and by whom matters: "hey Ada" on its own arms *her*, and the
@@ -2641,7 +2697,7 @@ async function main () {
                  conversation window is the same thing an answer does, so what
                  follows is a question with nothing else to be mistaken for. */
               state.talkingTo = wake.agent
-              state.listeningUntil = Date.now() + (state.settings.conversationMs || 0)
+              state.conversationWindow.open(state.settings.conversationMs || 0)
               hint(`${wake.agent.name} is listening…`)
             } else {
               window.transvibe.setCommandMode(true)
@@ -2788,6 +2844,7 @@ async function main () {
 
   function setListening (value) {
     state.listening = value
+    if (!value) turnBuffer.abort()
     state.capture?.setRecording(recordingStatus.active && value)
     debugEvent('listening', { active: value })
     $('mute').classList.toggle('on', !value)

@@ -24,11 +24,12 @@ Behind it is `~/Library/Application Support/transvibe/settings.json`, written on
 |---|---|---|
 | `threshold` | `0.02` | RMS level that counts as speech |
 | `minSegmentMs` | `250` | shortest speech retained; lower helps quick wake phrases |
+| `conversationHangoverMs` | `950` | silence before a chat turn ends; normal dictation keeps its own silence setting |
 | `wakeConfidenceFloor` | `-0.85` | lower confidence allowed only for short exact multiword addresses after speech detection |
 | `hangoverMs` | `550` | silence before an utterance is considered finished |
 | `interimMs` | `500` | how often the open utterance is re-transcribed |
 | `commandTimeoutMs` | `6000` | command mode disarms itself after this |
-| `conversationMs` | `25000` | how long an agent that talks back keeps listening without its name; `0` off |
+| `conversationMs` | `25000` | how long an agent keeps listening without its name after speech and the echo delay finish (or after the text appears when speech is off); `0` off |
 | `agents` | one commands agent | who you can talk to: a name, what it does, the voice it says it in and the model it thinks with. Edited in the Agents tab |
 | `wakeWordFuzzy` | `true` | forgive near-misses in the wake phrase ("hey cloud") |
 | `speakReplies` | `true` | say what a command just did, out loud |
@@ -78,6 +79,8 @@ Behind it is `~/Library/Application Support/transvibe/settings.json`, written on
 | `debugRecording` | `false` | save local microphone audio and conversation diagnostics; see [recording and review](recording.md) |
 | `debugRouting` | `false` | append a line per question to `routing.log`, questions and answers included |
 
+Agents can have comma-separated **Wake aliases**, such as “Hey Mera” for “Hey Mira”. Aliases match full phrases at the start of an utterance without rewriting dictation. An exact primary name wins over an alias; aliases shared by agents are ambiguous and do not route.
+
 Voice isolation can be requested in Listening settings and requires a restart.
 The app checks microphone capabilities, requests isolation, and records its
 actual state in capture-info during debug recording. Advertised support is not
@@ -85,5 +88,3 @@ proof of activation: a rejected constraint or `active: false` means ordinary
 capture continues. On the built-in MacBook microphone tested September 12, the
 runtime advertised support but rejected activation with “Cannot satisfy
 constraints,” both at startup and through applyConstraints.
-
-Agents can have comma-separated **Wake aliases**, such as “Hey Mera” for “Hey Mira”. Aliases match full phrases at the start of an utterance without rewriting dictation. An exact primary name wins over an alias; aliases shared by agents are ambiguous and do not route.

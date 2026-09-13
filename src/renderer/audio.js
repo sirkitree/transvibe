@@ -1,7 +1,7 @@
 import { configureVoiceIsolation } from './voice-isolation.js'
 import { createInterimPolicy } from './interim-policy.js'
 import { createVad } from './vad.js'
-import { captureStart } from './capture-timing.js'
+import { captureStart, captureHangover } from './capture-timing.js'
 import { createRecordingBuffer } from './recording-buffer.js'
 
 const SAMPLE_RATE = 16000
@@ -14,7 +14,7 @@ const RING_SECONDS = 30
  * for the visualizer, and an AudioWorklet feeding the VAD + a ring buffer that
  * closed segments are sliced out of.
  */
-export async function startCapture ({ onSegment, onPartial, onLevel, onError, onRecording = () => {}, settings }) {
+export async function startCapture ({ onSegment, onPartial, onLevel, onError, onRecording = () => {}, onVad = () => {}, isConversation = () => false, settings }) {
   let stream
   try {
     stream = await navigator.mediaDevices.getUserMedia({
@@ -57,6 +57,8 @@ export async function startCapture ({ onSegment, onPartial, onLevel, onError, on
   const ring = new Float32Array(ringFrames * frameSize)
   let writeFrame = 0
   let earliestFrame = 0
+  let hangoverMs = settings.hangoverMs
+  let conversationHangoverMs = settings.conversationHangoverMs ?? 950
 
   const vad = createVad({
     frameMs: FRAME_MS,
@@ -103,7 +105,9 @@ export async function startCapture ({ onSegment, onPartial, onLevel, onError, on
 
     onLevel(deaf ? 0 : data.rms)
 
+    vad.setHangoverMs(captureHangover(isConversation(), hangoverMs, conversationHangoverMs))
     const ev = vad.push(deaf ? 0 : data.rms)
+    if (ev) onVad({ ...ev, boundary: ev.type, deaf, threshold: vad.threshold, noiseFloor: vad.noiseFloor })
     // Silence still closes whatever was open when we went deaf; that event is
     // the app's own doing and nothing should be transcribed from it.
     if (deaf) return
@@ -161,7 +165,8 @@ export async function startCapture ({ onSegment, onPartial, onLevel, onError, on
     get deaf () { return deaf },
     setThreshold: t => vad.setThreshold(t),
     setMinSegmentMs: ms => vad.setMinSegmentMs(ms),
-    setHangoverMs: ms => vad.setHangoverMs(ms),
+    setHangoverMs: ms => { hangoverMs = ms },
+    setConversationHangoverMs: ms => { conversationHangoverMs = ms },
     /* The settings panel retunes a live microphone rather than reopening it:
        getUserMedia again would drop the utterance in progress. */
     setInterimMs (ms) {

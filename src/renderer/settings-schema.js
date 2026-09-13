@@ -70,6 +70,13 @@ export const SECTIONS = [
         type: 'range', min: 0.002, max: 0.08, step: 0.002, decimals: 3
       },
       {
+        key: 'conversationHangoverMs',
+        label: 'Silence before a conversation turn ends',
+        help: 'Keeps pauses inside a question together while talking to an agent. At least as long as the normal silence window.',
+        spoken: ['the conversation silence'],
+        type: 'range', min: 550, max: 2000, step: 50, unit: 'ms'
+      },
+      {
         key: 'wakeConfidenceFloor',
         label: 'Confidence for a short wake phrase',
         help: 'A separate floor for exact configured multiword names, after speech detection. Does not relax commands or ordinary dictation.',
@@ -148,7 +155,7 @@ export const SECTIONS = [
         group: 'Hearing a name',
         key: 'conversationMs',
         label: 'A conversation stays open for',
-        help: 'After an agent that talks back has answered, the next thing you say is a follow-up and needs no name. All the way left means every turn is addressed by name.',
+        help: 'Starts when the agent finishes speaking and the microphone reopens. The next thing you say is a follow-up and needs no name. With spoken replies off, starts when the answer appears. All the way left means every turn is addressed by name.',
         spoken: ['the conversation window', 'the conversation timeout'],
         type: 'range', min: 0, max: 120000, step: 5000, unit: 'ms', zero: 'off'
       },

@@ -91,3 +91,12 @@ Thinking is on by default in Ollama and cost ~1.1s per call for a task that need
 That parameter is a request, not a guarantee. Measured on `qwen3:30b-a3b`, asking for no reasoning does not stop the model reasoning; it stops the reasoning being held apart from the answer, and the entire chain of thought arrives in the reply — "Okay, the user is asking about voice activity detection, but they've also given very specific instructions…" — and gets said out loud. It is honoured by `gemma4:e2b`, where it was measured saving 1.1s, and ignored harmlessly by models with no reasoning to skip. If a chat agent starts narrating its own thoughts, turn thinking on for it.
 
 **What was tried and rejected.** Gemma 4 takes audio natively, so it could replace whisper outright. On the same clips it was slower and less accurate — "Vinchi" for "Vinci", words dropped off the end of a long sentence, and it ignored an instruction to clean up while transcribing. Whisper keeps the audio. Google's other new model, Gemini 3.5 Transcribe, does all of this better and in one pass, but it is a cloud API with no open weights, which would cost this app the only property it really has.
+
+### Taking turns
+
+Before answering, explicit questions get a 250 ms continuation grace period;
+setup statements get 1.4 seconds after final transcription. Speech resuming before
+the reply starts invalidates the pending answer and joins the next segment to the
+same thought. Escape/clear also cancels a queued thought. This is not full duplex
+speech: recognition remains muted during Mira's spoken reply to avoid echo.
+

@@ -3,6 +3,7 @@ import {
   globalShortcut, Tray, Menu, nativeImage, screen, shell
 } from 'electron'
 import path from 'node:path'
+import { createLatestRequest } from './latest-request.js'
 import { randomUUID } from 'node:crypto'
 import { createDebugRecording } from './debug-recording.js'
 import { spawn } from 'node:child_process'
@@ -1253,9 +1254,10 @@ async function askRemote (agent, question, history, { job, priorAnswer = '', web
  * asked a question. The correction is only wanted when you asked for one, so
  * the prior answer goes only down the manual "ask Claude about this" route.
  */
-async function walkChain (chain, question, history) {
+async function walkChain (chain, question, history, request) {
   let capped = false
   for (const target of chain) {
+    request.check()
     let answer
     if (isRemote(target)) {
       if (!settings.remote) continue
@@ -1270,6 +1272,7 @@ async function walkChain (chain, question, history) {
       answer = await askLocal(question, history,
         { model: target.model, thinking: target.thinking })
     }
+    request.check()
     if (answer.ok && answer.text) return { answer, via: target, capped }
   }
   return { capped }
@@ -1300,7 +1303,17 @@ function cappedResult (local, name) {
    name can be answered by something better than the small model doing the
    cleanup — measured on this machine, gemma4:e2b calls a VAD "video-assisted
    delivery" and llama3 gets it right. */
+const chatRequests = createLatestRequest()
 ipcMain.handle('assist:ask', async (_e, question, history, options) => {
+  const request = chatRequests.begin()
+  cancelRemote()
+  try { return await answerChat(question, history, options, request) } catch (err) {
+    if (err.code === 'TURN_CANCELLED') return { text: '', ok: false, reason: 'cancelled' }
+    throw err
+  }
+})
+
+async function answerChat (question, history, options, request) {
   const opts = options || {}
   const asked = String(question == null ? '' : question)
   const agent = askingAgent(opts)
@@ -1316,7 +1329,7 @@ ipcMain.handle('assist:ask', async (_e, question, history, options) => {
         reason: `${agent.name} answers through ${agent.provider}, and remote answers are off`
       }
     }
-    return askLocal(asked, history, opts)
+    return request.wait(askLocal(asked, history, opts))
   }
 
   const chain = agent ? escalationChain(settings.agents, agent) : []
@@ -1332,6 +1345,7 @@ ipcMain.handle('assist:ask', async (_e, question, history, options) => {
     logRouting('ask', { question: asked, agent: agent.name, direct: true, chain: chain.map(a => a.name) })
     if (remoteBudget().left <= 0) return cappedResult(null, agent.name)
     const answer = await askRemote(agent, asked, history, { job: 'chat' })
+    request.check()
     if (answer.ok) {
       /* Counted apart from the rules. Nothing decided this — you asked a CLI
          by name — and folding it in would make every rule look busier than it
@@ -1348,6 +1362,7 @@ ipcMain.handle('assist:ask', async (_e, question, history, options) => {
        the bubble, and saying "Claude said" over a sentence gemma wrote is the
        one thing this feature must never do. */
     const local = await askLocal(asked, history, { thinking: opts.thinking })
+    request.check()
     return { ...local, via: null, escalated: null, remoteFailed: answer.reason }
   }
 
@@ -1360,6 +1375,7 @@ ipcMain.handle('assist:ask', async (_e, question, history, options) => {
     : null
   if (fresh && remoteBudget().left > 0) {
     const answer = await askRemote(fresh, asked, history, { job: 'fresh', webSearch: true })
+    request.check()
     if (answer.ok) {
       /* Fired, and that is all this can say: there is no local answer to
          compare it with, because not asking for one is the whole point of the
@@ -1372,6 +1388,7 @@ ipcMain.handle('assist:ask', async (_e, question, history, options) => {
   }
 
   const local = await askLocal(asked, history, { ...opts, canEscalate: chain.length > 0 })
+  request.check()
   const name = agent ? agent.name : null
   const verdict = shouldEscalate(local)
   logRouting('ask', {
@@ -1392,7 +1409,7 @@ ipcMain.handle('assist:ask', async (_e, question, history, options) => {
     return { ...local, via: name, escalated: null }
   }
 
-  const { answer, via, capped } = await walkChain(chain, asked, history)
+  const { answer, via, capped } = await walkChain(chain, asked, history, request)
   if (answer) {
     /* The measurement this whole tally exists for. `unsure` is the rule that
        can be wrong in the expensive direction — it throws away an answer that
@@ -1407,7 +1424,7 @@ ipcMain.handle('assist:ask', async (_e, question, history, options) => {
   /* Nobody better answered. The local reply — hedge, admission of defeat and
      all — is what there is, and it is still better than silence. */
   return { ...local, via: name, escalated: null }
-})
+}
 
 /* Asked for by name, mid-conversation: "Mira, ask Claude about this."
  *
@@ -1421,6 +1438,14 @@ ipcMain.handle('assist:ask', async (_e, question, history, options) => {
  * @param {Array} history      the thread, trimmed on the way into the prompt
  * @param {{to?: string}} options the agent named out loud */
 ipcMain.handle('assist:escalate', async (_e, question, priorAnswer, history, options) => {
+  const request = chatRequests.begin()
+  cancelRemote()
+  try { return await answerEscalation(question, priorAnswer, history, options, request) } catch (err) {
+    if (err.code === 'TURN_CANCELLED') return { text: '', ok: false, reason: 'cancelled' }
+    throw err
+  }
+})
+async function answerEscalation (question, priorAnswer, history, options, request) {
   const opts = options || {}
   if (!settings.remote) {
     return { text: '', ok: false, reason: 'asking a frontier model is switched off' }
@@ -1442,23 +1467,25 @@ ipcMain.handle('assist:escalate', async (_e, question, priorAnswer, history, opt
      concerned — they asked somebody else — it just does not leave the room. */
   if (!isRemote(target)) {
     const answer = await askLocal(asked, history, { model: target.model, thinking: target.thinking })
+    request.check()
     countRouting('asked', answer.ok && prior ? answersAgree(prior, answer.text) : null)
     return { ...answer, via: target.name, escalated: 'asked' }
   }
 
   if (remoteBudget().left <= 0) return cappedResult(null, target.name)
   const answer = await askRemote(target, asked, history, { job: 'asked', priorAnswer: prior })
+  request.check()
   /* You overrode the router. Whether you were right is the one thing it cannot
      work out for itself, and here it is for free: a differing answer means a
      rule above should have escalated and did not. */
   countRouting('asked', answer.ok && prior ? answersAgree(prior, answer.text) : null)
   return { ...answer, via: target.name, escalated: 'asked' }
-})
+}
 
 /* Stop. Not "ignore the answer when it comes" — kill the process, because it
    is spending a subscription on something nobody is going to hear and holding
    the strip open behind it. The in-flight ask resolves as 'cancelled'. */
-ipcMain.on('assist:escalate:cancel', () => cancelRemote())
+ipcMain.on('assist:escalate:cancel', () => { chatRequests.cancel(); cancelRemote() })
 
 /* Which CLIs are on this machine, for the settings panel. Read on every open
    like the model lists are: `claude` can be installed while transvibe is

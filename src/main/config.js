@@ -12,6 +12,7 @@ const FILE = path.join(DIR, 'settings.json')
 export const DEFAULTS = {
   threshold: 0.02,
   voiceIsolation: false,
+  conversationHangoverMs: 950,
   wakeConfidenceFloor: -0.85,
   minSegmentMs: 250, // retain short wake phrases
   hangoverMs: 550,
