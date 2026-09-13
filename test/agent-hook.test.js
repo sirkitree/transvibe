@@ -46,18 +46,35 @@ const captured = () => {
   return fs.existsSync(at) ? fs.readdirSync(at) : []
 }
 
+/* Every payload recorded so far, so a capture added later is covered by
+   being added rather than by somebody remembering to write a test for it. */
+const RECORDED = fs.readdirSync(path.join(HERE, 'fixtures', 'hooks'))
+  .filter(name => name.endsWith('.json'))
+  .map(name => name.replace(/\.json$/, ''))
+
 describe('the capture hook', () => {
-  it('writes the payload through unchanged, under the name of its event', () => {
-    const payload = fixture('Stop')
+  it.each(RECORDED)('writes %s through unchanged, under the name of its event', name => {
+    const payload = fixture(name)
     expect(run(payload)).toBe('')
 
     const files = captured()
     expect(files).toHaveLength(1)
-    expect(files[0]).toMatch(/-Stop\.json$/)
+    expect(files[0]).toMatch(new RegExp(`-${JSON.parse(payload).hook_event_name}\\.json$`))
     // Byte for byte: whatever the app parses later, it parses what Claude Code
     // actually sent, not this script's idea of it.
     const wrote = fs.readFileSync(path.join(dir, 'agent', 'capture', files[0]), 'utf8')
     expect(JSON.parse(wrote)).toEqual(JSON.parse(payload))
+  })
+
+  /* The long one is here because it is the one the spoken-length rules will
+     have to cut, and the question is here because "Want it at X instead?" is
+     the whole feature in one sentence: an agent that has stopped, waiting on
+     an answer nobody is at the terminal to give. */
+  it('keeps a message long enough to need shortening, and one that asks something', () => {
+    expect(JSON.parse(fixture('Stop-long')).last_assistant_message.length).toBeGreaterThan(200)
+    expect(JSON.parse(fixture('Stop-question')).last_assistant_message.trim()).toMatch(/\?$/)
+    expect(JSON.parse(fixture('Notification-idle')))
+      .toMatchObject({ notification_type: 'idle_prompt', message: expect.any(String) })
   })
 
   it('names a payload it cannot classify rather than dropping it', () => {

@@ -1,0 +1,16 @@
+{
+  "session_id": "00000000-0000-4000-8000-000000000001",
+  "transcript_path": "/Users/example/.claude/projects/-Users-example-repos-transvibe/00000000-0000-4000-8000-000000000001.jsonl",
+  "cwd": "/Users/example/repos/transvibe",
+  "scratchpad_dir": "/private/tmp/claude-501/-Users-example-repos-transvibe/00000000-0000-4000-8000-000000000001/scratchpad",
+  "prompt_id": "00000000-0000-4000-8000-000000000002",
+  "permission_mode": "auto",
+  "effort": {
+    "level": "medium"
+  },
+  "hook_event_name": "Stop",
+  "stop_hook_active": false,
+  "last_assistant_message": "High near 71\u00b0F, low ~53\u00b0F tonight. Sources disagree on cloud cover: NWS says sunny with light NE wind, AccuWeather says sun/clouds mix with a chance of showers and a possible rumble of thunder. Current reading ~55\u00b0F and cloudy.\n\nSources: [NWS](https://forecast.weather.gov/MapClick.php?lat=47.329264&lon=-122.5801293), [AccuWeather](https://www.accuweather.com/en/us/gig-harbor/98335/weather-forecast/336408), [Weather Underground](https://www.wunderground.com/weather/us/wa/gig-harbor)",
+  "background_tasks": [],
+  "session_crons": []
+}

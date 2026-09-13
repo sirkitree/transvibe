@@ -1,0 +1,10 @@
+{
+  "session_id": "00000000-0000-4000-8000-000000000001",
+  "transcript_path": "/Users/example/.claude/projects/-Users-example-repos-transvibe/00000000-0000-4000-8000-000000000001.jsonl",
+  "cwd": "/Users/example/repos/transvibe",
+  "scratchpad_dir": "/private/tmp/claude-501/-Users-example-repos-transvibe/00000000-0000-4000-8000-000000000001/scratchpad",
+  "prompt_id": "00000000-0000-4000-8000-000000000002",
+  "hook_event_name": "Notification",
+  "message": "Claude is waiting for your input",
+  "notification_type": "idle_prompt"
+}
