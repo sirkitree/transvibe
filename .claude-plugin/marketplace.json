@@ -1,0 +1,17 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "transvibe",
+  "description": "Voice integration between transvibe and your coding agent.",
+  "owner": { "name": "Jerad Bitner" },
+  "plugins": [
+    {
+      "name": "transvibe",
+      "description": "Voice integration for transvibe. Your agent says what it needs through transvibe, and you answer out loud instead of going back to the terminal.",
+      "version": "0.1.0",
+      "author": { "name": "Jerad Bitner" },
+      "source": "./plugin",
+      "category": "productivity",
+      "homepage": "https://github.com/sirkitree/transvibe"
+    }
+  ]
+}

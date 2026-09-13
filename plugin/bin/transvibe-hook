@@ -1,0 +1,42 @@
+#!/bin/sh
+# transvibe's Claude Code hook.
+#
+# Step one of docs/plans/agent-plugin.md: capture only. It reads whatever
+# Claude Code puts on stdin, writes it where the app can find it, and gets out
+# of the way. Nothing here blocks, decides, or speaks yet — the point of this
+# version is to find out what the payloads actually look like, from a real
+# session, before anything is built on a guess about their shape.
+#
+# sh rather than node, and no JSON parsing, for the reason the plan gives: a
+# Claude Code user is not guaranteed to have node on PATH, and a hook that
+# fails to start fails in the middle of somebody's work. The one thing it does
+# read out of the payload is the event name, by pattern rather than by parse,
+# and only to name the file.
+#
+# Exit 0, always. A capture that cannot write is a capture that did not
+# happen, not an agent that stops.
+set -u
+
+: "${TRANSVIBE_DIR:=$HOME/Library/Application Support/transvibe}"
+
+# Two off switches, both about this terminal rather than about the app: an
+# environment variable for one session, and a file for one project.
+[ "${TRANSVIBE_AGENT:-1}" = "0" ] && exit 0
+hash=$(printf '%s' "${PWD:-}" | cksum | cut -d' ' -f1)
+[ -f "$TRANSVIBE_DIR/agent/off/$hash" ] && exit 0
+
+dir="$TRANSVIBE_DIR/agent/capture"
+mkdir -p "$dir" 2>/dev/null || exit 0
+
+payload=$(cat)
+[ -n "$payload" ] || exit 0
+
+event=$(printf '%s' "$payload" |
+  sed -n 's/.*"hook_event_name"[[:space:]]*:[[:space:]]*"\([A-Za-z]*\)".*/\1/p' |
+  head -1)
+[ -n "$event" ] || event=unknown
+
+file="$dir/$(date -u +%Y%m%dT%H%M%SZ)-$$-$event.json"
+printf '%s' "$payload" > "$file.tmp" 2>/dev/null && mv "$file.tmp" "$file" 2>/dev/null
+
+exit 0

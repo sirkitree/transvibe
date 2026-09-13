@@ -5,7 +5,7 @@ dist/
 models/
 
 # compiled Swift helpers — rebuilt by `npm run build:native`
-bin/
+/bin/
 # the PNGs script/make-icon.py draws on the way to build/icon.icns, which is
 # the only one anything reads
 build/icon.iconset/

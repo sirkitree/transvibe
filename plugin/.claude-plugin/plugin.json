@@ -1,0 +1,7 @@
+{
+  "name": "transvibe",
+  "version": "0.1.0",
+  "description": "Voice integration for transvibe. Your agent says what it needs through transvibe, and you answer out loud instead of going back to the terminal.",
+  "author": { "name": "Jerad Bitner" },
+  "homepage": "https://github.com/sirkitree/transvibe"
+}
