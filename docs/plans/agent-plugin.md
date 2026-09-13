@@ -1,6 +1,6 @@
 # Plan: the agent plugin — answer your coding agent out loud
 
-Status: **steps one to three built**, 2026-09-13. The plugin loads, the hook runs, the payloads below are recorded from a real session rather than read off a documentation page, `src/shared/agent-request.js` turns one into what to say and what to answer with, and the hook now waits for that answer rather than only recording. Nothing is wired to a microphone yet — with the app not watching, the hook exits at once and a session never notices it ran. Steps 4–7 are ahead.
+Status: **steps one to four built**, 2026-09-13. The plugin loads, the hook runs, the payloads below are recorded from a real session rather than read off a documentation page, `src/shared/agent-request.js` turns one into what to say and what to answer with, the hook waits for that answer rather than only recording, and `src/main/agent-inbox.js` is the other end of it — a real session's hook and a real inbox now complete a round trip in a test. Nothing is wired to a microphone yet: nothing calls `start()`, so the hook still exits at once and a session never notices it ran. Steps 5–7 are ahead.
 
 ## What step one found
 

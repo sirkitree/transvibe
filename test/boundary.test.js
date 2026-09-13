@@ -79,6 +79,22 @@ describe('dictation never leaves the machine', () => {
     })
   }
 
+  /* The same guarantee, coming the other way. A coding agent's hook reaches
+     into this app over a filesystem, carrying a session's last message and
+     its working directory. What arrives is shown and spoken and nothing else:
+     it is never a question for a model, so there is no reason for anything on
+     this path to be able to spawn a CLI or open a socket, and every reason
+     for that to be structural rather than remembered. */
+  for (const entry of ['src/main/agent-inbox.js', 'src/shared/agent-request.js']) {
+    it(`${entry} cannot reach a model, a CLI, or the network`, () => {
+      const { files, bare } = closure(entry)
+      expect(files.filter(f => /cli-agent|shared\/cli\.js|assist\.js|escalate\.js/.test(f)))
+        .toEqual([])
+      expect(bare.filter(b => SPAWNS.test(b))).toEqual([])
+      expect(bare.filter(b => /^node:(net|http|https|dgram|tls)$/.test(b))).toEqual([])
+    })
+  }
+
   it('walks a real graph, so an empty result cannot pass by accident', () => {
     // The crawler has to actually find things, or the assertions above are
     // vacuous and would keep passing after someone broke the import parsing.
