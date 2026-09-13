@@ -519,7 +519,16 @@ function presentAgentRequest (request) {
   state.history = [...state.history,
     { role: 'assistant', content: request.say.show, name: agent.name, hue: agent.hue }]
   if (request.answerable) state.agentAsking = { ...request, agent }
-  state.conversationWindow.open(state.settings.conversationMs || 0)
+  /* As long as the session will actually wait, rather than the ordinary
+     follow-up window. Those are two different clocks and the shorter one was
+     wrong here: a terminal sitting still for ninety seconds while the room
+     stopped being addressed after twenty-five means the answer arrives as
+     dictation, which is both halves of the feature failing at once. It also
+     makes the plugin work for somebody who has follow-ups switched off — a
+     session cannot be addressed by name, so a window is the only way in. */
+  state.conversationWindow.open(request.answerable
+    ? (state.settings.agentReplyMs || 90000)
+    : (state.settings.conversationMs || 0))
   debugEvent('agent-request', { id: request.id, name: request.name, say: request.say })
   hint(request.say.show)
   say(request.say.kind === 'permission'

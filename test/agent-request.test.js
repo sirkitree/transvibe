@@ -99,12 +99,26 @@ describe('what is worth saying', () => {
     expect(said.spoken).toMatch(/\.$/)
   })
 
-  it('says nothing about a Stop this app caused, however much it carries', () => {
+  /* The reply to what you just said. Staying quiet here — which is what
+     `stop_hook_active` first read as — ends every conversation after exactly
+     one exchange, which is the opposite of the feature. */
+  it('reads out the answer to the last thing said out loud', () => {
     const { request } = readRequest(JSON.stringify({
       hook_event_name: 'Stop', stop_hook_active: true,
       last_assistant_message: 'Right, doing that now.'
     }))
-    expect(whatToSay(request)).toBeNull()
+    expect(whatToSay(request)).toMatchObject({
+      kind: 'finished', spoken: 'Right, doing that now.', answerable: true
+    })
+  })
+
+  it('still says nothing when there is nothing to say', () => {
+    for (const message of ['', '   ', null]) {
+      const { request } = readRequest(JSON.stringify({
+        hook_event_name: 'Stop', last_assistant_message: message
+      }))
+      expect(whatToSay(request)).toBeNull()
+    }
   })
 
   it('describes a permission request by its tool, never by its argument', () => {

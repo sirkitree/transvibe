@@ -95,8 +95,9 @@ export function readRequest (text) {
       notification: squash(payload.notification_type) || null,
       tool: squash(payload.tool_name) || null,
       target: toolTarget(payload.tool_input),
-      /* True when this Stop is the one our own last answer caused. Speaking
-         it would ask the room to answer its own reply, forever. */
+      /* True when this Stop follows a turn a Stop hook continued — ours,
+         which means it is the reply to what somebody said out loud. Kept
+         because it is worth recording, not because it silences anything. */
       stopHookActive: payload.stop_hook_active === true
     }
   }
@@ -157,7 +158,13 @@ export function whatToSay (request, { asked = new Set() } = {}) {
   if (!request) return null
 
   if (request.event === 'Stop') {
-    if (request.stopHookActive || !request.message) return null
+    /* `stop_hook_active` is not a reason to stay quiet, which is what this
+       first assumed and what a day of using it disproved: it marks the reply
+       to the last thing said out loud, and refusing to read that out ends
+       every conversation after exactly one exchange. The flag guards against
+       a hook that answers *itself* into a loop. This one cannot — every turn
+       of it costs a person a sentence, and silence is what ends it. */
+    if (!request.message) return null
     const { text, spoken } = forSpeech(request.message)
     if (!spoken) return null
     return { kind: 'finished', show: text, spoken, answerable: true }
