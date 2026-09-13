@@ -92,7 +92,21 @@ That parameter is a request, not a guarantee. Measured on `qwen3:30b-a3b`, askin
 
 **What was tried and rejected.** Gemma 4 takes audio natively, so it could replace whisper outright. On the same clips it was slower and less accurate — "Vinchi" for "Vinci", words dropped off the end of a long sentence, and it ignored an instruction to clean up while transcribing. Whisper keeps the audio. Google's other new model, Gemini 3.5 Transcribe, does all of this better and in one pass, but it is a cloud API with no open weights, which would cost this app the only property it really has.
 
-### Taking turns
+### Verification and completed replies
+
+Explicit requests to verify an article or provide a source bypass the local model and use a Codex agent in the configured chain when remote answers and web search are enabled. A follow-up asking for the “actual response” after a verification request follows the same route. An unavailable lookup, a timeout, or a reply without a source URL is reported as unconfirmed; the local model does not fill that gap with a guessed verification. A supplied URL is necessary evidence, not an automatic guarantee of accuracy.
+
+The local prompt states that it has no search tools. A guard also catches claims such as “After searching, I found…” and replaces them with an explicit unconfirmed result. Codex streams must include a completed turn, and commentary messages are excluded from answer selection. A timed-out process cannot supply a successful answer from partial output.
+
+Short acknowledgments such as “Okay, that's great” do not call a model. New questions and cancellation invalidate pending local-to-remote continuations, so an obsolete local result cannot start a remote fallback. Conversation capture uses its own silence window and includes a bounded 200 ms pre-roll to retain quiet word beginnings.
+
+### Conversation review fixes (September 12)
+
+Chat wake phrases preserve question wording, including “can you”. Conversation
+history retains agent names and lookup outcomes; CLI prompts label prior speakers
+instead of calling every assistant “You”. Calendar-access, recorded-source, lookup
+status, and named-agent response questions use recorded app facts before model
+routing. A supplied link is described as a sourced result, not independent proof.
 
 Before answering, explicit questions get a 250 ms continuation grace period;
 setup statements get 1.4 seconds after final transcription. Speech resuming before
@@ -100,3 +114,24 @@ the reply starts invalidates the pending answer and joins the next segment to th
 same thought. Escape/clear also cancels a queued thought. This is not full duplex
 speech: recognition remains muted during Mira's spoken reply to avoid echo.
 
+The ribbon shows follow-up seconds, pauses the clock during speech, and shows the
+wake phrase when the window expires. Source links remain on screen; known
+publication names are spoken instead of their domains.
+
+### Follow-up review fixes
+
+Generated and retrieved answers share `response-format.js`: known leading speaker
+labels are removed before checking the PASS sentinel, and displayed URLs are
+removed or shortened for speech. A labelled refusal is not retained in history.
+Attribution stays in structured history and separate local-prompt metadata, rather
+than being prepended to assistant answer text. Local and CLI responses both use
+the formatter before routing.
+
+Leading replacement phrases such as “actually, forget that lookup” discard the
+pending question. Only the new question is routed; ordinary continuations and
+corrections still extend the current thought. A replacement with no new question
+cancels without dispatching an empty request.
+
+The local prompt explicitly permits recall from user-supplied facts and uses the
+latest stated value when a fact changes. Lookup-status replies report completion
+briefly; a source link still does not constitute independent proof.

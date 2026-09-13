@@ -20,6 +20,7 @@ import {
 import { applyCorrections } from '../shared/glossary.js'
 import { describeModel, canThink } from '../shared/assist.js'
 import { createPresence } from './presence.js'
+import { isAcknowledgment } from '../shared/reply-policy.js'
 import { createConversationWindow } from './conversation-window.js'
 import { createWaiting } from './waiting.js'
 import { clampPlacement, heightFor, isReachable, MARGIN } from './placement.js'
@@ -495,6 +496,16 @@ async function dispatchConversation (agent, question) {
   state.asking = true
   state.talkingTo = agent
   state.history = [...priorHistory, { role: 'user', content: question }]
+  if (isAcknowledgment(question)) {
+    turnBuffer.complete()
+    state.asking = false
+    stopWaiting()
+    state.conversationWindow.open(state.settings.conversationMs || 0)
+    debugEvent('acknowledgment', { question })
+    noteActivity()
+    render()
+    return
+  }
   hint(`${agent.name} is thinking…`)
   noteActivity()
 
@@ -514,6 +525,11 @@ async function dispatchConversation (agent, question) {
     if (seq !== state.askSeq) return
     turnBuffer.complete()
     state.asking = false
+    if (answer.silent) {
+      state.conversationWindow.open(state.settings.conversationMs || 0)
+      render()
+      return
+    }
     if (!answer.ok) {
       /* Cancelled is the one failure nobody needs told about out loud: you
          are the one who said stop, and the strip has already said so. */
@@ -546,7 +562,8 @@ const WHY = {
   unsure: 'was not sure',
   failed: 'did not answer',
   empty: 'came back with nothing',
-  fresh: 'has no clock'
+  fresh: 'has no clock',
+  verification: 'was asked to verify'
 }
 
 /**
@@ -572,7 +589,8 @@ function landAnswer (answer, asked) {
   const who = via ? (agentNamed(via) || { name: via, hue: null }) : asked
 
   state.history = [...state.history,
-    { role: 'assistant', content: answer.text, name: who.name, hue: who.hue }]
+    { role: 'assistant', content: answer.text, name: who.name, hue: who.hue,
+      ...(answer.verification ? { verification: answer.verification, sources: answer.sources || [] } : {}) }]
   /* The thread stays open for a while, so the next sentence can be "and how
      far is that from London" rather than the whole name again. */
   state.conversationWindow.open(state.settings.conversationMs || 0)

@@ -1,5 +1,6 @@
 import { acceptAnswer } from './response-format.js'
 export { acceptAnswer, speakable } from './response-format.js'
+import { LOCAL_CAPABILITIES } from './reply-policy.js'
 /**
  * Talking to a model instead of at the app.
  *
@@ -42,6 +43,7 @@ function askPrompt (length, canPass = true) {
   return [
     'You are answering out loud, through a speaker, to someone who is busy.',
     'Output only your answer, without speaker names, role labels, or bracketed prefixes.',
+    'For conversational recall, use facts supplied by the user in this conversation; the latest explicit correction wins. These facts do not require external verification. Only request verification when the user asks to check their truth.',
     length,
     'No lists, no headings, no code blocks, no markdown of any kind — none of',
     'it can be heard. A plain URL is the exception: it is shown on screen',
@@ -58,11 +60,14 @@ function askPrompt (length, canPass = true) {
          named product, company, person or event is exactly the shape of thing
          a two-billion-parameter model half-remembers, and exactly the shape
          the model with a web search will get right. */
-      ? 'If you cannot answer this from what you know, reply with exactly PASS ' +
-        'and nothing else. Reply PASS also when the question turns on a ' +
-        'specific named product, company, person, place or event whose details ' +
-        'you cannot vouch for — somebody who can look it up is standing by, and ' +
-        'a confident guess costs more than the wait.'
+      ? 'Answer ordinary arithmetic and general explanations from your knowledge. ' +
+        'Use facts stated in the current user message or earlier user messages for recall, ' +
+        'even when they mention a named person or pet. If the user states a newer value ' +
+        'for the same fact, use that value rather than treating the two values as a conflict. ' +
+        'For example, if a user says their group has five people and then says seven people, ' +
+        'answer seven when asked its size. Do not claim uncertainty merely because a value changed. ' +
+        'Reply with exactly PASS only when the information needed to answer is missing ' +
+        'from both your knowledge and the conversation, or requires current external research.'
       /* Nobody to hand it to. Offering PASS here does not get the question a
          better answer, it gets it a worse one: the only thing behind a
          frontier model is the two-billion-parameter model on this machine, and
@@ -75,11 +80,11 @@ function askPrompt (length, canPass = true) {
 }
 
 /** For the model on this machine, with a better one behind it. */
-export const ASK_PROMPT = askPrompt('Answer in one or two short sentences and stop.')
+export const ASK_PROMPT = askPrompt('Answer in one or two short sentences and stop.') + ' ' + LOCAL_CAPABILITIES
 
 /** The same, for a model that is on its own. */
 export const ASK_PROMPT_ALONE =
-  askPrompt('Answer in one or two short sentences and stop.', false)
+  askPrompt('Answer in one or two short sentences and stop.', false) + ' ' + LOCAL_CAPABILITIES
 
 const FRONTIER_LENGTH =
   'Answer in a short paragraph — up to four or five sentences. Lead with the ' +

@@ -4,6 +4,7 @@ import {
 } from 'electron'
 import path from 'node:path'
 import { createLatestRequest } from './latest-request.js'
+import { conversationFact, isAcknowledgment, needsVerification, claimsLocalSearch, verificationReply, UNVERIFIED } from '../shared/reply-policy.js'
 import { randomUUID } from 'node:crypto'
 import { createDebugRecording } from './debug-recording.js'
 import { spawn } from 'node:child_process'
@@ -1109,7 +1110,7 @@ function countRemoteCall () {
    here (cleanup, commandFallback) cannot reach this function at all, and
    test/boundary.test.js is what keeps that true; this catches the other way
    in, which is a new handler calling askRemote directly. */
-const REMOTE_JOBS = new Set(['chat', 'fresh', 'asked'])
+const REMOTE_JOBS = new Set(['chat', 'fresh', 'asked', 'verification'])
 
 /* How the escalation rules are doing. Numbers, and nothing else.
 
@@ -1193,6 +1194,10 @@ async function askLocal (question, history, options = {}) {
   if (!assist) return { text: '', ok: false, reason: 'the local model is not running' }
   const answer = await assist.ask(question, history, options)
   noteModelStat(answer, 'local')
+  if (answer.ok && claimsLocalSearch(answer.text)) {
+    debugRecording.event('unsupported-search-claim', { text: answer.text, question })
+    return { ...answer, text: UNVERIFIED, spoken: UNVERIFIED, verification: 'unconfirmed' }
+  }
   return answer
 }
 
@@ -1317,6 +1322,19 @@ async function answerChat (question, history, options, request) {
   const opts = options || {}
   const asked = String(question == null ? '' : question)
   const agent = askingAgent(opts)
+  if (isAcknowledgment(asked)) return { text: '', ok: true, silent: true }
+  const fact = conversationFact(asked, history)
+  if (fact) return fact
+  if (needsVerification(asked, history)) {
+    const chain = agent ? escalationChain(settings.agents, agent) : []
+    const target = [agent, ...chain].find(a => a?.provider === 'codex')
+    if (!settings.remote || !settings.remoteWebSearch || !target || remoteBudget().left <= 0) {
+      return { ...verificationReply(null), via: agent?.name }
+    }
+    const query = `${asked}\nVerify using an actual source. Return the finding, the publication name, and the source URL, or plainly say you could not verify it. Do not answer with a promise to search.`
+    const result = await request.wait(askRemote(target, query, history, { job: 'verification', webSearch: true }))
+    return { ...verificationReply(result), via: target.name, escalated: 'verification' }
+  }
 
   /* Off is off. Not "off unless", not "off but for this one": with the switch
      down, nothing below this line runs, and this handler is the one it was
