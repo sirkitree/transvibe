@@ -4,15 +4,6 @@ contextBridge.exposeInMainWorld('transvibe', {
   /** @param {Float32Array} samples 16 kHz mono — transferred, not copied */
   transcribe: (samples, interim = false, retrySamples = null, context = '') =>
     ipcRenderer.invoke('transcribe', samples.buffer, interim, retrySamples?.buffer, context),
-  /* A coding agent's session, asking. One way in — a request arrives — and
-     one way back — what you said, or nothing. Nothing here can ask a model
-     anything; an answer goes to the session that asked and stops there. */
-  onAgentRequest: fn => ipcRenderer.on('agent:request', (_e, request) => fn(request)),
-  onAgentExpired: fn => ipcRenderer.on('agent:expired', (_e, request) => fn(request)),
-  onAgentStatus: fn => ipcRenderer.on('agent:status', (_e, status) => fn(status)),
-  agentStatus: () => ipcRenderer.invoke('agent:status'),
-  answerAgent: (id, said) => ipcRenderer.send('agent:answer', id, said),
-  declineAgent: id => ipcRenderer.send('agent:decline', id),
   onDebugFlush: fn => ipcRenderer.on('debug:flush', fn),
   debugFlushed: () => ipcRenderer.send('debug:flushed'),
   debugEvent: (type, detail) => ipcRenderer.send('debug:event', type, detail),

@@ -75,8 +75,6 @@ Behind it is `~/Library/Application Support/transvibe/settings.json`, written on
 | `remoteAnnounce` | `true` | say "Claude said, …" so a remote answer is never passed off as local |
 | `remoteTimeoutMs` | `30000` | how long a CLI may take before it is given up on |
 | `remoteWebSearch` | `false` | let codex search the web; roughly doubles the wait |
-| `agentPlugin` | `false` | let a coding agent's session ask you out loud and take your spoken answer; needs the plugin installed in Claude Code |
-| `agentReplyMs` | `90000` | how long a session waits to hear from you before carrying on without an answer |
 | `remoteCallsToday` | `{}` | written by the app: how many questions went out, per day |
 | `debugRecording` | `false` | save local microphone audio and conversation diagnostics; see [recording and review](recording.md) |
 | `debugRouting` | `false` | append a line per question to `routing.log`, questions and answers included |
@@ -91,15 +89,3 @@ capture continues. On the built-in MacBook microphone tested September 12, the
 runtime advertised support but rejected activation with “Cannot satisfy
 constraints,” both at startup and through applyConstraints.
 
-## Answering a coding agent
-
-With `agentPlugin` on and transvibe's plugin installed in Claude Code, a session running in your terminal can say when it has finished or when it needs a decision, and you answer by voice. Install it with:
-
-```bash
-claude plugin marketplace add sirkitree/transvibe
-claude plugin install transvibe@transvibe
-```
-
-The session speaks through a directory — `agent/` beside this file — and nothing about it reaches the network. Which of its questions get read out, and how a spoken answer becomes an exit code, is in `src/shared/agent-request.js`; the plan behind it is [docs/plans/agent-plugin.md](plans/agent-plugin.md).
-
-Switched off, transvibe removes the `agent/listening` file, and the plugin's hook exits before it does anything at all — so a session pays nothing for the plugin being installed while this is off. There are two narrower switches on the terminal's side: `TRANSVIBE_AGENT=0` for one session, and a file named for the project under `agent/off/` for one project.
