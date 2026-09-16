@@ -7,6 +7,10 @@ import {
   COMMANDS
 } from './commands.js'
 import { matchAgent } from './wake.js'
+import { allowAgent, thresholdFor } from '../shared/voiceprint-gate.js'
+import {
+  startEnrolment, readingHeard, currentLine, progress, enrolmentSummary, LINE_COUNT
+} from '../shared/enroll-script.js'
 import { parseSettingCommand, applySettingCommand, settingPhrases } from './settings-voice.js'
 import { FIELDS, resolveChoice } from './settings-schema.js'
 import {
@@ -42,6 +46,8 @@ const state = {
   liveSeq: 0,        // guards against a slow interim landing after a newer one
   interimBusy: false,
   commandMode: false,
+  voiceprintStatus: null,  // { enrolled, available, count } — see main/voiceprint.js
+  enrolling: null,         // { state, clips } while reading the lines aloud
   undoStack: [],
   pending: 0,
   listening: true,
@@ -195,6 +201,67 @@ function conversing () {
    still what ⌃⌥↩ sends, so it must stay visible above the bubbles rather
    than be hidden behind them. Only the live, in-flight words have to pick a
    side, and they go to whichever the utterance is for. */
+/* The name the enrolment lines should use. The first agent on the roster is
+   the one somebody is most likely to say, and a line naming an agent that does
+   not exist would teach the wrong phrase. */
+function firstAgentName () {
+  const roster = state.settings?.agents || []
+  return roster[0]?.name || ''
+}
+
+/**
+ * Teach it your voice: five lines, read aloud, measured, saved.
+ *
+ * Driven entirely by the microphone that is already running — `onSegment`
+ * hands readings here instead of to the recogniser while this is live, so
+ * there is no second capture path to keep in step with the first.
+ */
+async function enrolVoice () {
+  if (state.enrolling) return
+  if (!state.voiceprintStatus?.modelReady) {
+    hint('fetching the speaker model…')
+    const got = await window.transvibe.voiceprintDownload()
+    if (!got.ok) return hint(`could not fetch the speaker model — ${got.error}`)
+    state.voiceprintStatus = await window.transvibe.voiceprintStatus()
+  }
+  togglePanel('settings', false)
+  state.enrolling = { state: startEnrolment(), clips: [] }
+  hint('read each line out loud — esc to stop')
+  render()
+}
+
+function stopEnrolling (message) {
+  state.enrolling = null
+  if (message) hint(message)
+  render()
+}
+
+/** One reading has arrived from the microphone. */
+async function enrolSegment (samples, text) {
+  const enrol = state.enrolling
+  if (!enrol) return
+  const seconds = samples.length / 16000
+  const verdict = readingHeard(enrol.state, seconds, text)
+  if (!verdict.accepted) return void (hint(verdict.message), render())
+
+  enrol.clips.push(samples)
+  enrol.state = verdict.state
+  if (!verdict.done) { hint(verdict.message); return void render() }
+
+  hint(verdict.message)
+  const result = await window.transvibe.voiceprintEnroll(enrol.clips)
+  /* Scored against the profile they just made — the readings agreeing with
+     each other is the one thing that can be checked without asking for more
+     audio, and readings that do not agree are how a profile ends up averaging
+     two people together. */
+  const scores = result.ok
+    ? (await window.transvibe.voiceprintProbe(enrol.clips)).map(r => r.score)
+    : []
+  state.voiceprintStatus = await window.transvibe.voiceprintStatus()
+  state.settings = await window.transvibe.getSettings()
+  stopEnrolling(enrolmentSummary({ ...result, scores, threshold: state.settings.voiceprintThreshold }))
+}
+
 function render () {
   recordDisplay()
   const chat = conversing()
@@ -202,6 +269,26 @@ function render () {
   // or the question being asked; otherwise they are dictation on the way in.
   const liveToChat = chat && !state.liveWake && (state.asking || inConversation())
   const inflight = state.live || state.pending > 0
+
+  /* Reading the lines takes the strip over completely. Everything else here
+     is about words coming *in*; this is the one moment the app has something
+     for you to say, and burying it in the hint line under a live transcript
+     would be asking somebody to read aloud from a status bar. */
+  if (state.enrolling) {
+    const line = currentLine(state.enrolling.state, firstAgentName())
+    const box = document.createElement('div')
+    box.className = 'enrol'
+    const count = progress(state.enrolling.state)
+    box.append(Object.assign(document.createElement('div'),
+      { className: 'enrol-step', textContent: `Read this aloud — ${count.done + 1} of ${count.total}` }))
+    box.append(Object.assign(document.createElement('div'),
+      { className: 'enrol-line', textContent: line || '' }))
+    transcriptEl.replaceChildren(box)
+    transcriptEl.hidden = false
+    conversationEl.hidden = true
+    syncHeight()
+    return
+  }
 
   transcriptEl.replaceChildren(...state.finals.map(finalNode))
   if (inflight && !liveToChat) {
@@ -2531,6 +2618,12 @@ function updateRecording (status) {
 
 async function main () {
   state.settings = await window.transvibe.getSettings()
+  /* Read once at startup and kept fresh by the main process, because the gate
+     consults it on every utterance and an IPC round trip per segment to ask
+     "is a voice enrolled" would be a round trip to learn something that
+     changes about once. */
+  state.voiceprintStatus = await window.transvibe.voiceprintStatus()
+  window.transvibe.onVoiceprintStatus(status => { state.voiceprintStatus = status })
   window.transvibe.onDebugStatus(updateRecording)
   window.transvibe.onDebugFlush(() => {
     state.capture?.flushRecording()
@@ -2555,7 +2648,8 @@ async function main () {
     open: name => togglePanel(name, true),
     getExternal: () => window.transvibe.getLaunchAtLogin(),
     setExternal: (_key, value) => window.transvibe.setLaunchAtLogin(value),
-    getOptions: fieldOptions
+    getOptions: fieldOptions,
+    actions: { enrolVoice }
   })
   state.presence = createPresence({
     idleFadeMs: state.settings.idleFadeMs,
@@ -2652,6 +2746,12 @@ async function main () {
     },
     onSegment: async (samples, detail) => {
       if (!state.listening) return
+      /* Reading the lines borrows the microphone wholesale: nothing said now
+         is dictation, a command, or addressed to anybody. */
+      if (state.enrolling) {
+        const heard = await window.transvibe.transcribe(samples, false).catch(() => ({ text: '' }))
+        return enrolSegment(samples, heard.text || '')
+      }
       // the utterance is over: whatever interim is in flight is now stale
       state.liveSeq++
       state.pending++
@@ -2667,6 +2767,13 @@ async function main () {
       const wasStale = state.presence.stale
       noteActivity()
       render()
+      /* Started before the recogniser and joined after it. Measuring the voice
+         takes about a twentieth of what transcribing it does, so running the
+         two together puts the whole gate inside whisper's shadow — the answer
+         is already waiting by the time there are words to gate. */
+      const scoring = state.settings.voiceprint && !asCommand
+        ? window.transvibe.voiceprintScore(samples).catch(() => ({ score: null }))
+        : null
       try {
         const res = await window.transvibe.transcribe(samples, false, detail?.retrySamples,
           inConversation() ? state.history.filter(t => t.role === 'user').slice(-2).map(t => t.content).join(' ') : '')
@@ -2696,7 +2803,28 @@ async function main () {
           const wake = matchAgent(res.text, (state.settings.agents || []), {
             fuzzy: state.settings.wakeWordFuzzy
           })
-          if (wake.matched && wake.rest) {
+          /* The name was heard. Whether it was *yours* to say is a separate
+             question, and it is asked only here — dictation is nobody's to
+             gate, and the key path answered it by being held down.
+
+             A voice that does not match falls through to dictation rather
+             than to silence: the words still land on the strip, so a false
+             reject costs you a retry instead of the sentence. */
+          const voice = allowAgent({
+            score: scoring ? (await scoring).score : null,
+            threshold: thresholdFor(samples.length / 16000, state.settings.voiceprintThreshold),
+            enabled: !!state.settings.voiceprint,
+            enrolled: !!state.voiceprintStatus?.enrolled,
+            commandMode: false
+          })
+          debugEvent('voiceprint', { ...voice, seconds: samples.length / 16000, wake: wake.matched })
+          if (!voice.pass && (wake.matched || inConversation())) {
+            /* Somebody else said the name. Say so on the strip — a gate that
+               drops what you said without a word is the one thing that cannot
+               be tuned from the outside. */
+            hint(`not your voice — ${voice.score.toFixed(2)}`)
+            dictate(res.text, wasStale)
+          } else if (wake.matched && wake.rest) {
             state.agent = wake.agent
             addressAgent(wake.agent, wake.rest, { keep: () => dictate(res.text, wasStale) })
               .catch(err => hint(err.message))
@@ -2853,6 +2981,9 @@ async function main () {
       // A call in flight is the topmost layer there is: it is the only one
       // that is still costing you something while you wait for it.
       if (cancelEscalation()) return
+      /* Above the panels: the lines are on the strip, over everything, and
+         esc is the only way out of them. */
+      if (state.enrolling) return stopEnrolling('stopped — your old voiceprint is untouched')
       if (!$('fixer').hidden) return closeFixer()
       const open = openPanel()
       if (open) return togglePanel(open, false)
@@ -2886,6 +3017,7 @@ async function main () {
   // the menu bar can drive the same actions as the buttons
   window.transvibe.onListening(setListening)
   window.transvibe.onCommand(name => {
+    if (name === 'dismiss') dismiss()
     if (name === 'copy') $('copy').click()
     if (name === 'clear') $('clear').click()
     if (name === 'send') doSend()

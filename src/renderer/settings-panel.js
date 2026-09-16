@@ -16,7 +16,7 @@ import { SECTIONS, coerce, formatValue, fieldApplies } from './settings-schema.j
  */
 export function createSettingsPanel ({
   body, note, getSettings, save, applyLive, open, getExternal, setExternal,
-  getOptions, panes: extraPanes = new Map()
+  getOptions, panes: extraPanes = new Map(), actions = {}
 }) {
   const el = (tag, cls, text) => {
     const n = document.createElement(tag)
@@ -38,6 +38,24 @@ export function createSettingsPanel ({
 
   function row (field) {
     const wrap = el('div', `set-row set-${field.type}`)
+
+    /* A button, not a value. It reads nothing back and writes nothing, so it
+       skips the whole commit path below — `show()` has nothing to show for
+       it, and `inputs` never learns about it. */
+    if (field.type === 'action') {
+      const button = el('button', 'set-action', field.label)
+      button.type = 'button'
+      button.addEventListener('click', async () => {
+        const run = actions[field.action]
+        if (!run) return note(`${field.label} · unavailable`)
+        button.disabled = true
+        try { await run() } catch (err) { note(err.message) } finally { button.disabled = false }
+      })
+      wrap.append(button)
+      if (field.help) wrap.append(el('p', 'set-help', field.help))
+      return wrap
+    }
+
     const input = field.type === 'select' ? el('select') : el('input')
     const value = el('span', 'set-value')
 

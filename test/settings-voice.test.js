@@ -228,9 +228,11 @@ describe('the aliases themselves', () => {
   })
 
   it('reaches every toggle and slider the panel has', () => {
-    const reachable = FIELDS.filter(f => f.spoken).map(f => f.key)
-    const panelOnly = FIELDS.filter(f => !f.spoken).map(f => f.key)
-    expect(reachable).toHaveLength(47)
+    // An action is a button, not a value — there is nothing to set by voice.
+    const settings = FIELDS.filter(f => f.type !== 'action')
+    const reachable = settings.filter(f => f.spoken).map(f => f.key)
+    const panelOnly = settings.filter(f => !f.spoken).map(f => f.key)
+    expect(reachable).toHaveLength(49)
     // Free text and paths, and nothing else.
     expect(panelOnly.sort()).toEqual(
       ['assistUrl', 'language', 'modelPath', 'sendTarget', 'spacesDir'])

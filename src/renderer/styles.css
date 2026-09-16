@@ -915,3 +915,38 @@ body.awake .bar {
 .agent-sub .note { font-size: 11px; white-space: nowrap; }
 
 .recording-status { position: absolute; top: 8px; right: 16px; z-index: 5; pointer-events: auto; align-self: center; border: 1px solid #e76b6b; border-radius: 6px; background: #301b20; color: #ffb8b8; padding: 4px 10px; cursor: pointer; font: 12px system-ui; }
+
+/* Teaching it your voice. The line has to be read aloud off the screen, so it
+   is set larger than the transcript rather than smaller: this is the one thing
+   the strip ever asks you to read rather than the other way round. */
+.enrol {
+  padding: 4px 2px 6px;
+}
+.enrol-step {
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0.55;
+  margin-bottom: 6px;
+}
+.enrol-line {
+  font-size: 19px;
+  line-height: 1.45;
+  font-weight: 500;
+  text-wrap: balance;
+}
+
+/* An action is a button that does something rather than a control that holds a
+   value, so it reads as a button and not as a row with its value missing. */
+.set-action {
+  font: inherit;
+  padding: 6px 14px;
+  border-radius: 7px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.07);
+  color: inherit;
+  cursor: pointer;
+}
+.set-action:hover:not(:disabled) { background: rgba(255, 255, 255, 0.13); }
+.set-action:disabled { opacity: 0.5; cursor: default; }
+

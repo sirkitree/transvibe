@@ -35,6 +35,25 @@ export const DEFAULTS = {
   ],
   wakeWordFuzzy: true,
 
+  /* Who may use a name, as opposed to what the name is.
+     ------------------------------------------------------------------
+     The wake word hears words, not people, so anybody in the room — or on a
+     call coming out of the speakers — can address an agent by saying its
+     name. This compares the voice that said it against an enrolled one and
+     lets the rest fall through to dictation.
+
+     Off until a voice is enrolled, and it fails open on every error: no
+     model, no profile, a failed measurement, all pass. The key path (right ⌥)
+     is never gated at all. It is a filter against accidents, not a lock —
+     a recording of you saying the name would still pass it.
+
+     `voiceprintThreshold` is a cosine similarity. Measured on this machine,
+     the enrolled voice lands 0.53–0.93 and other people land below 0.15, so
+     0.35 sits in the gap with room either side. Raise it if somebody else
+     gets through; lower it if you have to repeat yourself. */
+  voiceprint: false,
+  voiceprintThreshold: 0.35,
+
   /* Saying what it just did. A command you gave with your voice deserves an
      answer in kind — you are looking at the app you are dictating into, not at
      the strip. `speakVoice` is a macOS voice name (`say -v '?'` lists them);

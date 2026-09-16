@@ -7,6 +7,7 @@ import { createLatestRequest } from './latest-request.js'
 import { conversationFact, isAcknowledgment, needsVerification, claimsLocalSearch, verificationReply, UNVERIFIED } from '../shared/reply-policy.js'
 import { randomUUID } from 'node:crypto'
 import { createDebugRecording } from './debug-recording.js'
+import { createVoiceprint, modelReady as voiceprintModelReady, downloadModel as downloadVoiceprintModel } from './voiceprint.js'
 import { spawn } from 'node:child_process'
 import fs, { existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
@@ -48,6 +49,10 @@ const debugRecording = createDebugRecording(path.join(config.DIR, 'recordings'),
   if (tray) tray.setTitle(debugRecording.status.active ? '● REC' : '')
   send('debug:status', debugRecording.status)
 })
+
+/* The voiceprint engine loads its model lazily, on the first utterance it is
+   asked to score, so an app with the setting off never pays for it. */
+const voiceprint = createVoiceprint({ onError: message => console.warn('[transvibe]', message) })
 
 let listening = true
 let commandTimer = null
@@ -413,6 +418,17 @@ function toggleWindow () {
   else showWindow()
 }
 
+/* Left click is about the words, not the app. The ribbon is how you can tell
+   from across the room that it is still listening, and taking that away is
+   not what somebody dismissing a transcript asked for — so a click on the
+   icon clears the text and the conversation and leaves the visualizer where
+   it was. Hiding the strip outright is still a thing you can do: this icon's
+   menu, or ⌃⌥Space. */
+function trayClick () {
+  if (!win || win.isDestroyed() || !win.isVisible()) return showWindow()
+  send('command', 'dismiss')
+}
+
 function refreshTray () {
   if (!tray) return
   const visible = win && !win.isDestroyed() && win.isVisible()
@@ -491,7 +507,7 @@ function createTray () {
     path.join(__dirname, '..', 'assets', 'trayTemplate.png'))
   icon.setTemplateImage(true)          // adapts to light/dark menu bars
   tray = new Tray(icon)
-  tray.on('click', toggleWindow)       // left click toggles, right click menus
+  tray.on('click', trayClick)          // left click clears, right click menus
   refreshTray()
 }
 
@@ -940,6 +956,51 @@ ipcMain.handle('transcribe', async (_e, buffer, interim = false, retryBuffer = n
     debugRecording.event('transcription-result', { debugId, interim, error: err.message }, session)
     return { debugId, text: '', error: err.message }
   }
+})
+
+/* Scored on the same samples the recogniser is given, and deliberately not
+   awaited together with it: the renderer fires this alongside `transcribe`
+   and joins before deciding who was addressed, so the measurement costs
+   nothing on a pass that whisper is already paying for. */
+ipcMain.handle('voiceprint:score', (_e, buffer) => {
+  if (!(buffer instanceof ArrayBuffer)) return { score: null }
+  const samples = new Float32Array(buffer)
+  const score = voiceprint.score(samples)
+  return { score, seconds: samples.length / 16000 }
+})
+
+ipcMain.handle('voiceprint:status', () => ({ ...voiceprint.status, threshold: settings.voiceprintThreshold }))
+
+ipcMain.handle('voiceprint:enroll', (_e, buffers) => {
+  const list = (Array.isArray(buffers) ? buffers : [])
+    .filter(b => b instanceof ArrayBuffer)
+    .map(b => new Float32Array(b))
+  const result = voiceprint.enroll(list)
+  /* Enrolling is the only moment the gate can be switched on without it
+     being a setting that does nothing: before this there was no voice to
+     compare against, and after it there is. */
+  if (result.ok && !settings.voiceprint) settings = config.save({ voiceprint: true })
+  send('voiceprint:status', { ...voiceprint.status, threshold: settings.voiceprintThreshold })
+  return result
+})
+
+ipcMain.handle('voiceprint:probe', (_e, buffers) => voiceprint.probe(
+  (Array.isArray(buffers) ? buffers : []).filter(b => b instanceof ArrayBuffer).map(b => new Float32Array(b))))
+
+ipcMain.handle('voiceprint:forget', () => {
+  const result = voiceprint.forget()
+  settings = config.save({ voiceprint: false })
+  send('voiceprint:status', { ...voiceprint.status, threshold: settings.voiceprintThreshold })
+  return result
+})
+
+ipcMain.handle('voiceprint:download', async () => {
+  if (voiceprintModelReady()) return { ok: true, already: true }
+  try {
+    await downloadVoiceprintModel(progress => send('voiceprint:progress', progress))
+    send('voiceprint:status', { ...voiceprint.status, threshold: settings.voiceprintThreshold })
+    return { ok: true }
+  } catch (err) { return { ok: false, error: err.message } }
 })
 
 ipcMain.handle('settings:get', () => settings)

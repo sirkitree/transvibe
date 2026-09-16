@@ -145,6 +145,36 @@ export const SECTIONS = [
       },
       {
         group: 'Hearing a name',
+        key: 'voiceprint',
+        label: 'Only answer to my voice',
+        help: 'A name said by anybody works — including somebody on a call coming out of the speakers. With this on, an utterance is also measured against your enrolled voice, and one that does not match is dictated instead of addressed. Holding right ⌥ is never gated. Enrol in the Voice tab first; with nothing enrolled this does nothing. It is a filter against accidents, not a lock — a recording of you would still pass it.',
+        spoken: ['my voice only', 'the voice filter', 'voice matching'],
+        type: 'toggle'
+      },
+      {
+        /* Not a setting — the only way to make the toggle above mean anything.
+           A voiceprint cannot be shipped or defaulted: it is yours, it is built
+           on this machine from your voice, and until somebody has read the
+           lines there is nothing for the gate to compare against. So the
+           button lives beside the switch rather than in a script somebody has
+           to be told about. */
+        group: 'Hearing a name',
+        key: 'voiceprintEnrol',
+        type: 'action',
+        action: 'enrolVoice',
+        label: 'Teach it my voice',
+        help: 'Reads you five lines to say out loud, about half a minute in all, and builds a voiceprint from them. Do it where you normally work — a voiceprint picks up the room and the microphone along with you, so one made in a quiet office fits a quiet office. Doing it again replaces the old one.'
+      },
+      {
+        group: 'Hearing a name',
+        key: 'voiceprintThreshold',
+        label: 'How closely the voice must match',
+        help: 'How similar an utterance has to be to the voice you enrolled. Measured here, your own voice lands between 0.53 and 0.93 and other people land below 0.15, so the default sits in the gap. Raise it if somebody else gets through; lower it if you find yourself repeating a name. Short utterances are judged slightly more kindly, because a two-word name carries less of a voice than a sentence does.',
+        spoken: ['the voice threshold', 'how strict the voice filter is'],
+        type: 'range', min: 0, max: 0.9, step: 0.05
+      },
+      {
+        group: 'Hearing a name',
         key: 'commandTimeoutMs',
         label: 'Command mode disarms after',
         help: 'After ⌃⌥C, or after the name of an agent that runs commands said on its own.',

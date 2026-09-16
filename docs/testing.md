@@ -1,7 +1,7 @@
 # Tests
 
 ```sh
-npm test          # 854
+npm test          # 1030
 npm run test:unit # pure modules only, no whisper binary needed
 ```
 
@@ -12,6 +12,8 @@ npm run test:unit # pure modules only, no whisper binary needed
 | `orb.test.js` | 39 | the seed ring, the walk, the mirror, and the zoom envelope |
 | `assist.test.js` | 36 | assist prompts, and the guards on its replies |
 | `wake.test.js` | 35 | the wake phrase: what starts a command, and what is just speech |
+| `voiceprint-gate.test.js` | 18 | who may use a name: the gate policy, and every way it fails open |
+| `enroll-script.test.js` | 20 | the lines you read to enrol, and what counts as having read one |
 | `settings-voice.test.js` | 34 | changing a setting by voice, and which ones can be |
 | `overlay.test.js` | 32 | strip and orb geometry, the orb's circle, hover-wake dwell, the sleep grace |
 | `spaces.test.js` | 30 | desktop Space markers, matching, and switch targets |
@@ -35,8 +37,13 @@ npm run test:unit # pure modules only, no whisper binary needed
 | `assist-models.test.js` | 8 | listing what Ollama has, and what an absent Ollama reads as |
 | `speech.test.js` | 8 | voice list parsing, and the `say` argv |
 | `engine.integration.test.js` | 4 | the real engine, end to end |
+| `voiceprint.integration.test.js` | 7 | the real speaker model against this Mac's own recordings |
 
 The bulk sits in `commands.test.js` because a command parser's worst failure is silent: a false positive eats dictation the user meant to keep. Over 60 of the cases there are ordinary sentences — "I need to copy that file", "let's undo the last commit", "send that email to Bob" — asserted to parse as *nothing*.
+
+`voiceprint.integration.test.js` is the other one that needs the machine rather than the repo: it loads the 27 MB speaker model and scores this Mac's own debug recordings, so it self-skips wherever either is missing. It exists because two of the three things that went wrong while building the gate were invisible to a unit test — a model export that scored near chance while looking perfectly healthy, and an Electron rule against external buffers that made every call throw in the app while passing in Node. So it asserts the embedding dimension, that a bare wake phrase still clears the threshold, that the key path is never gated, and that scoring stays an order of magnitude cheaper than transcribing.
+
+The half it cannot test is the half worth watching: whether the threshold is right for your room. `node script/voiceprint.mjs score` prints every utterance ranked with the gap drawn, which is the real check.
 
 `engine.integration.test.js` is real end-to-end coverage with no cloud and no microphone: macOS `say` synthesises a known phrase, `ffmpeg` conforms it to 16 kHz mono, and the engine has to read it back. It also covers an interim pass over a partial utterance, and asserts that a second of pure silence returns empty text rather than a hallucinated phrase. It self-skips if `say`, `ffmpeg`, whisper.cpp, or a model is unavailable.
 
@@ -92,7 +99,7 @@ Things the automated tests cannot cover:
 - [ ] The ➤ button hides transvibe, restores the previous app, and pastes there
 - [ ] `⌃⌥Space` toggles visibility from another app
 - [ ] Waveform icon appears in the menu bar and adapts to light/dark
-- [ ] × clears the transcript; the tray icon still shows and hides the strip
+- [ ] × clears the transcript; clicking the tray icon clears it too, leaving the visualizer up; the tray menu still shows and hides the strip
 
 Escalation, which is almost entirely beyond the unit suite — the pure modules decide *whether* to escalate, but nothing under Node ever spawns a CLI, draws the wait, or speaks the attribution:
 

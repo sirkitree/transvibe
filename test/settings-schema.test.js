@@ -5,7 +5,9 @@ import {
   coerce, formatValue, resolveChoice, fieldApplies
 } from '../src/renderer/settings-schema.js'
 
-const fileKeys = FIELDS.filter(f => !f.external).map(f => f.key)
+/* An action is a button, not a setting: it has no value, nothing in
+   config.js, and nothing to read back. */
+const fileKeys = FIELDS.filter(f => !f.external && f.type !== 'action').map(f => f.key)
 
 describe('the settings schema against config.js', () => {
   it('has a row for every setting in the file', () => {
@@ -30,7 +32,8 @@ describe('the settings schema against config.js', () => {
 
   it('gives every field a type the panel can build', () => {
     for (const field of FIELDS) {
-      expect(['toggle', 'range', 'text', 'select']).toContain(field.type)
+      expect(['toggle', 'range', 'text', 'select', 'action']).toContain(field.type)
+      if (field.type === 'action') expect(field.action).toBeTruthy()
       expect(field.label).toBeTruthy()
       if (field.type === 'range') {
         expect(field.min).toBeLessThan(field.max)

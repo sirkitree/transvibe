@@ -108,6 +108,34 @@ The name has to come first. A name recognised anywhere would turn "I told him he
 
 Because the app decided this was a command rather than you, an utterance that reaches the parser and means nothing to it is **put back into the transcript** rather than dropped: `not a command — kept "…"`. The key path does not do that — there you meant a command, so being told is better than a stray sentence appearing.
 
+### Only when *you* say it
+
+A name works in anybody's mouth. The wake word hears words, not people, so somebody on a call coming out of your speakers can say "hey Mira" and get an answer — which is embarrassing in exactly the moment you cannot explain it.
+
+**Settings › Agents › “Only answer to my voice”** adds a second question to the first one. The wake word decides *what* was said; this decides *who said it*, by measuring the utterance against a voice you enrolled once. An utterance that does not match is dictated instead of addressed — the words still land on the strip, so being wrongly turned away costs you a repeat rather than the sentence, and the strip says `not your voice — 0.12` so you can see what it scored.
+
+**Settings › Agents › “Teach it my voice”** is the whole of it. The panel closes, and the strip puts five lines in front of you one at a time — read each one aloud, about half a minute in total, and it builds the voiceprint from those readings. The last line uses the name of an agent you actually have, because that short phrase is what the gate judges most often and the hardest case it ever sees. esc stops, and stopping leaves whatever you had before untouched.
+
+Do it where you normally work. A voiceprint picks up the room and the microphone along with you, so one made at a quiet desk fits a quiet desk; if you usually wear a headset, enrol wearing it. Doing it again replaces the old one, so re-enrolling after you change setups costs nothing.
+
+Afterwards it tells you how well the readings agreed with each other. Readings that do not sound alike are the one problem worth catching at the time, because it almost always means two voices got in — somebody else in the room, or a television — and a profile averaged across two people lets both of them through.
+
+There is a terminal version of the same thing, which is also how you inspect the numbers:
+
+```sh
+node script/voiceprint.mjs enrol     # build a profile from your existing debug recordings
+node script/voiceprint.mjs score     # every recording, ranked, with the gap drawn
+node script/voiceprint.mjs forget    # throw the profile away and switch the gate off
+```
+
+`score` is the one worth running. It prints everything you have ever said to the app, ranked by how much it sounded like you, and draws a line at the widest gap in the scores. That gap is the setting: on one machine in one room, ordinary sentences land between 0.60 and 0.97, a bare "Hey Mira." between 0.52 and 0.67, and a meeting playing out of the speakers below 0.14. The default threshold of 0.35 sits in the middle of that emptiness. Raise it if somebody gets through; lower it if you repeat yourself. Both are also reachable by voice — *"raise the voice threshold"*, *"turn off my voice only"*.
+
+Short utterances carry less of a voice than long ones — the same person saying the same words scores lower at one second than at four — so the threshold relaxes for short audio rather than being set loose for everything. A name said on its own is the shortest thing anybody says and the one that most needs to work.
+
+Three things it deliberately does not do. Holding right ⌥ is **never** gated: nobody on a call can press a key on your Mac, so the one route that must never fail, cannot. Dictation is never gated either — only addressing an agent is. And every failure passes: no model, no profile, a measurement that did not work, all let the utterance through, because an app that stops answering because a file moved is worse than one that occasionally answers the wrong person.
+
+It is a filter against accidents, not a lock. A recording of you saying the name would pass it, and so would a good enough imitation. If an agent can do something you would not want done twice, the thing protecting you is the confirmation, not this.
+
 ### Settings, by voice
 
 **"open settings"** brings the panel up — the strip is shown first if it was hidden, so it always opens onto something you can see — and **"close the panel"** puts it away, which is what esc does for hands that are on the keyboard.

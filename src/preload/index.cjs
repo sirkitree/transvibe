@@ -9,6 +9,20 @@ contextBridge.exposeInMainWorld('transvibe', {
   debugEvent: (type, detail) => ipcRenderer.send('debug:event', type, detail),
   debugAudio: (samples, detail) => ipcRenderer.send('debug:audio', samples.buffer, detail),
   debugStatus: () => ipcRenderer.invoke('debug:status'),
+
+  /* Who said it, rather than what was said. Fired alongside `transcribe` on
+     the same samples and joined before the wake word is acted on. */
+  /** @param {Float32Array} samples @returns {Promise<{score: number|null, seconds: number}>} */
+  voiceprintScore: samples => ipcRenderer.invoke('voiceprint:score', samples.buffer),
+  voiceprintStatus: () => ipcRenderer.invoke('voiceprint:status'),
+  /** @param {Float32Array[]} clips replaces the enrolled profile */
+  voiceprintEnroll: clips => ipcRenderer.invoke('voiceprint:enroll', clips.map(c => c.buffer)),
+  /** score clips without enrolling them — how a threshold gets tuned */
+  voiceprintProbe: clips => ipcRenderer.invoke('voiceprint:probe', clips.map(c => c.buffer)),
+  voiceprintForget: () => ipcRenderer.invoke('voiceprint:forget'),
+  voiceprintDownload: () => ipcRenderer.invoke('voiceprint:download'),
+  onVoiceprintStatus: fn => ipcRenderer.on('voiceprint:status', (_e, status) => fn(status)),
+  onVoiceprintProgress: fn => ipcRenderer.on('voiceprint:progress', (_e, p) => fn(p)),
   onDebugStatus: fn => ipcRenderer.on('debug:status', (_e, status) => fn(status)),
   getSettings: () => ipcRenderer.invoke('settings:get'),
   /* Not a setting in settings.json: macOS owns this one, and the answer is
