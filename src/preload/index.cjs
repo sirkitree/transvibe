@@ -25,6 +25,7 @@ contextBridge.exposeInMainWorld('transvibe', {
   onVoiceprintProgress: fn => ipcRenderer.on('voiceprint:progress', (_e, p) => fn(p)),
   onDebugStatus: fn => ipcRenderer.on('debug:status', (_e, status) => fn(status)),
   getSettings: () => ipcRenderer.invoke('settings:get'),
+  getDefaults: () => ipcRenderer.invoke('settings:defaults'),
   /* Not a setting in settings.json: macOS owns this one, and the answer is
      whatever the login item list actually says. */
   /** every whisper model on this machine, and which one is loaded */
@@ -34,6 +35,7 @@ contextBridge.exposeInMainWorld('transvibe', {
   getLaunchAtLogin: () => ipcRenderer.invoke('login-item:get'),
   setLaunchAtLogin: value => ipcRenderer.invoke('login-item:set', value),
   setSettings: patch => ipcRenderer.invoke('settings:set', patch),
+  relaunch: () => ipcRenderer.send('app:relaunch'),
   copy: text => ipcRenderer.invoke('clipboard:write', text),
   /** tidy one settled utterance with the local assist model */
   cleanup: text => ipcRenderer.invoke('assist:cleanup', text),

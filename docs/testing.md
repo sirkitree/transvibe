@@ -1,7 +1,7 @@
 # Tests
 
 ```sh
-npm test          # 1030
+npm test          # 1051
 npm run test:unit # pure modules only, no whisper binary needed
 ```
 
@@ -19,8 +19,8 @@ npm run test:unit # pure modules only, no whisper binary needed
 | `spaces.test.js` | 30 | desktop Space markers, matching, and switch targets |
 | `escalate.test.js` | 28 | when a local answer is not good enough, and who is asked next |
 | `whisper-parse.test.js` | 28 | output parsing, artifact filter, FIFO queue |
-| `modules.test.js` | 27 | every module imports, and exports what it claims |
-| `settings-schema.test.js` | 26 | the panel's schema against `config.js`, both directions, and which rows apply |
+| `modules.test.js` | 28 | every module imports, and exports what it claims |
+| `settings-schema.test.js` | 46 | the panel's schema against `config.js`, both directions, which rows apply, which have moved from their defaults, and what a search finds |
 | `wav.test.js` | 26 | header byte-exactness, clamping, overflow guards |
 | `cli-agent.test.js` | 24 | spawning a frontier CLI against a fake process: timeouts, cancel, exit codes |
 | `glossary-edit.test.js` | 23 | glossary panel edits, word splitting |

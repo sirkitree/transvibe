@@ -1004,6 +1004,10 @@ ipcMain.handle('voiceprint:download', async () => {
 })
 
 ipcMain.handle('settings:get', () => settings)
+/* What the app would hold if it had never been told otherwise. The panel uses
+   it to mark the rows you have moved and to move them back, which is the only
+   way to undo a setting you tuned by ear and lost track of. */
+ipcMain.handle('settings:defaults', () => config.DEFAULTS)
 ipcMain.handle('settings:set', (_e, patch) => {
   settings = config.save(patch)
   if ('debugRecording' in patch) {
@@ -1688,6 +1692,14 @@ ipcMain.on('window:hide', () => win && win.hide())
 ipcMain.on('window:show', () => showWindow())
 ipcMain.on('models:reveal', () => revealModelFolder())
 ipcMain.on('app:quit', () => app.quit())
+/* The settings that are baked into the transcription engine at launch — the
+   model, the language, voice isolation — used to say "takes effect when
+   transvibe restarts" and leave you to work out how. Restarting is the
+   instruction, so the panel may as well carry it. */
+ipcMain.on('app:relaunch', () => {
+  app.relaunch()
+  app.quit()
+})
 
 /* Said out loud rather than clicked. Routed through the same function the menu
    bar uses, so the window is shown first — "go away" then "open settings"

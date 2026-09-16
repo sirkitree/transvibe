@@ -29,6 +29,7 @@ const MODULES = [
   '../src/renderer/commands.js',
   '../src/renderer/wake.js',
   '../src/renderer/settings-voice.js',
+  '../src/renderer/viz-preview.js',
   '../src/renderer/saying.js',
   '../src/renderer/waiting.js'
 ]

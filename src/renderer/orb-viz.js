@@ -196,6 +196,9 @@ export function createOrbViz (canvas, {
     // Same guard as the ribbon's: a hidden or not-yet-laid-out canvas is 0x0,
     // and the blit at the end of this throws on a zero-sized source.
     if (!canvas.clientWidth || !canvas.clientHeight) return
+    // And the same catch-up: on the frame a hidden canvas comes back, it has a
+    // size before the ResizeObserver has given `off` one.
+    if (!off.width || !off.height) resize()
 
     const dt = last ? Math.min((now - last) / 1000, 0.1) : 0.033
     last = now

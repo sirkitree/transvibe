@@ -228,8 +228,9 @@ describe('the aliases themselves', () => {
   })
 
   it('reaches every toggle and slider the panel has', () => {
-    // An action is a button, not a value — there is nothing to set by voice.
-    const settings = FIELDS.filter(f => f.type !== 'action')
+    // An action is a button and a preview is a picture — neither is a value,
+    // so there is nothing to set by voice.
+    const settings = FIELDS.filter(f => !['action', 'preview'].includes(f.type))
     const reachable = settings.filter(f => f.spoken).map(f => f.key)
     const panelOnly = settings.filter(f => !f.spoken).map(f => f.key)
     expect(reachable).toHaveLength(49)

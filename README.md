@@ -109,14 +109,14 @@ Settings are a panel on the strip, tabbed down the left, saved and applied as yo
 | [The assist model](docs/assist.md) | Optional local LLM: filler-word cleanup, smarter command mode, and when it may ask a bigger one |
 | [Settings](docs/settings.md) | The settings panel, and every key behind it |
 | [Architecture](docs/architecture.md) | The pipeline, interim results, the overlay, project layout |
-| [Testing](docs/testing.md) | What the 1030 tests cover, and the manual checklist |
+| [Testing](docs/testing.md) | What the 1051 tests cover, and the manual checklist |
 | [Performance](docs/performance.md) | Where the visualizer's cost went, and what the orb costs |
 | [Demo video](docs/demo.md) | The script for the video at the top of this page |
 
 ## Develop
 
 ```sh
-npm test                      # 1030
+npm test                      # 1051
 npm run test:unit             # pure modules only, no whisper binary needed
 npm run dev                   # CDP on 9333
 ./script/install-launcher.sh  # -> ~/Applications/Transvibe.app, running this tree

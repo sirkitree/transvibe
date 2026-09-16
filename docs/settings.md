@@ -2,9 +2,13 @@
 
 The gear on the strip, or **Settings…** in the menu bar (⌘,). Tabs down the left, one section at a time; every change saves and takes hold as you make it, which is the point — the speech threshold and the fade delay are settings you tune by watching what they do, not by editing a file and relaunching.
 
-Two exceptions say so on the row: the speech model and the language are baked into a running whisper server and take effect on restart.
+A few are built when the app starts rather than applied as you go — the speech model, the language, voice isolation. They carry a **restart** tag beside the label, and changing one puts a banner at the top of the panel with the button that does it.
 
-Six tabs, grouped by what you are trying to change rather than by which part of the app does it: **Listening** (what it hears and what it throws away), **Agents** (who you talk to and how they answer), **Transcription** (what turns sound into text), **Sending**, **Visuals** (the strip, and which visualizer is running), and **Advanced** (the plumbing). A long tab carries sub-headings rather than becoming a wall of sliders.
+Seven tabs, grouped by what you are trying to change rather than by which part of the app does it: **Listening** (what it hears and what it throws away), **Agents** (who you talk to and how they answer), **Reaching out** (when a question leaves this Mac), **Transcription** (what turns sound into text), **Sending**, **Visuals** (the strip, and which visualizer is running), and **Advanced** (the plumbing). A long tab carries sub-headings rather than becoming a wall of sliders. The tabs are a list to the arrow keys as well as to the mouse.
+
+Knowing which tab a setting is in is the part nobody knows, so there is a search box above them. It matches the label, the sentence under it, the key in the file and the names the setting answers to by voice, and it replaces the tabs with every match under the name of the section it came from — so it also tells you where the thing lives.
+
+A setting you have moved from where it shipped carries a **↺** next to its label, and clicking that puts back the one setting. At the foot of each tab, **Reset this section** puts back all of them; it asks once before it does.
 
 `vocabulary` and `corrections` are not in it: they have the glossary panel, which is a better editor for them than a text field, and the Transcription tab links there. `agents` is edited in the Agents tab, but as a list of records — a name, a kind, a voice and a model per row — rather than as fields. One setting in the panel is not in the file: **Launch at login** is macOS's, kept in its Login Items list.
 
@@ -12,7 +16,7 @@ Six tabs, grouped by what you are trying to change rather than by which part of 
 
 ![The Transcription tab: a dropdown of the whisper models found on this machine, the language, and the glossary-echo toggle](images/settings-transcription.png)
 
-The Visuals tab shows the dials of the visualizer that is actually running, and not the other one's. Which one is running is the first thing on it, under **The visualizer**, with the two frame rates — those pace whichever it is. Under that comes a second heading naming the one you picked, **The ribbon** or **The orb**, and only ever the one. Eight sliders where half of them do nothing you can see is worse than four, because you have to work out which half.
+The Visuals tab shows the dials of the visualizer that is actually running, and not the other one's. Under **The visualizer** it draws a small live one — fed an invented room, because the panel being open means you are looking at a screen rather than talking to it — so the seven dials that are shapes rather than numbers can be tuned by dragging instead of by closing the panel and saying something. Then which one is running, and the two frame rates — those pace whichever it is. Under that comes a second heading naming the one you picked, **The ribbon** or **The orb**, and only ever the one. Eight sliders where half of them do nothing you can see is worse than four, because you have to work out which half.
 
 ![The Visuals tab with the orb selected: a Which one dropdown reading “Orb in the corner”, the two frame rates, then the orb’s own dials — size, distance from the corner, filaments, filament length, inner ring size, and the two zoom settings](images/settings-visuals.png)
 

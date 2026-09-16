@@ -2,12 +2,16 @@ import { describe, it, expect } from 'vitest'
 import { DEFAULTS } from '../src/main/config.js'
 import {
   SECTIONS, FIELDS, GLOSSARY_KEYS, PANEL_KEYS, REMEMBERED_KEYS, EXTERNAL_KEYS,
-  coerce, formatValue, resolveChoice, fieldApplies
+  coerce, formatValue, resolveChoice, fieldApplies, isDefault, sectionDefaults,
+  fieldMatches, searchFields
 } from '../src/renderer/settings-schema.js'
 
-/* An action is a button, not a setting: it has no value, nothing in
-   config.js, and nothing to read back. */
-const fileKeys = FIELDS.filter(f => !f.external && f.type !== 'action').map(f => f.key)
+/* An action is a button and a preview is a picture. Neither is a setting: no
+   value, nothing in config.js, and nothing to read back. */
+const NOT_SETTINGS = ['action', 'preview']
+const fileKeys = FIELDS
+  .filter(f => !f.external && !NOT_SETTINGS.includes(f.type))
+  .map(f => f.key)
 
 describe('the settings schema against config.js', () => {
   it('has a row for every setting in the file', () => {
@@ -32,9 +36,12 @@ describe('the settings schema against config.js', () => {
 
   it('gives every field a type the panel can build', () => {
     for (const field of FIELDS) {
-      expect(['toggle', 'range', 'text', 'select', 'action']).toContain(field.type)
+      expect(['toggle', 'range', 'text', 'select', 'action', 'preview'])
+        .toContain(field.type)
       if (field.type === 'action') expect(field.action).toBeTruthy()
-      expect(field.label).toBeTruthy()
+      if (field.type === 'preview') expect(field.preview).toBeTruthy()
+      // A preview has no label: it is the picture, not a row about one.
+      if (field.type !== 'preview') expect(field.label).toBeTruthy()
       if (field.type === 'range') {
         expect(field.min).toBeLessThan(field.max)
         expect(field.step).toBeGreaterThan(0)
@@ -190,5 +197,163 @@ describe('fieldApplies', () => {
     const hidden = FIELDS.filter(f => f.showWhen)
     expect(hidden.length).toBeGreaterThan(0)
     expect(hidden.every(f => f.spoken && f.spoken.length)).toBe(true)
+  })
+})
+
+describe('telling a changed setting from an untouched one', () => {
+  const range = { key: 'threshold', type: 'range' }
+  const toggle = { key: 'vad', type: 'toggle' }
+  const text = { key: 'sendTarget', type: 'text', nullable: true }
+
+  it('matches a number the DOM handed back as a string', () => {
+    expect(isDefault(range, String(DEFAULTS.threshold), DEFAULTS)).toBe(true)
+    expect(isDefault(range, DEFAULTS.threshold, DEFAULTS)).toBe(true)
+    expect(isDefault(range, DEFAULTS.threshold + 0.01, DEFAULTS)).toBe(false)
+  })
+
+  it('reads an empty text field as the null it defaults to', () => {
+    expect(DEFAULTS.sendTarget).toBe(null)
+    expect(isDefault(text, '', DEFAULTS)).toBe(true)
+    expect(isDefault(text, null, DEFAULTS)).toBe(true)
+    expect(isDefault(text, undefined, DEFAULTS)).toBe(true)
+    expect(isDefault(text, 'Ghostty', DEFAULTS)).toBe(false)
+  })
+
+  it('compares a toggle as true or false, not as what it was stored as', () => {
+    expect(isDefault(toggle, !!DEFAULTS.vad, DEFAULTS)).toBe(true)
+    expect(isDefault(toggle, !DEFAULTS.vad, DEFAULTS)).toBe(false)
+  })
+
+  it('calls a setting the defaults have no opinion about unchanged', () => {
+    expect(isDefault({ key: 'launchAtLogin', type: 'toggle' }, true, DEFAULTS)).toBe(true)
+    expect(isDefault(range, 1, null)).toBe(true)
+    expect(isDefault(null, 1, DEFAULTS)).toBe(true)
+  })
+
+  it('agrees with the defaults on every field in the schema', () => {
+    // Nothing should read as changed on a fresh install.
+    for (const field of FIELDS) {
+      if (field.external || field.type === 'action') continue
+      expect([field.key, isDefault(field, DEFAULTS[field.key], DEFAULTS)])
+        .toEqual([field.key, true])
+    }
+  })
+})
+
+describe('resetting a section', () => {
+  const listening = SECTIONS.find(s => s.title === 'Listening')
+  const agents = SECTIONS.find(s => s.title === 'Agents')
+
+  it('writes each of the settings the section owns', () => {
+    const patch = sectionDefaults(listening, DEFAULTS)
+    const keys = listening.fields.map(f => f.key)
+    expect(Object.keys(patch).sort()).toEqual(keys.sort())
+    for (const key of keys) expect(patch[key]).toEqual(DEFAULTS[key])
+  })
+
+  it('leaves out the buttons and the settings the file does not hold', () => {
+    const patch = sectionDefaults(agents, DEFAULTS)
+    // 'Teach it my voice' is an action, and the roster has its own editor.
+    expect('enrolVoice' in patch).toBe(false)
+    for (const key of Object.keys(patch)) expect(key in DEFAULTS).toBe(true)
+  })
+
+  it('touches nothing outside the section', () => {
+    const patch = sectionDefaults(listening, DEFAULTS)
+    expect('layout' in patch).toBe(false)
+    expect(sectionDefaults(null, DEFAULTS)).toEqual({})
+    expect(sectionDefaults(listening, null)).toEqual({})
+  })
+})
+
+describe('finding a setting by typing what you call it', () => {
+  const find = q => searchFields(q).map(r => r.field.key)
+
+  it('matches words anywhere in the label, in any order', () => {
+    expect(find('silence turn')).toEqual(['conversationHangoverMs'])
+    expect(find('turn silence')).toEqual(['conversationHangoverMs'])
+  })
+
+  it('narrows as words are added', () => {
+    const one = find('silence')
+    const two = find('silence conversation')
+    expect(one.length).toBeGreaterThan(two.length)
+    expect(one).toEqual(expect.arrayContaining(two))
+  })
+
+  it('finds a setting by what you would say out loud', () => {
+    // 'the noise gate' is nowhere in the label or the help; it is a spoken
+    // alias, which is exactly the name someone reaches for.
+    const vad = FIELDS.find(f => f.key === 'vad')
+    expect(vad.label.toLowerCase()).not.toContain('noise gate')
+    expect(find('noise gate')).toContain('vad')
+  })
+
+  it('finds a setting by the section it lives in', () => {
+    expect(find('transcription').length).toBeGreaterThan(0)
+  })
+
+  it('finds a setting by its key, which is what the file calls it', () => {
+    expect(find('hangoverMs')).toContain('hangoverMs')
+  })
+
+  it('returns everything for an empty query', () => {
+    expect(searchFields('').length).toBe(FIELDS.length)
+    expect(searchFields('   ').length).toBe(FIELDS.length)
+  })
+
+  it('returns nothing for a word no setting has', () => {
+    expect(find('kumquat')).toEqual([])
+  })
+
+  it('will not surface a row the panel is hiding', () => {
+    const ribbon = FIELDS.filter(f => f.showWhen && f.showWhen.layout === 'strip')
+    expect(ribbon.length).toBeGreaterThan(0)
+    const hidden = searchFields('', f => fieldApplies(f, { layout: 'orb' }))
+      .map(r => r.field.key)
+    for (const field of ribbon) expect(hidden).not.toContain(field.key)
+  })
+
+  it('says which section each hit came from', () => {
+    const [hit] = searchFields('noise gate')
+    expect(hit.section).toBe('Listening')
+  })
+
+  it('is safe with nothing to match against', () => {
+    expect(fieldMatches(null, 'x')).toBe(false)
+    expect(fieldMatches(null, '')).toBe(true)
+    expect(fieldMatches({ label: 'A' }, null)).toBe(true)
+  })
+})
+
+describe('the sub-headings inside a section', () => {
+  /* The panel opens a heading when `group` changes and closes it when it
+     changes again, so a group that appears, stops, and appears again gets two
+     headings with the same name and its rows split between them. Contiguity is
+     not a style rule here; it is what the builder can express. */
+  it('never repeats a group after leaving it', () => {
+    for (const section of SECTIONS) {
+      const seen = []
+      let last = null
+      for (const field of section.fields) {
+        const group = field.group || null
+        if (group === last) continue
+        expect([section.title, group, seen]).toEqual([section.title, group, seen.filter(g => g !== group)])
+        seen.push(group)
+        last = group
+      }
+    }
+  })
+
+  it('does not leave a row stranded under a heading it is not part of', () => {
+    // An ungrouped field after a grouped one renders below that heading while
+    // belonging to nothing, which reads as a lie about what the heading covers.
+    for (const section of SECTIONS) {
+      let grouped = false
+      for (const field of section.fields) {
+        if (field.group) grouped = true
+        else expect([section.title, field.key, grouped]).toEqual([section.title, field.key, false])
+      }
+    }
   })
 })

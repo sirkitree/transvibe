@@ -58,11 +58,7 @@ export const SECTIONS = [
     note: 'What counts as speech, when an utterance is over, and what is thrown away rather than written down. These are the settings you tune by talking and watching.',
     fields: [
       {
-        key: 'voiceIsolation', label: 'Voice isolation', type: 'toggle', restart: true,
-        spoken: ['voice isolation'],
-        help: 'Ask the microphone to emphasize your voice and suppress background sound. Availability depends on the microphone and platform. Debug recordings report whether it actually activated.'
-      },
-      {
+        group: 'What counts as speech',
         key: 'threshold',
         label: 'Speech threshold',
         help: 'Raise it in a noisy room, lower it if quiet speech is missed.',
@@ -70,20 +66,29 @@ export const SECTIONS = [
         type: 'range', min: 0.002, max: 0.08, step: 0.002, decimals: 3
       },
       {
-        key: 'conversationHangoverMs',
-        label: 'Silence before a conversation turn ends',
-        help: 'Keeps pauses inside a question together while talking to an agent. At least as long as the normal silence window.',
-        spoken: ['the conversation silence'],
-        type: 'range', min: 550, max: 2000, step: 50, unit: 'ms'
+        group: 'What counts as speech',
+        key: 'vad',
+        label: 'Ignore anything that is not speech',
+        help: 'A small speech detector listens before the recogniser does, and music, a fan or a passing car never reach it at all. Off falls back to judging the words after they arrive, which catches less. Restarts the recogniser.',
+        spoken: ['speech detection', 'the speech detector', 'the noise gate'],
+        type: 'toggle'
       },
       {
-        key: 'wakeConfidenceFloor',
-        label: 'Confidence for a short wake phrase',
-        help: 'A separate floor for exact configured multiword names, after speech detection. Does not relax commands or ordinary dictation.',
-        spoken: ['the wake confidence'],
-        type: 'range', min: -1, max: -0.1, step: 0.05, decimals: 2
+        group: 'What counts as speech',
+        key: 'vadThreshold',
+        label: 'How sure the detector has to be',
+        help: 'Higher ignores more of the room and starts costing you quiet or distant speech. 0.5 is the default and where this was measured.',
+        spoken: ['the detector threshold', 'how sure the detector has to be'],
+        type: 'range', min: 0.1, max: 0.9, step: 0.05, decimals: 2
       },
       {
+        group: 'What counts as speech',
+        key: 'voiceIsolation', label: 'Voice isolation', type: 'toggle', restart: true,
+        spoken: ['voice isolation'],
+        help: 'Ask the microphone to emphasize your voice and suppress background sound. Availability depends on the microphone and platform. Debug recordings report whether it actually activated.'
+      },
+      {
+        group: 'When an utterance ends',
         key: 'minSegmentMs',
         label: 'Minimum speech duration',
         help: 'Shorter keeps quick wake phrases. Longer rejects more brief noises.',
@@ -91,6 +96,7 @@ export const SECTIONS = [
         type: 'range', min: 100, max: 1000, step: 50, unit: 'ms'
       },
       {
+        group: 'When an utterance ends',
         key: 'hangoverMs',
         label: 'Silence before an utterance ends',
         help: 'Longer keeps a sentence together across a pause for breath.',
@@ -100,20 +106,15 @@ export const SECTIONS = [
         type: 'range', min: 150, max: 2000, step: 50, unit: 'ms'
       },
       {
-        key: 'vad',
-        label: 'Ignore anything that is not speech',
-        help: 'A small speech detector listens before the recogniser does, and music, a fan or a passing car never reach it at all. Off falls back to judging the words after they arrive, which catches less. Restarts the recogniser.',
-        spoken: ['speech detection', 'the speech detector', 'the noise gate'],
-        type: 'toggle'
+        group: 'When an utterance ends',
+        key: 'conversationHangoverMs',
+        label: 'Silence before a conversation turn ends',
+        help: 'Keeps pauses inside a question together while talking to an agent. At least as long as the normal silence window.',
+        spoken: ['the conversation silence'],
+        type: 'range', min: 550, max: 2000, step: 50, unit: 'ms'
       },
       {
-        key: 'vadThreshold',
-        label: 'How sure the detector has to be',
-        help: 'Higher ignores more of the room and starts costing you quiet or distant speech. 0.5 is the default and where this was measured.',
-        spoken: ['the detector threshold', 'how sure the detector has to be'],
-        type: 'range', min: 0.1, max: 0.9, step: 0.05, decimals: 2
-      },
-      {
+        group: 'What is thrown away',
         key: 'confidenceFloor',
         label: 'Ignore anything less certain than',
         help: 'Whisper says how sure it was. Real speech scores about -0.05; music, a fan or a passing car score about -0.7, which is how music playing in the room turns into words. Lower is more permissive; all the way right turns the check off.',
@@ -121,6 +122,15 @@ export const SECTIONS = [
         type: 'range', min: -1, max: 0, step: 0.05, decimals: 2, zero: 'off'
       },
       {
+        group: 'What is thrown away',
+        key: 'wakeConfidenceFloor',
+        label: 'Confidence for a short wake phrase',
+        help: 'A separate floor for exact configured multiword names, after speech detection. Does not relax commands or ordinary dictation.',
+        spoken: ['the wake confidence'],
+        type: 'range', min: -1, max: -0.1, step: 0.05, decimals: 2
+      },
+      {
+        group: 'What is thrown away',
         key: 'dropGlossaryEcho',
         label: 'Drop utterances that are only glossary words',
         spoken: ['the glossary echo', 'glossary echo'],
@@ -365,6 +375,20 @@ export const SECTIONS = [
         type: 'range', min: 320, max: 900, step: 20, unit: 'px'
       },
       {
+        /* Seven of the dials below this are shapes — filament count, length,
+           inner ring, how far sound opens it — and every one of them was
+           tuned by dragging, closing the panel, saying something, and opening
+           it again. The preview is the same figure fed a made-up room, so the
+           drag is the whole loop.
+
+           Not a setting: a row with nothing in settings.json behind it, which
+           is why it has no `spoken` name and nothing to coerce. */
+        group: 'The visualizer',
+        key: 'vizPreview',
+        type: 'preview',
+        preview: 'viz'
+      },
+      {
         group: 'The visualizer',
         key: 'layout',
         label: 'Which one',
@@ -487,19 +511,28 @@ export const SECTIONS = [
     note: 'The plumbing. Sensible left alone, and worth a look when something is not behaving. Which local model does the thinking is each agent’s own, in the Agents tab — dictation, which is addressed to nobody, uses the one belonging to whoever runs commands.',
     fields: [
       {
+        group: 'Guesswork',
         key: 'cleanup',
         label: 'Tidy fillers out of settled text',
         spoken: ['cleanup', 'tidying'],
         type: 'toggle'
       },
       {
+        group: 'Guesswork',
         key: 'commandFallback',
         label: 'Guess what an unrecognised command meant',
         spoken: ['the command fallback', 'guessing at commands'],
         type: 'toggle'
       },
-      { key: 'assistUrl', label: 'Ollama at', type: 'text', placeholder: 'http://127.0.0.1:11434' },
       {
+        group: 'Guesswork',
+        key: 'assistUrl',
+        label: 'Ollama at',
+        help: 'Where the local model is. The guessing above is what it is for when nobody is being addressed.',
+        type: 'text', placeholder: 'http://127.0.0.1:11434'
+      },
+      {
+        group: 'Diagnostics',
         key: 'debugRecording',
         label: 'Record audio and conversations for debugging',
         help: 'Saves microphone audio, transcripts and replies locally in Application Support/transvibe/recordings. Includes room audio while listening, even during replies. Pause listening to pause audio; switch this off to finish the session. About 115 MB per hour. Recording continues across app restarts until switched off.',
@@ -507,6 +540,7 @@ export const SECTIONS = [
         type: 'toggle'
       },
       {
+        group: 'Diagnostics',
         key: 'debugRouting',
         label: 'Write a log of how each question was answered',
         help: 'For working out why an answer came from where it did. A line per question in routing.log, next to settings.json — the question, what the local model said, which rule sent it on, and how long each leg took. It holds what you asked and what you were told, so leave it off unless you are chasing something.',
@@ -514,6 +548,7 @@ export const SECTIONS = [
         type: 'toggle'
       },
       {
+        group: 'At startup',
         key: 'launchAtLogin',
         label: 'Launch transvibe at login',
         help: 'Kept by macOS in Login Items, not in settings.json.',
@@ -617,4 +652,97 @@ export function coerce (field, raw) {
   const text = String(raw).trim()
   if (!text) return field.nullable ? null : undefined
   return text
+}
+
+/**
+ * Whether a setting is still holding what it shipped with.
+ *
+ * Not `===`: the file and the defaults disagree on shape in ways that are not
+ * disagreements. A nullable text field is `null` by default and `''` the
+ * moment someone types into it and deletes it again; a range read back from
+ * JSON is a number and the same value typed into the DOM is a string. Both of
+ * those would otherwise light up as "you changed this", which is exactly the
+ * mark people learn to ignore.
+ *
+ * A field with no default at all — one the app has never had an opinion about
+ * — counts as unchanged, because there is nothing to change it back to.
+ */
+export function isDefault (field, value, defaults) {
+  if (!field || !defaults || !(field.key in defaults)) return true
+  const want = defaults[field.key]
+  if (field.type === 'toggle') return !!value === !!want
+  if (field.type === 'range') return Number(value) === Number(want)
+  // Empty and absent are the same thing for a text or select field: both of
+  // them mean the setting is not set.
+  const blank = v => v == null || v === ''
+  if (blank(value) && blank(want)) return true
+  return String(value) === String(want)
+}
+
+/**
+ * The defaults for one section, as a patch — what "reset this section" writes.
+ * Fields the defaults have no opinion about are left out rather than written
+ * as undefined, and external settings (macOS's login item) are skipped: they
+ * do not live in settings.json and a patch cannot reach them.
+ */
+export function sectionDefaults (section, defaults) {
+  const patch = {}
+  if (!section || !defaults) return patch
+  for (const field of section.fields || []) {
+    if (field.type === 'action' || field.external) continue
+    if (!(field.key in defaults)) continue
+    patch[field.key] = defaults[field.key]
+  }
+  return patch
+}
+
+/**
+ * Finding a setting by typing what you would call it.
+ *
+ * Fifty-five settings behind seven tabs means knowing which tab owns "silence
+ * before a turn ends" before you can go and change it, and the tab titles are
+ * about what the app does rather than about what you are looking for. The
+ * schema already knows every name a setting has: the label on the row, the
+ * sentence underneath it, the section it sits in, and the `spoken` aliases —
+ * the ones written down precisely because they are what someone would say out
+ * loud. All four are searched.
+ *
+ * Matching is per word and unanchored: "silence turn" finds "Silence before a
+ * conversation turn ends" without either word being where a prefix match would
+ * want it, and every word has to hit something, so each one you add narrows.
+ */
+export function fieldMatches (field, query, sectionTitle = '') {
+  const words = String(query || '').toLowerCase().split(/\s+/).filter(Boolean)
+  if (!words.length) return true
+  if (!field) return false
+  const hay = [
+    field.label,
+    field.help,
+    field.key,
+    sectionTitle,
+    ...(field.spoken || [])
+  ].filter(Boolean).join(' ').toLowerCase()
+  return words.every(word => hay.includes(word))
+}
+
+/**
+ * Every field the query finds, each with the section it came from — the panel
+ * shows them as one list under their section names rather than as tabs,
+ * because which tab a setting is in is the thing you did not know.
+ *
+ * `applies` is the panel's own dependency test, passed in so a search cannot
+ * surface a row the panel would otherwise be hiding: the orb's filament count
+ * is not an answer to anything while the ribbon is the visualizer.
+ */
+export function searchFields (query, applies = () => true) {
+  const found = []
+  for (const section of SECTIONS) {
+    for (const field of section.fields) {
+      if (!applies(field)) continue
+      if (fieldMatches(field, query, section.title)) {
+        found.push({ section: section.title, field })
+      }
+    }
+  }
+  return found
 }

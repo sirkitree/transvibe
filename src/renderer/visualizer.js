@@ -116,10 +116,17 @@ export function createVisualizer (canvas, {
     if (now - lastDraw < (active ? ACTIVE_MS : QUIET_MS)) return
 
     /* A canvas with no size is a canvas that is `display: none` — the other
-       layout is running. The class comes off before the ResizeObserver has
-       resized anything back, so there is a frame in between where the
-       offscreen buffer is still 0x0 and `drawImage` throws on it. */
+       layout is running, or the settings panel is on a tab this preview is not
+       in. Nothing to draw, and the offscreen buffer it would draw through is
+       0x0 as well. */
     if (!canvas.clientWidth || !canvas.clientHeight) return
+
+    /* Back on screen, and the buffer has not caught up. The class comes off
+       before the ResizeObserver runs, so there is a frame where the canvas has
+       a size and `off` is still 0x0 — and `drawImage` throws on a zero-sized
+       source rather than drawing nothing. Resizing here rather than skipping
+       the frame means the first frame after it reappears is a drawn one. */
+    if (!off.width || !off.height) resize()
 
     const dt = last ? Math.min((now - last) / 1000, 0.1) : 0.016
     last = now

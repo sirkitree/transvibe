@@ -442,6 +442,14 @@ body.awake .bar {
   margin-bottom: 5px;
 }
 .set-head label { font-size: 12.5px; color: var(--text); }
+/* The name of the setting and the arrow that puts it back, as one thing. */
+.set-named {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
+}
 
 .set-value {
   font-size: 11px;
@@ -449,13 +457,83 @@ body.awake .bar {
   color: hsl(var(--accent) 60% 76%);
 }
 
+/* Was 10.5px, which is under what reads comfortably at a glance — and this is
+   the text that explains what a setting means, so it is exactly the text you
+   are squinting at. */
 .set-help {
   margin: 4px 0 0;
-  font-size: 10.5px;
+  font-size: 11.5px;
   line-height: 1.45;
   color: var(--text-dim);
 }
-.set-help.restart { color: hsl(38 80% 70% / 0.85); }
+/* The restart marker, beside the label rather than a sentence beneath it. */
+.set-tag {
+  flex: none;
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 1px 5px;
+  border-radius: 4px;
+  color: hsl(38 80% 76%);
+  background: hsl(38 80% 60% / 0.16);
+  border: 1px solid hsl(38 80% 65% / 0.3);
+}
+.set-check .set-tag { margin-left: 2px; }
+
+/* Saved, but built at launch. Spans both columns at the top of the panel, so
+   it is above the tabs rather than inside whichever one happened to be open
+   when the setting changed. */
+.set-restart {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 4px;
+  padding: 7px 10px;
+  border-radius: 9px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: hsl(38 80% 84%);
+  background: hsl(38 80% 55% / 0.14);
+  border: 1px solid hsl(38 80% 65% / 0.32);
+}
+.set-restart[hidden] { display: none; }
+.set-restart > span { flex: 1; }
+.set-restart button {
+  flex: none;
+  border: 1px solid hsl(38 80% 70% / 0.5);
+  background: transparent;
+  color: hsl(38 85% 88%);
+  border-radius: 7px;
+  padding: 4px 10px;
+  font: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+}
+.set-restart button:hover { background: hsl(38 80% 60% / 0.25); }
+.set-restart-hide {
+  padding: 2px 6px !important;
+  border-color: transparent !important;
+  opacity: 0.6;
+}
+.set-restart-hide:hover { opacity: 1; }
+
+/* The readout beside a select names the file or the count actually in use,
+   and both can change while the panel is open. The ⟳ asks again. */
+.set-refresh-btn {
+  flex: none;
+  border: 0;
+  background: transparent;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1;
+  padding: 1px 4px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+.set-refresh-btn:hover { color: var(--text); background: hsl(var(--accent) 60% 50% / 0.2); }
+.set-refresh-btn:disabled { opacity: 0.4; cursor: default; }
 
 .set-row input[type="range"] {
   -webkit-appearance: none;
@@ -898,6 +976,16 @@ body.awake .bar {
 }
 
 .agent-row .agent-drop:hover { color: hsl(4 90% 72%); }
+/* Armed: it has stopped being an × and started being a sentence, so it needs
+   the width and the colour to match what the second click will do. */
+.agent-row .agent-drop.armed {
+  width: auto;
+  padding: 2px 7px;
+  font-size: 10.5px;
+  color: hsl(4 90% 76%);
+  background: hsl(4 80% 50% / 0.2);
+  border-radius: 6px;
+}
 
 .agent-sub {
   grid-column: 2 / -1;
@@ -950,3 +1038,202 @@ body.awake .bar {
 .set-action:hover:not(:disabled) { background: rgba(255, 255, 255, 0.13); }
 .set-action:disabled { opacity: 0.5; cursor: default; }
 
+/* ------------------------------------------------------------- focus, visible
+   Every control in the panels is custom-drawn, and most of them had nothing at
+   all to show for keyboard focus: the text fields and selects swapped the
+   outline for a border tint, and the ranges, checkboxes, tabs and buttons had
+   neither. One ring, declared once, on `:focus-visible` rather than `:focus`,
+   so it appears for the tab key and stays out of the way of the mouse. */
+:root { --focus-ring: 0 0 0 2px hsl(var(--accent) 80% 62% / 0.9); }
+
+.set-nav button:focus-visible,
+.set-action:focus-visible,
+.set-links button:focus-visible,
+.set-row input:focus-visible,
+.set-row select:focus-visible,
+.set-check input:focus-visible,
+.agent-row input:focus-visible,
+.agent-row select:focus-visible,
+.agent-dot:focus-visible,
+.agent-drop:focus-visible,
+.panel-close:focus-visible,
+.fixer-close:focus-visible,
+.gl-add input:focus-visible,
+.gl-add button:focus-visible,
+.chip button:focus-visible,
+.rule button:focus-visible,
+.fixer input:focus-visible,
+.fixer button:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+/* A range is a 3px line; a ring hugging it reads as a thicker line rather than
+   as focus. It gets the ring around the thumb instead. */
+.set-row input[type="range"]:focus-visible { box-shadow: none; }
+.set-row input[type="range"]:focus-visible::-webkit-slider-thumb {
+  box-shadow: var(--focus-ring), 0 0 8px hsl(var(--accent) 90% 60% / 0.5);
+}
+
+/* ------------------------------------------------------- a value it cannot use
+   A text field that coerces to nothing is put back to what was saved. Silently
+   putting it back looks like the app ignored the typing, so the row says so
+   for as long as it takes to read, and the footer says what went wrong. */
+.set-row.invalid input[type="text"] {
+  border-color: hsl(2 80% 68% / 0.8);
+}
+
+/* A save is a quiet thing and the footer is a long way from the control that
+   caused it. The value readout flashes where the eye already is. */
+@keyframes set-saved {
+  from { color: hsl(var(--accent) 70% 88%); }
+  to   { color: hsl(var(--accent) 60% 76%); }
+}
+.set-row.saved .set-value { animation: set-saved 900ms ease-out; }
+
+/* ------------------------------------------------ moved from the default
+   The dot appears only on a row whose value is no longer what the app ships
+   with, and clicking it puts that one setting back. Fifty rows with nothing on
+   them and three with a dot is the whole point: it is a way of finding what
+   you changed six weeks ago and cannot remember the shape of. */
+.set-revert {
+  flex: none;
+  border: 0;
+  background: transparent;
+  color: hsl(var(--accent) 70% 66%);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1;
+  padding: 1px 4px;
+  border-radius: 5px;
+  cursor: pointer;
+  opacity: 0.6;
+}
+.set-revert:hover { opacity: 1; background: hsl(var(--accent) 60% 50% / 0.22); }
+.set-revert[hidden] { display: none; }
+/* On a toggle the dot follows the label rather than sitting in a header, so
+   the row has to stop being a block for it. */
+/* `:not([hidden])` is load-bearing. A bare `display: flex` here has the same
+   specificity as the `.set-row[hidden] { display: none }` above and comes
+   later in the file, so it wins — and every toggle a search or a dependency
+   had hidden stayed on screen. */
+.set-row.set-toggle:not([hidden]) {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+/* Not flex:1 — the arrow has to sit against the label the way it does on
+   every other row, not out at the right-hand edge of an empty line. */
+.set-row.set-toggle .set-check { flex: 0 1 auto; }
+.set-row.set-toggle .set-help { flex: 1 0 100%; }
+
+/* Putting a whole section back. Sits under the last setting rather than beside
+   the tab: it belongs to what you have just been reading, and nothing that
+   throws work away belongs anywhere the eye passes on the way somewhere else. */
+.set-reset {
+  margin: 14px 0 0;
+  border: 1px solid hsl(var(--accent) 60% 65% / 0.25);
+  background: transparent;
+  color: var(--text-dim);
+  border-radius: 8px;
+  padding: 4px 10px;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.set-reset:hover { color: var(--text); border-color: hsl(var(--accent) 60% 65% / 0.5); }
+.set-reset.armed {
+  color: hsl(4 90% 80%);
+  border-color: hsl(4 80% 65% / 0.6);
+  background: hsl(4 80% 50% / 0.16);
+}
+
+/* ---------------------------------------------------------- search, settings
+   Above the tabs and spanning both columns, because what it does is take the
+   tabs away: with something typed, every section is on screen at once with
+   only the matching rows left in it, each under its own name. */
+.set-search {
+  grid-column: 1 / -1;
+  margin-bottom: 2px;
+}
+.set-search input {
+  width: 100%;
+  border: 1px solid hsl(var(--accent) 60% 65% / 0.3);
+  border-radius: 8px;
+  background: hsl(var(--accent) 40% 12% / 0.85);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  padding: 6px 10px;
+}
+.set-search input::placeholder { color: var(--text-dim); }
+.set-search input:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+/* The stock one is a dark glyph on a dark field, invisible here. Two crossed
+   gradients draw the × instead — no image to load and no font to depend on. */
+.set-search input::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  height: 11px; width: 11px;
+  cursor: pointer;
+  opacity: 0.45;
+  background:
+    linear-gradient(to bottom, transparent 44%, currentColor 44%, currentColor 56%, transparent 56%),
+    linear-gradient(to right, transparent 44%, currentColor 44%, currentColor 56%, transparent 56%);
+  transform: rotate(45deg);
+}
+.set-search input::-webkit-search-cancel-button:hover { opacity: 0.9; }
+
+/* The section name over each pane. Redundant while the tabs are there — the
+   lit tab beside it already says it — so it only exists in a search. */
+.set-pane-title {
+  margin: 0 0 8px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: hsl(var(--accent) 60% 78%);
+}
+.set-body:not(.searching) .set-pane-title { display: none; }
+
+/* Searching: the tabs go, the panes all open, and everything in a pane that is
+   not a setting goes with the tabs — the section's opening paragraph, its
+   links, its reset, its roster. A search is a list of rows, not seven pages
+   stacked. */
+.set-body.searching { grid-template-columns: 1fr; }
+.set-body.searching .set-nav,
+.set-body.searching .set-pane > .lead,
+.set-body.searching .set-links,
+.set-body.searching .set-reset,
+.set-body.searching .set-custom { display: none; }
+.set-body.searching .set-pane + .set-pane { margin-top: 18px; }
+/* The rule above a group heading separates it from the settings before it.
+   In a search there may be none — the first group that still has a match is
+   rarely the first one in the pane — so the line lands directly under the
+   section name and reads as a stray divider. The section name is the
+   separator here. */
+.set-body.searching .set-group { border-top: 0; padding-top: 0; margin-top: 12px; }
+
+.set-empty {
+  margin: 14px 0 0;
+  font-size: 11.5px;
+  color: var(--text-dim);
+  font-style: italic;
+}
+.set-empty[hidden] { display: none; }
+
+/* ------------------------------------------------------- visualizer preview
+   A living picture of whichever visualizer is configured, above the dials that
+   shape it. Wide and short for the ribbon, which is a band; the orb fills the
+   same box from the middle out and simply has more room around it than it
+   needs, which is better than the box changing shape under the pointer every
+   time the layout select moves. */
+.set-preview { margin: 0 0 12px; }
+
+.viz-preview-canvas {
+  display: block;
+  width: 100%;
+  height: 132px;
+  border-radius: 10px;
+  background: hsl(var(--accent) 45% 8% / 0.55);
+  border: 1px solid hsl(var(--accent) 60% 65% / 0.18);
+}

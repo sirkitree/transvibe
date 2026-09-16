@@ -29,6 +29,7 @@ import { createConversationWindow } from './conversation-window.js'
 import { createWaiting } from './waiting.js'
 import { clampPlacement, heightFor, isReachable, MARGIN } from './placement.js'
 import { createSettingsPanel } from './settings-panel.js'
+import { createVizPreview } from './viz-preview.js'
 
 const $ = id => document.getElementById(id)
 // Breathing room under the last thing on the strip, so nothing sits flush
@@ -89,6 +90,9 @@ const state = {
   pendingPlacement: null,   // where a panel is being dragged to, until released
   // Which glossary fix is loaded into the form for editing, by what it hears.
   editingRule: null,
+  // What settings.json would hold if it had never been written to. Read at
+  // startup; the settings panel marks and reverts against it.
+  defaults: null,
   // The word fixer's checkboxes, remembered across opens: whoever turns
   // 'remember' off is usually making a run of one-off fixes, not one.
   fixRemember: true,
@@ -1607,12 +1611,31 @@ function buildHelp () {
 function agentsNote (text, warn = false) {
   // The tab inside settings has the settings panel's own footer; the panel on
   // the strip has its own. Whichever is on screen says it.
-  for (const id of ['agents-note', 'settings-note']) {
-    const note = $(id)
-    if (!note || note.closest('.panel').hidden) continue
+  if (!$('settings').hidden) settingsNote(text, warn)
+  const note = $('agents-note')
+  if (note && !note.closest('.panel').hidden) {
     note.textContent = text
     note.classList.toggle('warn', warn)
   }
+}
+
+/* The settings panel's own status line. It reverts to what the footer says
+   when nothing has just happened, because a "saved" left standing for an hour
+   is a claim about whatever you are looking at now rather than about the thing
+   it was actually describing. */
+const SETTINGS_FOOT = 'Saved as you change them.'
+let settingsNoteTimer = null
+
+function settingsNote (text, warn = false) {
+  const note = $('settings-note')
+  if (!note) return
+  note.textContent = text
+  note.classList.toggle('warn', warn)
+  clearTimeout(settingsNoteTimer)
+  settingsNoteTimer = setTimeout(() => {
+    note.textContent = SETTINGS_FOOT
+    note.classList.remove('warn')
+  }, 4000)
 }
 
 async function saveAgents (result) {
@@ -1707,10 +1730,29 @@ async function renderAgents (into = null) {
     }
     row.append(voice)
 
+    /* Removing an agent takes its name, its voice, its colour and its model
+       with it, and there is nothing to undo it with. One click arms the
+       button and says so; the second does it. Moving the pointer away is how
+       you change your mind, which is the gesture you were going to make
+       anyway. */
     const drop = el('button', 'agent-drop', '×')
     drop.type = 'button'
     drop.title = `Remove ${agent.name}`
-    drop.onclick = () => saveAgents(removeAgent(roster, agent.name))
+    let armed = false
+    const disarm = () => {
+      armed = false
+      drop.textContent = '×'
+      drop.classList.remove('armed')
+    }
+    drop.onclick = () => {
+      if (armed) return saveAgents(removeAgent(roster, agent.name))
+      armed = true
+      drop.textContent = 'remove?'
+      drop.classList.add('armed')
+      agentsNote(`Click again to remove ${agent.name}.`)
+    }
+    drop.onmouseleave = disarm
+    drop.onblur = disarm
     row.append(drop)
 
     /* Every agent gets its own local model. A chat agent answers with it; one
@@ -2190,7 +2232,13 @@ const PANELS = {
   agents: { btn: null, open: renderAgents },
   help: { btn: 'help-btn', open: buildHelp },
   glossary: { btn: 'glossary-btn', open: renderGlossary },
-  settings: { btn: 'settings-btn', open: () => state.settingsPanel.render() }
+  settings: {
+    btn: 'settings-btn',
+    open: () => state.settingsPanel.render(),
+    // The visualizer preview animates. Closed, it would go on animating
+    // against the same frame budget the real visualizer is spending.
+    close: () => state.settingsPanel.suspend()
+  }
 }
 
 function togglePanel (name, show) {
@@ -2200,6 +2248,8 @@ function togglePanel (name, show) {
     for (const other of Object.keys(PANELS)) if (other !== name) togglePanel(other, false)
     PANELS[name].open()
     placePanel(panel)
+  } else if (!panel.hidden && PANELS[name].close) {
+    PANELS[name].close()
   }
   panel.hidden = !next
   // Not every panel has a button on the strip: agents is reached from the
@@ -2618,6 +2668,10 @@ function updateRecording (status) {
 
 async function main () {
   state.settings = await window.transvibe.getSettings()
+  /* What the app would hold untouched. Read once — it is compiled into the
+     build, not read from anywhere that can change while this is running — and
+     used by the settings panel to mark and undo the rows you have moved. */
+  state.defaults = await window.transvibe.getDefaults()
   /* Read once at startup and kept fresh by the main process, because the gate
      consults it on every utterance and an IPC round trip per segment to ask
      "is a voice enrolled" would be a round trip to learn something that
@@ -2641,7 +2695,7 @@ async function main () {
     // is a tab in the settings panel rather than only a panel of its own.
     panes: new Map([['agents', pane => { renderAgents(pane) }]]),
     body: $('settings-body'),
-    note: text => { $('settings-note').textContent = text },
+    note: settingsNote,
     getSettings: () => state.settings,
     save: async patch => { state.settings = await saveSettings(patch) },
     applyLive: applyLiveSetting,
@@ -2649,7 +2703,10 @@ async function main () {
     getExternal: () => window.transvibe.getLaunchAtLogin(),
     setExternal: (_key, value) => window.transvibe.setLaunchAtLogin(value),
     getOptions: fieldOptions,
-    actions: { enrolVoice }
+    actions: { enrolVoice },
+    relaunch: () => window.transvibe.relaunch(),
+    getDefaults: () => state.defaults,
+    previews: { viz: host => createVizPreview(host, () => state.settings) }
   })
   state.presence = createPresence({
     idleFadeMs: state.settings.idleFadeMs,
